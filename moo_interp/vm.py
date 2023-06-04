@@ -8,7 +8,7 @@ from attr import define, field
 
 from .list import MOOList
 from .map import MOOMap
-from .opcodes import NUM_READY_VARS, Extended_Opcode, Opcode
+from .opcodes import Extended_Opcode, Opcode
 
 basicConfig(level="DEBUG")
 logger = getLogger(__name__)

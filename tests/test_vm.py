@@ -46,12 +46,13 @@ def test_vm_math_operations(values, opcode):
         # Prepare instructions
         instruction_list = []
         for value in values:
-            instruction_list.append(Instruction(opcode=Opcode.OP_PUSH, operand=value))
+            instruction_list.append(Instruction(
+                opcode=Opcode.OP_PUSH, operand=value))
         if isinstance(opcode, Extended_Opcode):
             # For extended opcodes, use Opcode.OP_EXTENDED and opcode value as operand
 
-            
-            instruction_list.append(Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode.value))
+            instruction_list.append(Instruction(
+                opcode=Opcode.OP_EXTENDED, operand=opcode.value))
         else:
             instruction_list.append(Instruction(opcode=opcode))
         prog = Program()
@@ -78,7 +79,7 @@ def test_vm_math_operations(values, opcode):
             pass
 
 
-### MOOList tests
+# MOOList tests
 
 def test_vm_creating_empty_list():
     with create_vm() as vm:
