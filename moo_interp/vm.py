@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 from attr import define, field
 
+from .list import MOOList
 from .opcodes import NUM_READY_VARS, Extended_Opcode, Opcode
 
 basicConfig(level="DEBUG")
@@ -287,21 +288,21 @@ class VM:
 
     @operator(Opcode.OP_MAKE_EMPTY_LIST, 0)
     def handle_make_empty_list(self):
-        return []
+        return MOOList()
 
     @operator(Opcode.OP_LIST_ADD_TAIL, 2)
     def handle_list_add_tail(self, tail, list: List[Any]):
-        if not isinstance(list, List):
+        if not isinstance(list, MOOList):
             raise VMError("Expected list")
         list.append(tail)
-        return list
 
+        return list
     @operator(Opcode.OP_LIST_APPEND, 2)  # extend in Python
     def handle_list_append(self, list1: List[Any], list2: List[Any]):
-        if not isinstance(list1, list) or not isinstance(list2, List):
+        if not isinstance(list1, MOOList) or not isinstance(list2, MOOList):
             raise VMError("Expected list")
         return list1 + list2
 
     @operator(Opcode.OP_MAKE_SINGLETON_LIST, 1)
     def handle_make_singleton_list(self, value):
-        return [value]
+        return MOOList([value])

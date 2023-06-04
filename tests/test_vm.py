@@ -1,11 +1,13 @@
-import sys
+import operator
+from contextlib import contextmanager
+
 import pytest
+from hypothesis import given
+from hypothesis.strategies import integers, lists, sampled_from
+from moo_interp.list import MOOList
+
 from moo_interp.opcodes import Extended_Opcode, Opcode
 from moo_interp.vm import VM, Instruction, Program, StackFrame, VMError
-from hypothesis import given
-from hypothesis.strategies import lists, integers, sampled_from
-from contextlib import contextmanager
-import operator
 
 
 @contextmanager
@@ -67,3 +69,14 @@ def test_vm_math_operations(values, opcode):
             assert vm.stack[-1] == expected_result
         except VMError:
             pass
+
+
+### MOOList tests
+
+def test_vm_creating_empty_list():
+    with create_vm() as vm:
+        vm.call_stack.append(StackFrame(Program(), 0, ip=0, stack=[
+            Instruction(opcode=Opcode.OP_MAKE_EMPTY_LIST),
+        ]))
+        vm.step()
+        assert vm.stack[-1] == MOOList()
