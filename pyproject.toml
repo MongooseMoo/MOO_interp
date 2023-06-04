@@ -2,3 +2,24 @@
 log_cli = true
 log_cli_level = "CRITICAL"
 log_cli_format = "%(message)s"
+
+[tool.poetry]
+name = "moo-interp"
+version = "0.1.0"
+description = ""
+authors = ["Christopher Toth <q.alpha@gmail.com>"]
+readme = "README.md"
+packages = [{include = "moo_interp"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+attrs = "^23.1.0"
+lark = "^1.1.5"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.1"
+hypothesis = "^6.76.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

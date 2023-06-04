@@ -1,0 +1,128 @@
+start: code
+
+?code:
+	| statement_list 
+
+
+statement_list: statement*
+
+statement:
+	| expression SEMI
+	| if_statement
+	| return_statement SEMI
+	| for_statement
+	| while_statement
+	| fork_statement
+	| try_except_statement
+	| try_finally_statement
+	| break_statement SEMI
+	| continue_statement SEMI
+	| scatter_statement SEMI
+
+
+if_clause: "if" "(" expression ")"
+
+if_statement: if_clause statement_list elseif_statement* else_statement* "endif"
+
+elseif_clause: "elseif" "(" expression ")"
+
+elseif_statement: elseif_clause statement_list
+
+else_statement: "else" statement_list
+
+for_clause: "for" IDENTIFIER "in" "(" expression ")" | "for" IDENTIFIER "in" "[" (expression ".." (expression | "$")) "]"
+
+for_statement: for_clause statement_list "endfor"
+
+while_clause: "while" (IDENTIFIER)? "(" expression ")"
+
+while_statement: while_clause statement_list "endwhile"
+
+fork_clause: "fork" "(" expression ")"
+
+fork_statement: fork_clause statement_list "endfork"
+
+return_statement: "return" expression?
+
+scatter_statement: "{" scattering_target "}" "=" expression
+
+try_except_statement: "try" statement_list except_statement+ "endtry"
+
+except_statement: except_clause statement_list
+
+except_clause: "except" (IDENTIFIER)? "(" exception_codes ")"
+
+exception_code: IDENTIFIER | "error"
+
+exception_codes: "@" expression | "any" | exception_code ("," exception_code)*
+
+try_finally_statement: "try" statement_list finally_statement "endtry"
+
+finally_statement: "finally" statement_list
+
+break_statement: "break" IDENTIFIER?
+
+continue_statement: "continue" IDENTIFIER?
+
+dict : "[" map_entry_expression ("," map_entry_expression)* "]"
+list : "{" [expression ("," expression)*] "}"
+map_entry_expression : STRING "->" expression
+
+unary_expression: ("!" | "~" | "-") expression
+binary_expression: expression ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">") expression
+
+expression: paren
+          | ternary
+          | catch
+          | splicer
+          | index
+          | range
+          | property
+          | verb
+          | unary_expression
+          | binary_expression
+          | call
+          | assign
+          | literal
+          | IDENTIFIER
+
+paren: "(" expression ")"
+
+ternary: expression "?" expression "|" expression
+
+catch: "`" expression "!" exception_codes ("=>" expression)? "'"
+
+splicer: "@" expression
+
+index: expression "[" ("^" | "$" | expression) "]"
+
+range: expression "[" ("^" | expression) ".." ("$" | expression) "]"
+
+property: expression "." (IDENTIFIER | "(" expression ")")
+
+verb: expression ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
+
+call: IDENTIFIER "(" call_arguments ")"
+
+assign: expression "=" expression
+
+literal: "error" | STRING | "object" | NUMBER | FLOAT | "true" | "false" | list | dict
+
+call_arguments: (expression ("," expression)*)?
+
+scattering_target: scattering_target_item ("," scattering_target_item)*
+
+scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDENTIFIER
+
+SEMI: ";"
+IDENTIFIER: (("_"|"$"|LETTER) ("_"|LETTER|DIGIT)*)
+STRING: /".*?"|'.*?'/
+IN: "in"
+NUMBER: /-?[0-9]+/
+FLOAT: /-?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?/
+LETTER: /[a-zA-Z]/
+DIGIT: /\d/
+WS: /[ \t\n\r\f]+/
+
+%ignore WS
+
