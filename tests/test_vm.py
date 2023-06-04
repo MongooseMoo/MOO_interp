@@ -44,10 +44,16 @@ opcode_mapping = {
 def test_vm_math_operations(values, opcode):
     with create_vm() as vm:
         # Prepare instructions
-        instruction_list = [
-            Instruction(opcode=Opcode.OP_PUSH, operand=value) for value in values
-        ]
-        instruction_list.append(Instruction(opcode=opcode))
+        instruction_list = []
+        for value in values:
+            instruction_list.append(Instruction(opcode=Opcode.OP_PUSH, operand=value))
+        if isinstance(opcode, Extended_Opcode):
+            # For extended opcodes, use Opcode.OP_EXTENDED and opcode value as operand
+
+            
+            instruction_list.append(Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode.value))
+        else:
+            instruction_list.append(Instruction(opcode=opcode))
         prog = Program()
         frame1 = StackFrame(prog, 0, ip=0, stack=instruction_list)
         vm.call_stack.append(frame1)
@@ -57,6 +63,7 @@ def test_vm_math_operations(values, opcode):
             expected_result = opcode_mapping[opcode](*values)
         except ZeroDivisionError:
             expected_result = None
+
         # Ensure the values are pushed to the stack
         for _ in range(len(values)):
             vm.step()

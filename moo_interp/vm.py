@@ -90,14 +90,19 @@ def operator(opcode, num_args):
         @wraps(func)
         def wrapper(self, *args):
             # Check for stack underflow
-            if opcode != Opcode.OP_PUSH and len(self.stack) < num_args:
-                raise VMError(f"Stack underflow in opcode {opcode}")
+            if (isinstance(opcode, Opcode) and opcode != Opcode.OP_PUSH):
+                if len(self.stack) < num_args:
+                    raise VMError(f"Stack underflow in opcode {opcode}")
 
             # Call the function
             return func(self, *args)
 
         # Store the opcode and number of arguments on the function itself
-        wrapper.opcode = opcode
+        # Distinguish between Opcode and Extended_Opcode
+        if isinstance(opcode, Opcode):
+            wrapper.opcode = opcode
+        elif isinstance(opcode, Extended_Opcode):
+            wrapper.eopcode = opcode
         wrapper.num_args = num_args
 
         return wrapper
@@ -121,8 +126,8 @@ class VM:
         # Register all opcode handlers
         for name in dir(self):
             method = getattr(self, name, None)
-            if hasattr(method, 'opcode'):
-                self.opcode_handlers[method.opcode] = method
+            if hasattr(method, 'opcode') or hasattr(method, 'eopcode'):
+                self.opcode_handlers[method.opcode if hasattr(method, 'opcode') else method.eopcode] = method
 
     def push(self, value: Any) -> None:
         """Push a value onto the stack"""
@@ -149,9 +154,14 @@ class VM:
         instr = frame.stack[frame.ip]
         handler = self.opcode_handlers.get(instr.opcode)
         if not handler:
-            raise VMError(f"Unknown opcode {instr.opcode}")
+            # Handle extended opcode
+            if instr.opcode == Opcode.OP_EXTENDED:
+                handler = self.opcode_handlers.get(Extended_Opcode(instr.operand))
+                if not handler:
+                    raise VMError(f"Unknown extended opcode {instr.operand}")
+            if not handler:
+                raise VMError(f"Unknown opcode {instr.opcode}")
         logger.debug(f"Executing {instr.opcode} {instr.operand}")
-
         args = []
         if instr.opcode == Opcode.OP_PUSH:
             args = [instr.operand]
@@ -288,36 +298,36 @@ class VM:
 
     # List operations
 
-@operator(Opcode.OP_MAKE_EMPTY_LIST, 0)
-def handle_make_empty_list(self) -> MOOList:
-    return MOOList()
+    @operator(Opcode.OP_MAKE_EMPTY_LIST, 0)
+    def handle_make_empty_list(self) -> MOOList:
+        return MOOList()
 
-@operator(Opcode.OP_LIST_ADD_TAIL, 2)
-def handle_list_add_tail(self, tail, lst: MOOList) -> MOOList:
-    if not isinstance(lst, MOOList):
-        raise VMError("Expected list")
-    lst.append(tail)
-    return lst
+    @operator(Opcode.OP_LIST_ADD_TAIL, 2)
+    def handle_list_add_tail(self, tail, lst: MOOList) -> MOOList:
+        if not isinstance(lst, MOOList):
+            raise VMError("Expected list")
+        lst.append(tail)
+        return lst
 
-@operator(Opcode.OP_LIST_APPEND, 2)  # extend in Python
-def handle_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
-    if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
-        raise VMError("Expected list")
-    return lst1 + lst2
+    @operator(Opcode.OP_LIST_APPEND, 2)  # extend in Python
+    def handle_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
+        if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
+            raise VMError("Expected list")
+        return lst1 + lst2
 
-@operator(Opcode.OP_MAKE_SINGLETON_LIST, 1)
-def handle_make_singleton_list(self, value) -> MOOList:
-    return MOOList([value])
+    @operator(Opcode.OP_MAKE_SINGLETON_LIST, 1)
+    def handle_make_singleton_list(self, value) -> MOOList:
+        return MOOList([value])
 
-# Map operations
+    # Map operations
 
-@operator(Opcode.OP_MAP_CREATE, 0)
-def handle_make_empty_map(self) -> MOOMap:
-    return MOOMap()
+    @operator(Opcode.OP_MAP_CREATE, 0)
+    def handle_make_empty_map(self) -> MOOMap:
+        return MOOMap()
 
-@operator(Opcode.OP_MAP_INSERT, 3)
-def handle_map_insert(self, key, value, mapping: MOOMap) -> MOOMap:
-    if not isinstance(mapping, MOOMap):
-        raise VMError("Expected map")
-    mapping[key] = value
-    return mapping
+    @operator(Opcode.OP_MAP_INSERT, 3)
+    def handle_map_insert(self, key, value, mapping: MOOMap) -> MOOMap:
+        if not isinstance(mapping, MOOMap):
+            raise VMError("Expected map")
+        mapping[key] = value
+        return mapping
