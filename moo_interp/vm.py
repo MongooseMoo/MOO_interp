@@ -1,11 +1,13 @@
 from enum import Enum
 from functools import wraps
 from logging import basicConfig, getLogger
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import (Any, Callable, Dict, List, Mapping, Optional, Tuple, Union,
+                    cast)
 
 from attr import define, field
 
 from .list import MOOList
+from .map import MOOMap
 from .opcodes import NUM_READY_VARS, Extended_Opcode, Opcode
 
 basicConfig(level="DEBUG")
@@ -286,23 +288,36 @@ class VM:
 
     # List operations
 
-    @operator(Opcode.OP_MAKE_EMPTY_LIST, 0)
-    def handle_make_empty_list(self):
-        return MOOList()
+@operator(Opcode.OP_MAKE_EMPTY_LIST, 0)
+def handle_make_empty_list(self) -> MOOList:
+    return MOOList()
 
-    @operator(Opcode.OP_LIST_ADD_TAIL, 2)
-    def handle_list_add_tail(self, tail, list: List[Any]):
-        if not isinstance(list, MOOList):
-            raise VMError("Expected list")
-        list.append(tail)
+@operator(Opcode.OP_LIST_ADD_TAIL, 2)
+def handle_list_add_tail(self, tail, lst: MOOList) -> MOOList:
+    if not isinstance(lst, MOOList):
+        raise VMError("Expected list")
+    lst.append(tail)
+    return lst
 
-        return list
-    @operator(Opcode.OP_LIST_APPEND, 2)  # extend in Python
-    def handle_list_append(self, list1: List[Any], list2: List[Any]):
-        if not isinstance(list1, MOOList) or not isinstance(list2, MOOList):
-            raise VMError("Expected list")
-        return list1 + list2
+@operator(Opcode.OP_LIST_APPEND, 2)  # extend in Python
+def handle_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
+    if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
+        raise VMError("Expected list")
+    return lst1 + lst2
 
-    @operator(Opcode.OP_MAKE_SINGLETON_LIST, 1)
-    def handle_make_singleton_list(self, value):
-        return MOOList([value])
+@operator(Opcode.OP_MAKE_SINGLETON_LIST, 1)
+def handle_make_singleton_list(self, value) -> MOOList:
+    return MOOList([value])
+
+# Map operations
+
+@operator(Opcode.OP_MAP_CREATE, 0)
+def handle_make_empty_map(self) -> MOOMap:
+    return MOOMap()
+
+@operator(Opcode.OP_MAP_INSERT, 3)
+def handle_map_insert(self, key, value, mapping: MOOMap) -> MOOMap:
+    if not isinstance(mapping, MOOMap):
+        raise VMError("Expected map")
+    mapping[key] = value
+    return mapping
