@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "CRITICAL"
+log_cli_format = "%(message)s"
