@@ -1,3 +1,4 @@
+import warnings
 from enum import Enum
 from functools import wraps
 from logging import basicConfig, getLogger
@@ -123,12 +124,32 @@ class VM:
         self.stack = []
         self.call_stack = []
         self.opcode_handlers = {}
+        handled_opcodes = set()
+
         # Register all opcode handlers
         for name in dir(self):
             method = getattr(self, name, None)
             if hasattr(method, 'opcode') or hasattr(method, 'eopcode'):
-                self.opcode_handlers[method.opcode if hasattr(
-                    method, 'opcode') else method.eopcode] = method
+                opcode = method.opcode if hasattr(
+                    method, 'opcode') else method.eopcode
+                self.opcode_handlers[opcode.value] = method
+                handled_opcodes.add(opcode)
+
+        # Set of all opcodes
+        all_opcodes = set(Opcode)
+        unhandled_opcodes = all_opcodes - handled_opcodes
+
+        if unhandled_opcodes:
+            warnings.warn(
+                f"The following opcodes are not being handled: {[opcode.name for opcode in unhandled_opcodes]}", UserWarning)
+
+        # Set of all extended opcodes
+        all_eopcodes = set(Extended_Opcode)
+        unhandled_eopcodes = all_eopcodes - handled_opcodes
+
+        if unhandled_eopcodes:
+            warnings.warn(
+                f"The following extended opcodes are not being handled: {[opcode.name for opcode in unhandled_eopcodes]}", UserWarning)
 
     def push(self, value: Any) -> None:
         """Push a value onto the stack"""
@@ -333,3 +354,19 @@ class VM:
             raise VMError("Expected map")
         mapping[key] = value
         return mapping
+
+    # Return Operations
+
+    @operator(Opcode.OP_RETURN, 1)
+    def handle_return(self, value):
+        self.call_stack.pop()
+        return value
+
+    @operator(Opcode.OP_RETURN0, 0)
+    def handle_return0(self):
+        self.call_stack.pop()
+        return 0
+
+    @operator(Opcode.OP_DONE, 0)
+    def handle_done(self):
+        return 0
