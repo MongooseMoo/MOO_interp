@@ -127,7 +127,8 @@ class VM:
         for name in dir(self):
             method = getattr(self, name, None)
             if hasattr(method, 'opcode') or hasattr(method, 'eopcode'):
-                self.opcode_handlers[method.opcode if hasattr(method, 'opcode') else method.eopcode] = method
+                self.opcode_handlers[method.opcode if hasattr(
+                    method, 'opcode') else method.eopcode] = method
 
     def push(self, value: Any) -> None:
         """Push a value onto the stack"""
@@ -156,7 +157,8 @@ class VM:
         if not handler:
             # Handle extended opcode
             if instr.opcode == Opcode.OP_EXTENDED:
-                handler = self.opcode_handlers.get(Extended_Opcode(instr.operand))
+                handler = self.opcode_handlers.get(
+                    Extended_Opcode(instr.operand))
                 if not handler:
                     raise VMError(f"Unknown extended opcode {instr.operand}")
             if not handler:

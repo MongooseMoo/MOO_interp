@@ -4,33 +4,30 @@ start: code
 	| statement_list 
 
 
-statement_list: statement*
+?statement_list: statement*
 
-statement:
-	| expression SEMI
+?statement:
+	| expression _SEMI
 	| if_statement
-	| return_statement SEMI
+	| return_statement _SEMI
 	| for_statement
 	| while_statement
 	| fork_statement
 	| try_except_statement
 	| try_finally_statement
-	| break_statement SEMI
-	| continue_statement SEMI
-	| scatter_statement SEMI
+	| break_statement _SEMI
+	| continue_statement _SEMI
+	| scatter_statement _SEMI
 
+condition: expression
+then_block: statement_list
 
-if_clause: "if" "(" expression ")"
+if_clause: "if" "(" condition ")" then_block
+elseif_clause: "elseif" "(" condition ")" then_block
+else_clause: "else" then_block
 
-if_statement: if_clause statement_list elseif_statement* else_statement* "endif"
-
-elseif_clause: "elseif" "(" expression ")"
-
-elseif_statement: elseif_clause statement_list
-
-else_statement: "else" statement_list
-
-for_clause: "for" IDENTIFIER "in" "(" expression ")" | "for" IDENTIFIER "in" "[" (expression ".." (expression | "$")) "]"
+if_statement: if_clause elseif_clause* else_clause? "endif"
+for_clause: "for" IDENTIFIER IN "(" expression ")" | "for" IDENTIFIER IN "[" (expression ".." (expression | "$")) "]"
 
 for_statement: for_clause statement_list "endfor"
 
@@ -69,9 +66,10 @@ list : "{" [expression ("," expression)*] "}"
 map_entry_expression : STRING "->" expression
 
 unary_expression: ("!" | "~" | "-") expression
-binary_expression: expression ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">") expression
+binary_expression: expression binary_op expression
+binary_op: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">")
 
-expression: paren
+?expression: paren
           | ternary
           | catch
           | splicer
@@ -114,7 +112,7 @@ scattering_target: scattering_target_item ("," scattering_target_item)*
 
 scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDENTIFIER
 
-SEMI: ";"
+_SEMI: ";"
 IDENTIFIER: (("_"|"$"|LETTER) ("_"|LETTER|DIGIT)*)
 STRING: /".*?"|'.*?'/
 IN: "in"
