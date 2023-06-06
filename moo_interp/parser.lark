@@ -19,7 +19,7 @@ start: code
 	| continue_statement _SEMI
 	| scatter_statement _SEMI
 
-condition: expression
+?condition: expression
 then_block: statement_list
 
 if_clause: "if" "(" condition ")" then_block
