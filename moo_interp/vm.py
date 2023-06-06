@@ -132,7 +132,7 @@ class VM:
             if hasattr(method, 'opcode') or hasattr(method, 'eopcode'):
                 opcode = method.opcode if hasattr(
                     method, 'opcode') else method.eopcode
-                self.opcode_handlers[opcode.value] = method
+                self.opcode_handlers[opcode] = method
                 handled_opcodes.add(opcode)
 
         # Set of all opcodes
@@ -141,7 +141,7 @@ class VM:
 
         if unhandled_opcodes:
             warnings.warn(
-                f"The following opcodes are not being handled: {[opcode.name for opcode in unhandled_opcodes]}", UserWarning)
+                f"The following opcodes are not implemented: {[opcode.name for opcode in unhandled_opcodes]}", UserWarning)
 
         # Set of all extended opcodes
         all_eopcodes = set(Extended_Opcode)
@@ -149,7 +149,7 @@ class VM:
 
         if unhandled_eopcodes:
             warnings.warn(
-                f"The following extended opcodes are not being handled: {[opcode.name for opcode in unhandled_eopcodes]}", UserWarning)
+                f"The following extended opcodes are not implemented: {[opcode.name for opcode in unhandled_eopcodes]}", UserWarning)
 
     def push(self, value: Any) -> None:
         """Push a value onto the stack"""
