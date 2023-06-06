@@ -37,6 +37,11 @@ class StringLiteral(_Expression):
 
 
 @dataclass
+class BooleanLiteral(_Expression):
+    value: bool
+
+
+@dataclass
 class NumberLiteral(_Expression):
     value: int
 
@@ -48,8 +53,8 @@ class FloatLiteral(_Expression):
 
 @dataclass
 class BinaryExpression(_Expression):
-    operator: str
     left: _Expression
+    operator: str
     right: _Expression
 
 
@@ -86,9 +91,13 @@ class WhileStatement(_Statement):
 
 
 class ToAst(Transformer):
-    def IDENTIFIER(self, s):
-        return Identifier(s)
+    def BOOLEAN(self, b):
+        return BooleanLiteral(b == "true")
 
+    def IDENTIFIER(self, s):
+        if s.value == "true" or s.value == "false":
+            return BooleanLiteral(s.value == "true")
+        return Identifier(s.value)
     def STRING(self, s):
         return StringLiteral(s[1:-1])
 
@@ -101,11 +110,7 @@ class ToAst(Transformer):
     def assignment(self, target, _, value):
         return Assignment(target, value)
 
-    def binary_expression(self, left, operator, right):
-        return BinaryExpression(operator, left, right)
-
     def if_statement(self, if_clause, *elseif_clauses, else_clause=None):
-        print("if_statement", if_clause, elseif_clauses, else_clause)
         condition, then_block = if_clause[0].children
         if elseif_clauses:
             elseif_clauses = [ElseIfClause(*clause)

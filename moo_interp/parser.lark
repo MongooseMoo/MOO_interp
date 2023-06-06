@@ -66,8 +66,8 @@ list : "{" [expression ("," expression)*] "}"
 map_entry_expression : STRING "->" expression
 
 unary_expression: ("!" | "~" | "-") expression
-binary_expression: expression binary_op expression
-binary_op: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">")
+binary_expression: expression BINARY_OP expression
+BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">")
 
 ?expression: paren
           | ternary
@@ -104,7 +104,8 @@ call: IDENTIFIER "(" call_arguments ")"
 
 assign: expression "=" expression
 
-literal: "error" | STRING | "object" | NUMBER | FLOAT | "true" | "false" | list | dict
+literal: "error" | STRING | "object" | NUMBER | FLOAT | BOOLEAN | list | dict
+BOOLEAN: "true" | "false"
 
 call_arguments: (expression ("," expression)*)?
 
@@ -113,7 +114,7 @@ scattering_target: scattering_target_item ("," scattering_target_item)*
 scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDENTIFIER
 
 _SEMI: ";"
-IDENTIFIER: (("_"|"$"|LETTER) ("_"|LETTER|DIGIT)*)
+IDENTIFIER.-5: (("_"|"$"|LETTER) ("_"|LETTER|DIGIT)*)
 STRING: /".*?"|'.*?'/
 IN: "in"
 NUMBER: /-?[0-9]+/
