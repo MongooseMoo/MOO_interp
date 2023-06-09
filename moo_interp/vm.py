@@ -14,7 +14,6 @@ from .list import MOOList
 from .map import MOOMap
 from .opcodes import Extended_Opcode, Opcode
 
-
 basicConfig(level="DEBUG")
 logger = getLogger(__name__)
 
@@ -82,23 +81,6 @@ class StackFrame:
     debug: bool = field(default=False)
     threaded: bool = field(default=False)
 
-import inspect
-from functools import wraps
-import warnings
-
-import inspect
-from functools import wraps
-import warnings
-from typing import Any
-
-import inspect
-from functools import wraps
-import warnings
-from typing import Any
-
-import inspect
-from functools import wraps
-from typing import Any
 
 def operator(opcode):
     """Operator decorator.
@@ -109,8 +91,9 @@ def operator(opcode):
 
         num_args = len(func_params)
 
-        unannotated_params = [param.name for param in func_params if param.annotation is inspect._empty]
-        
+        unannotated_params = [
+            param.name for param in func_params if param.annotation is inspect._empty]
+
         if unannotated_params:
             warnings.warn(
                 f"Parameter(s) {', '.join(unannotated_params)} of {func.__name__} are not annotated, will be considered as 'Any'")
@@ -142,6 +125,7 @@ def operator(opcode):
 
         return wrapper
     return decorator
+
 
 @define
 class VM:
