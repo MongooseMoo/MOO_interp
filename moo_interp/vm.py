@@ -1,3 +1,4 @@
+import inspect
 import warnings
 from enum import Enum
 from functools import wraps
@@ -7,9 +8,12 @@ from typing import (Any, Callable, Dict, List, Mapping, Optional, Tuple, Union,
 
 from attr import define, field
 
+from moo_interp.string import MOOString
+
 from .list import MOOList
 from .map import MOOMap
 from .opcodes import Extended_Opcode, Opcode
+
 
 basicConfig(level="DEBUG")
 logger = getLogger(__name__)
@@ -78,28 +82,58 @@ class StackFrame:
     debug: bool = field(default=False)
     threaded: bool = field(default=False)
 
+import inspect
+from functools import wraps
+import warnings
 
-def operator(opcode, num_args):
+import inspect
+from functools import wraps
+import warnings
+from typing import Any
+
+import inspect
+from functools import wraps
+import warnings
+from typing import Any
+
+import inspect
+from functools import wraps
+from typing import Any
+
+def operator(opcode):
     """Operator decorator.
-
-    Decorates a method and stores some information about the opcode being
-    handled and the number of arguments the method expects on the stack.
-    Also checks that the stack is not underflowed before calling the
-    method.
     """
     def decorator(func):
+        sig = inspect.signature(func)
+        func_params = list(sig.parameters.values())[1:]  # Skip 'self'
+
+        num_args = len(func_params)
+
+        unannotated_params = [param.name for param in func_params if param.annotation is inspect._empty]
+        
+        if unannotated_params:
+            warnings.warn(
+                f"Parameter(s) {', '.join(unannotated_params)} of {func.__name__} are not annotated, will be considered as 'Any'")
+
         @wraps(func)
         def wrapper(self, *args):
             # Check for stack underflow
-            if (isinstance(opcode, Opcode) and opcode != Opcode.OP_PUSH):
+            if isinstance(opcode, Opcode) and opcode != Opcode.OP_PUSH:
                 if len(self.stack) < num_args:
-                    raise VMError(f"Stack underflow in opcode {opcode}")
+                    raise VMError(
+                        f"Stack underflow in opcode {opcode} in function {func.__name__}")
+
+            # Check types match annotations
+            for (param, arg) in zip(func_params, args):
+                if param.annotation not in {inspect._empty, Any}:
+                    if not isinstance(arg, param.annotation):
+                        raise VMError(
+                            f"Argument {arg} in function {func.__name__} is not of expected type {param.annotation}")
 
             # Call the function
             return func(self, *args)
 
         # Store the opcode and number of arguments on the function itself
-        # Distinguish between Opcode and Extended_Opcode
         if isinstance(opcode, Opcode):
             wrapper.opcode = opcode
         elif isinstance(opcode, Extended_Opcode):
@@ -108,7 +142,6 @@ def operator(opcode, num_args):
 
         return wrapper
     return decorator
-
 
 @define
 class VM:
@@ -211,45 +244,45 @@ class VM:
 
     # Basic opcode implementations
 
-    @operator(Opcode.OP_PUSH, 1)
-    def handle_push(self, value):
+    @operator(Opcode.OP_PUSH)
+    def handle_push(self, value: Any):
         return value
 
-    @operator(Opcode.OP_POP, 0)
+    @operator(Opcode.OP_POP)
     def handle_pop(self):
         return self.pop()
 
-    @operator(Opcode.OP_ADD, 2)
+    @operator(Opcode.OP_ADD)
     def handle_add(self, op1, op2):
         return op1 + op2
 
-    @operator(Opcode.OP_MINUS, 2)
+    @operator(Opcode.OP_MINUS)
     def handle_subtract(self, op1, op2):
         return op1 - op2
 
-    @operator(Opcode.OP_MULT, 2)
+    @operator(Opcode.OP_MULT)
     def handle_multiply(self, op1, op2):
         return op1 * op2
 
-    @operator(Opcode.OP_DIV, 2)
+    @operator(Opcode.OP_DIV)
     def handle_divide(self, op1, op2):
         try:
             return op1 / op2
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
-    @operator(Opcode.OP_MOD, 2)
+    @operator(Opcode.OP_MOD)
     def handle_mod(self, op1, op2):
         try:
             return op1 % op2
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
-    @operator(Opcode.OP_EQ, 2)
+    @operator(Opcode.OP_EQ)
     def handle_eq(self, op1, op2):
         return op1 == op2
 
-    @operator(Opcode.OP_IN, 2)
+    @operator(Opcode.OP_IN)
     def handle_in(self, rhs, lhs):
         # either 0 if not in the list or the index if it is
         index = rhs.find(lhs)
@@ -257,99 +290,99 @@ class VM:
             return 0
         return index
 
-    @operator(Opcode.OP_NE, 2)
+    @operator(Opcode.OP_NE)
     def handle_ne(self, op1, op2):
         return op1 != op2
 
-    @operator(Opcode.OP_LT, 2)
+    @operator(Opcode.OP_LT)
     def handle_lt(self, op1, op2):
         return op1 < op2
 
-    @operator(Opcode.OP_LE, 2)
+    @operator(Opcode.OP_LE)
     def handle_le(self, op1, op2):
         return op1 <= op2
 
-    @operator(Opcode.OP_GT, 2)
+    @operator(Opcode.OP_GT)
     def handle_gt(self, op1, op2):
         return op1 > op2
 
-    @operator(Opcode.OP_GE, 2)
+    @operator(Opcode.OP_GE)
     def handle_ge(self, op1, op2):
         return op1 >= op2
 
-    @operator(Opcode.OP_AND, 2)
+    @operator(Opcode.OP_AND)
     def handle_and(self, op1, op2):
         return op1 and op2
 
-    @operator(Opcode.OP_OR, 2)
+    @operator(Opcode.OP_OR)
     def handle_or(self, op1, op2):
         return op1 or op2
 
-    @operator(Opcode.OP_NOT, 1)
+    @operator(Opcode.OP_NOT)
     def handle_not(self, op1):
         return not op1
 
-    @operator(Opcode.OP_UNARY_MINUS, 1)
+    @operator(Opcode.OP_UNARY_MINUS)
     def handle_unary_minus(self, op1):
         return -op1
 
-    # Extended opcode implementations - some examples
+    # Extended opcode implementations
 
-    @operator(Extended_Opcode.EOP_BITOR, 2)
+    @operator(Extended_Opcode.EOP_BITOR)
     def handle_bitor(self, op1, op2):
         return op1 | op2
 
-    @operator(Extended_Opcode.EOP_BITAND, 2)
-    def handle_bitand(self, op1, op2):
+    @operator(Extended_Opcode.EOP_BITAND)
+    def handle_bitand(self, op1: int, op2: int):
         return op1 & op2
 
-    @operator(Extended_Opcode.EOP_BITXOR, 2)
+    @operator(Extended_Opcode.EOP_BITXOR)
     def handle_bitxor(self, op1, op2):
         return op1 ^ op2
 
-    @operator(Extended_Opcode.EOP_BITSHL, 2)
+    @operator(Extended_Opcode.EOP_BITSHL)
     def handle_bitshl(self, op1, op2):
         return op1 << op2
 
-    @operator(Extended_Opcode.EOP_BITSHR, 2)
+    @operator(Extended_Opcode.EOP_BITSHR)
     def handle_bitshr(self, op1, op2):
         return op1 >> op2
 
-    @operator(Extended_Opcode.EOP_EXP, 2)
+    @operator(Extended_Opcode.EOP_EXP)
     def handle_exp(self, lhs,   rhs):
         return lhs ** rhs
 
     # List operations
 
-    @operator(Opcode.OP_MAKE_EMPTY_LIST, 0)
+    @operator(Opcode.OP_MAKE_EMPTY_LIST)
     def handle_make_empty_list(self) -> MOOList:
         return MOOList()
 
-    @operator(Opcode.OP_LIST_ADD_TAIL, 2)
+    @operator(Opcode.OP_LIST_ADD_TAIL)
     def handle_list_add_tail(self, tail, lst: MOOList) -> MOOList:
         if not isinstance(lst, MOOList):
             raise VMError("Expected list")
         lst.append(tail)
         return lst
 
-    @operator(Opcode.OP_LIST_APPEND, 2)  # extend in Python
+    @operator(Opcode.OP_LIST_APPEND)  # extend in Python
     def handle_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
         if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
             raise VMError("Expected list")
         return lst1 + lst2
 
-    @operator(Opcode.OP_MAKE_SINGLETON_LIST, 1)
+    @operator(Opcode.OP_MAKE_SINGLETON_LIST)
     def handle_make_singleton_list(self, value) -> MOOList:
         return MOOList([value])
 
     # Map operations
 
-    @operator(Opcode.OP_MAP_CREATE, 0)
+    @operator(Opcode.OP_MAP_CREATE)
     def handle_make_empty_map(self) -> MOOMap:
         return MOOMap()
 
-    @operator(Opcode.OP_MAP_INSERT, 3)
-    def handle_map_insert(self, key, value, mapping: MOOMap) -> MOOMap:
+    @operator(Opcode.OP_MAP_INSERT)
+    def handle_map_insert(self, key: MOOString, value, mapping: MOOMap) -> MOOMap:
         if not isinstance(mapping, MOOMap):
             raise VMError("Expected map")
         mapping[key] = value
@@ -357,16 +390,16 @@ class VM:
 
     # Return Operations
 
-    @operator(Opcode.OP_RETURN, 1)
+    @operator(Opcode.OP_RETURN)
     def handle_return(self, value):
         self.call_stack.pop()
         return value
 
-    @operator(Opcode.OP_RETURN0, 0)
+    @operator(Opcode.OP_RETURN0)
     def handle_return0(self):
         self.call_stack.pop()
         return 0
 
-    @operator(Opcode.OP_DONE, 0)
+    @operator(Opcode.OP_DONE)
     def handle_done(self):
         return 0
