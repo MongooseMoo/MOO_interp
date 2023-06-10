@@ -3,8 +3,7 @@ import warnings
 from enum import Enum
 from functools import wraps
 from logging import basicConfig, getLogger
-from typing import (Any, Callable, Dict, List, Mapping, Optional, Tuple, Union,
-                    cast)
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from attr import define, field
 
@@ -227,6 +226,31 @@ class VM:
             self.call_stack.pop()
 
     # Basic opcode implementations
+    @operator(Opcode.OP_JUMP)
+    def handle_jump(self, offset: int):
+        """Jumps to a different instruction in the bytecode.
+
+        Args:
+            offset (int): The label or offset to jump to.
+        """
+        frame = self.call_stack[-1]  # get current stack frame
+        frame.ip += offset  # adjust instruction pointer by offset
+
+    def read_bytes(self, num_bytes: int) -> int:
+        """Reads the given number of bytes from the bytecode.
+
+        Args:
+            num_bytes (int): The number of bytes to read.
+
+        Returns:
+            int: The value represented by the read bytes.
+        """
+        frame = self.call_stack[-1]  # get current stack frame
+        # slice the bytecode from ip to ip + num_bytes and interpret it as an integer
+        value = int.from_bytes(
+            frame.stack[frame.ip:frame.ip + num_bytes], 'big')
+        frame.ip += num_bytes  # increment ip by num_bytes
+        return value
 
     @operator(Opcode.OP_PUSH)
     def handle_push(self, value: Any):
