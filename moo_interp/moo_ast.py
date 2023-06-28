@@ -5,7 +5,7 @@ from typing import List, Union
 from lark import Lark, Transformer, ast_utils, v_args
 from lark.tree import Meta
 
-from .vm import Instruction, Program
+from .vm import Instruction, Program, StackFrame
 from .opcodes import Opcode, Extended_Opcode
 from .parser import parser
 from .string import MOOString
@@ -192,11 +192,12 @@ class WhileStatement(_Statement):
     condition: _Expression
     body: List[_Statement]
 
-# ... other classes ...
-
-#
-# Transformer
-#
+    def to_bytecode(self, program: Program):
+        condition_bc = self.condition.to_bytecode(program)
+        body_bc = []
+        for stmt in self.body.children:
+            body_bc += stmt.to_bytecode(program)
+        return condition_bc + [Instruction(opcode=Opcode.OP_WHILE, operand=None)] + body_bc + [Instruction(opcode=Opcode.OP_JUMP, operand=-len(body_bc) - 1)]
 
 
 class ToAst(Transformer):
@@ -254,7 +255,10 @@ def compile(tree):
     bc = []
     for node in tree.children:
         bc += node.to_bytecode(None)
-    return bc + [Instruction(opcode=Opcode.OP_DONE)]
+    bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
+    prog = Program()
+    frame = StackFrame(prog, 0, ip=0, stack=bc)
+    return frame
 
 
 def disassemble(bc: List[Instruction]):

@@ -32,15 +32,17 @@ for_clause: "for" IDENTIFIER IN "(" expression ")" | "for" IDENTIFIER IN "[" (ex
 
 for_statement: for_clause statement* "endfor"
 
-while_clause: "while" (IDENTIFIER)? "(" expression ")"
+?while_clause: "while" "(" condition ")"
 
-while_statement: while_clause statement* "endwhile"
+body: statement*
+while_statement: while_clause body "endwhile"
 
-fork_clause: "fork" "(" expression ")"
-
+?fork_clause: FORK "(" expression ")"
+FORK: "fork"
 fork_statement: fork_clause statement* "endfork"
 
 return_statement: "return" expression?
+
 
 scatter_statement: "{" scattering_target "}" "=" expression
 
@@ -85,7 +87,7 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | literal
           | IDENTIFIER
 
-paren: "(" expression ")"
+?paren: "(" expression ")"
 
 ternary: expression "?" expression "|" expression
 
