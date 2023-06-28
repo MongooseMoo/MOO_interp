@@ -1,10 +1,9 @@
 start: code
 
-?code:
-	| statement_list 
+code:
+	| statement*
 
 
-?statement_list: statement*
 
 ?statement:
 	| expression _SEMI
@@ -20,32 +19,34 @@ start: code
 	| scatter_statement _SEMI
 
 ?condition: expression
-then_block: statement_list
+
+then_block: statement*
 
 if_clause: "if" "(" condition ")" then_block
 elseif_clause: "elseif" "(" condition ")" then_block
 else_clause: "else" then_block
 
 if_statement: if_clause elseif_clause* else_clause? "endif"
+
 for_clause: "for" IDENTIFIER IN "(" expression ")" | "for" IDENTIFIER IN "[" (expression ".." (expression | "$")) "]"
 
-for_statement: for_clause statement_list "endfor"
+for_statement: for_clause statement* "endfor"
 
 while_clause: "while" (IDENTIFIER)? "(" expression ")"
 
-while_statement: while_clause statement_list "endwhile"
+while_statement: while_clause statement* "endwhile"
 
 fork_clause: "fork" "(" expression ")"
 
-fork_statement: fork_clause statement_list "endfork"
+fork_statement: fork_clause statement* "endfork"
 
 return_statement: "return" expression?
 
 scatter_statement: "{" scattering_target "}" "=" expression
 
-try_except_statement: "try" statement_list except_statement+ "endtry"
+try_except_statement: "try" statement* except_statement+ "endtry"
 
-except_statement: except_clause statement_list
+except_statement: except_clause statement*
 
 except_clause: "except" (IDENTIFIER)? "(" exception_codes ")"
 
@@ -53,9 +54,9 @@ exception_code: IDENTIFIER | "error"
 
 exception_codes: "@" expression | "any" | exception_code ("," exception_code)*
 
-try_finally_statement: "try" statement_list finally_statement "endtry"
+try_finally_statement: "try" statement* finally_statement "endtry"
 
-finally_statement: "finally" statement_list
+finally_statement: "finally" statement*
 
 break_statement: "break" IDENTIFIER?
 

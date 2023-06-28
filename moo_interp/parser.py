@@ -5,4 +5,4 @@ import pathlib
 
 path = pathlib.Path(__file__).parent.absolute()
 grammar = open(path / "parser.lark", "r")
-parser = Lark(grammar)
+parser = Lark(grammar, parser='earley')
