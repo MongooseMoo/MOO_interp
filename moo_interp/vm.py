@@ -178,6 +178,13 @@ class VM:
         except IndexError:
             raise VMError("Stack underflow")
 
+    def peek(self) -> Any:
+        """Peek at the top value on the stack"""
+        try:
+            return self.stack[-1]
+        except IndexError:
+            raise VMError("Stack underflow")
+
     def step(self) -> None:
         """Execute the next instruction in the current stack frame."""
         if not self.call_stack:
@@ -411,3 +418,17 @@ class VM:
     @operator(Opcode.OP_DONE)
     def handle_done(self):
         return 0
+
+    # Control Flow Operations
+
+    @operator(Opcode.OP_WHILE)
+    def handle_while(self):
+        frame = self.call_stack[-1]
+        condition = self.pop()  # Pop the condition off the stack
+        if not isinstance(condition, bool):
+            raise VMError("Expected boolean condition for OP_WHILE")
+
+        if not condition:
+            # Skip to after the end of the loop body
+            while frame.ip < len(frame.stack) and frame.stack[frame.ip].opcode != Opcode.OP_JUMP:
+                frame.ip += 1

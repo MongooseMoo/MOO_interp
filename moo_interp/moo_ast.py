@@ -5,7 +5,7 @@ from typing import List, Union
 from lark import Lark, Transformer, ast_utils, v_args
 from lark.tree import Meta
 
-from .vm import Instruction, Program, StackFrame
+from .vm import VM, Instruction, Program, StackFrame
 from .opcodes import Opcode, Extended_Opcode
 from .parser import parser
 from .string import MOOString
@@ -192,12 +192,32 @@ class WhileStatement(_Statement):
     condition: _Expression
     body: List[_Statement]
 
+
+@dataclass
+class WhileStatement(_Statement):
+    condition: _Expression
+    body: List[_Statement]
+
     def to_bytecode(self, program: Program):
+        # First generate bytecode for condition and body
         condition_bc = self.condition.to_bytecode(program)
         body_bc = []
         for stmt in self.body.children:
             body_bc += stmt.to_bytecode(program)
-        return condition_bc + [Instruction(opcode=Opcode.OP_WHILE, operand=None)] + body_bc + [Instruction(opcode=Opcode.OP_JUMP, operand=-len(body_bc) - 1)]
+
+        # Calculate the relative jump points
+        # +1 accounts for the OP_JUMP instruction at the end
+        jump_over_body = len(body_bc) + 1
+        # +1 accounts for the OP_WHILE instruction
+        jump_to_start = -(len(condition_bc) + len(body_bc) + 1)
+
+        # Generate bytecode
+        return (
+            condition_bc
+            + [Instruction(opcode=Opcode.OP_WHILE, operand=jump_over_body)]
+            + body_bc
+            + [Instruction(opcode=Opcode.OP_JUMP, operand=jump_to_start)]
+        )
 
 
 class ToAst(Transformer):
@@ -265,6 +285,13 @@ def disassemble(bc: List[Instruction]):
     for instruction in bc:
         print(
             f"{instruction.opcode.value} {instruction.opcode.name} {type(instruction.operand).__name__} {instruction.operand}")
+
+
+def run(frame: StackFrame):
+    vm = VM()
+    vm.call_stack = [frame]
+    while True:
+        vm.step()
 
 
 if __name__ == '__main__':
