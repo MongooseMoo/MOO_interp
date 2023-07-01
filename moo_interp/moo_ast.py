@@ -122,6 +122,8 @@ class _List(_Expression):
             else:
                 result += [Instruction(opcode=Opcode.OP_LIST_ADD_TAIL)]
         return result
+
+
 @dataclass
 class UnaryExpression(_Expression):
     operator: str
@@ -324,10 +326,20 @@ def disassemble(frame: StackFrame):
 def run(frame: StackFrame):
     vm = VM()
     vm.call_stack = [frame]
-    for top in vm.run():
-        # print(top)
-        pass
+    try:
+        for top in vm.run():
+            # print(top)
+            pass
+    except Exception as e:
+        raise VMRunError(vm, e)
     return vm
+
+
+class VMRunError(Exception):
+
+    def __init__(self, vm, message):
+        self.vm = vm
+        self.message = message
 
 
 if __name__ == '__main__':
