@@ -41,6 +41,12 @@ class FinallyReason(Enum):
     FIN_EXIT = 5
 
 
+class VMOutcome(Enum):
+    OUTCOME_DONE = 0  # Task ran successfully to completion
+    OUTCOME_ABORTED = 1  # Task aborted, either by kill_task or by an uncaught error
+    OUTCOME_BLOCKED = 2  # Task called a blocking built-in function
+
+
 @define
 class Instruction:
     """Represents a single bytecode instruction"""
@@ -57,7 +63,7 @@ class Instruction:
 
 @define
 class Program:
-    first_lineno: int = field(default=0)
+    first_lineno: int = field(default=1)
     literals: List[Any] = field(factory=list)
     fork_vectors: List[int] = field(factory=list)
     var_names: List[str] = field(factory=list)
@@ -100,7 +106,7 @@ def operator(opcode):
         @wraps(func)
         def wrapper(self, *args):
             # Check for stack underflow
-            if isinstance(opcode, Opcode) and opcode != Opcode.OP_PUSH:
+            if isinstance(opcode, Opcode) and opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM}:
                 if len(self.stack) < num_args:
                     raise VMError(
                         f"Stack underflow in opcode {opcode} in function {func.__name__}")
@@ -132,6 +138,8 @@ class VM:
 
     stack: List[Any] = field(factory=list)
     call_stack: List[StackFrame] = field(factory=list)
+    result: Any = field(default=0)
+    state: Union[VMOutcome, None] = field(default=None)
     opcode_handlers: Dict[Union[Opcode, Extended_Opcode],
                           Callable] = field(factory=dict)
 
@@ -139,6 +147,8 @@ class VM:
         super().__init__()
         self.stack = []
         self.call_stack = []
+        self.result = None
+        self.state = None
         self.opcode_handlers = {}
         handled_opcodes = set()
 
@@ -185,6 +195,12 @@ class VM:
         except IndexError:
             raise VMError("Stack underflow")
 
+    def run(self):
+        """Run the program"""
+        while self.state is None:
+            self.step()
+            yield self.peek()
+
     def step(self) -> None:
         """Execute the next instruction in the current stack frame."""
         if not self.call_stack:
@@ -193,7 +209,8 @@ class VM:
         frame = self.call_stack[-1]
 
         if frame.ip >= len(frame.stack):
-            self.call_stack.pop()
+            self.result = self.call_stack[-1].stack[-1]
+            self.state = VMOutcome.OUTCOME_DONE
             return
 
         instr = frame.stack[frame.ip]
@@ -209,7 +226,7 @@ class VM:
                 raise VMError(f"Unknown opcode {instr.opcode}")
         logger.debug(f"Executing {instr.opcode} {instr.operand}")
         args = []
-        if instr.opcode == Opcode.OP_PUSH:
+        if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM}:
             args = [instr.operand]
         elif handler.num_args:
             args = self.stack[-handler.num_args:]
@@ -220,7 +237,7 @@ class VM:
             if instr.opcode != Opcode.OP_POP:
                 result = handler(*args)
 
-                if handler.num_args and instr.opcode != Opcode.OP_PUSH:
+                if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM}:
                     del self.stack[-handler.num_args:]
 
                 self.stack.append(result)
@@ -260,12 +277,61 @@ class VM:
         return value
 
     @operator(Opcode.OP_PUSH)
-    def handle_push(self, value: Any):
-        return value
+    def handle_push(self, var_name: str):
+        """Pushes a value onto the stack.
+
+        Args:
+            var_name (str): The name of the variable to push.
+        """
+        frame = self.call_stack[-1]
+        # get the index of the variable in the variable names list
+        var_index = frame.prog.var_names.index(var_name)
+        # push the value at the same index in the runtime environment
+        self.push(frame.rt_env[var_index])
+
+    @operator(Opcode.OP_PUSH_CLEAR)
+    def handle_push_clear(self, var_name: str):
+        """ called the last time the variable is referenced in the program.
+
+          Args:
+            var_name (str): The name of the variable to push.
+        """
+        frame = self.call_stack[-1]
+        # get the index of the variable in the variable names list
+        var_index = frame.prog.var_names.index(var_name)
+        # push the value at the same index in the runtime environment
+        self.push(frame.rt_env[var_index])
+        # clear the variable from the variable names list and the runtime environment
+        frame.prog.var_names.pop(var_index)
+        frame.rt_env.pop(var_index)
+
+    @operator(Opcode.OP_IMM)
+    def handle_imm(self, value: Any):
+        """Pushes an immediate value onto the stack.
+
+        Args:
+            value (int): The value to push.
+        """
+        self.push(value)
 
     @operator(Opcode.OP_POP)
     def handle_pop(self):
         return self.pop()
+
+    @operator(Opcode.OP_PUT)
+    def handle_put(self, identifier: str):
+        self.put(identifier, self.peek)
+
+    def put(self, identifier: str, value: Any) -> None:
+        """Puts a value into the current stack frame's scope.
+
+        Args:
+            identifier (str): The identifier to store the value under.
+            value (Any): The value to store.
+        """
+        frame = self.call_stack[-1]
+        frame.prog.var_names.append(identifier)
+        frame.rt_env.append(value)
 
     @operator(Opcode.OP_ADD)
     def handle_add(self, op1, op2):
@@ -407,16 +473,20 @@ class VM:
 
     @operator(Opcode.OP_RETURN)
     def handle_return(self, value):
+        self.result = value
+        self.state = VMOutcome.OUTCOME_DONE
         self.call_stack.pop()
         return value
 
     @operator(Opcode.OP_RETURN0)
     def handle_return0(self):
+        self.state = VMOutcome.OUTCOME_DONE
         self.call_stack.pop()
         return 0
 
     @operator(Opcode.OP_DONE)
     def handle_done(self):
+        self.state = VMOutcome.OUTCOME_DONE
         return 0
 
     # Control Flow Operations

@@ -17,6 +17,9 @@ this_module = sys.modules[__name__]
 binary_opcodes = {
     '+': Opcode.OP_ADD,
     '-': Opcode.OP_MINUS,
+    "*": Opcode.OP_MULT,
+    "/": Opcode.OP_DIV,
+    '%': Opcode.OP_MOD,
     '==': Opcode.OP_EQ,
     '!=': Opcode.OP_NE,
     '<': Opcode.OP_LT,
@@ -40,7 +43,12 @@ unary_opcodes = {
 
 
 class _Ast(ast_utils.Ast):
-    pass
+
+    def emit_byte(self, opcode: Opcode, operand: Union[int, float, MOOString]):
+        return Instruction(opcode=opcode, operand=operand)
+
+    def emit_extended_byte(self, opcode: Extended_Opcode):
+        return Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode)
 
 
 class _Expression(_Ast):
@@ -58,38 +66,52 @@ class _Statement(_Ast):
 class Identifier(_Expression):
     value: str
 
+    def to_bytecode(self, program: Program):
+        return [self.emit_byte(Opcode.OP_PUSH, self.value)]
+
 
 @dataclass
-class StringLiteral(_Expression):
+class _Literal(_Ast):
+    value: any
+
+    def to_bytecode(self, program: Program):
+        return [self.emit_byte(Opcode.OP_PUSH, self.value)]
+
+
+@dataclass
+class StringLiteral(_Literal, _Expression):
     value: str
 
-
-def to_bytecode(self, program: Program):
-    return [Instruction(opcode=Opcode.PUSH, operand=MOOString(self.value))]
+    def to_bytecode(self, program: Program):
+        return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
 
 @dataclass
-class BooleanLiteral(_Expression):
+class BooleanLiteral(_Literal, _Expression):
     value: bool
 
-    def to_bytecode(self, program: Program):
-        return [Instruction(opcode=Opcode.OP_PUSH, operand=self.value)]
-
 
 @dataclass
-class NumberLiteral(_Expression):
+class NumberLiteral(_Literal, _Expression):
     value: int
 
-    def to_bytecode(self, program: Program):
-        return [Instruction(opcode=Opcode.OP_PUSH, operand=self.value)]
+
+@dataclass
+class FloatLiteral(_Literal, _Expression):
+    value: float
 
 
 @dataclass
-class FloatLiteral(_Expression):
-    value: float
+class _List(_Expression):
+    value: list
 
     def to_bytecode(self, program: Program):
-        return [Instruction(opcode=Opcode.PUSH, operand=self.value)]
+        if (not self.value):
+            # empty list
+            return [Instruction(opcode=Opcode.OP_MAKE_EMPTY_LIST)]
+        if len(self.value) == 1:
+            # single element list
+            return self.value[0].to_bytecode(program) + [Instruction(opcode=Opcode.OP_MAKE_SINGLETON_LIST)]
 
 
 @dataclass
@@ -109,17 +131,13 @@ class BinaryExpression(_Expression):
     right: _Expression
 
     def to_bytecode(self, program: Program):
-        left_bc = []
-        for child in self.left.children:
-            left_bc += child.to_bytecode(program)
-        right_bc = []
-        for child in self.right.children:
-            right_bc += child.to_bytecode(program)
+        left_bc = self.left.to_bytecode(program)
+        right_bc = self.right.to_bytecode(program)
         return left_bc + right_bc + [Instruction(opcode=binary_opcodes[self.operator])]
 
 
 @dataclass
-class Assignment(_Statement):
+class _Assign(_Statement):
     target: Identifier
     value: _Expression
 
@@ -238,8 +256,13 @@ class ToAst(Transformer):
     def FLOAT(self, n):
         return FloatLiteral(float(n))
 
-    def assignment(self, target, _, value):
-        return Assignment(target, value)
+    def assign(self, assignment):
+        target, value = assignment
+        print(value)
+        return _Assign(target=target, value=value)
+
+    def list(self, *args):
+        return _List(args)
 
     def if_statement(self, if_clause, *elseif_clauses, else_clause=None):
         condition, then_block = if_clause[0].children
@@ -277,7 +300,7 @@ def compile(tree):
         bc += node.to_bytecode(None)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
     prog = Program()
-    frame = StackFrame(prog, 0, ip=0, stack=bc)
+    frame = StackFrame(func_id=0, prog=prog, ip=0, stack=bc)
     return frame
 
 
@@ -290,8 +313,9 @@ def disassemble(bc: List[Instruction]):
 def run(frame: StackFrame):
     vm = VM()
     vm.call_stack = [frame]
-    while True:
-        vm.step()
+    for top in vm.run():
+        print(top)
+    return vm
 
 
 if __name__ == '__main__':
