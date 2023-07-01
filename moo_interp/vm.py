@@ -322,7 +322,7 @@ class VM:
 
     @operator(Opcode.OP_PUT)
     def handle_put(self, identifier: str):
-        return self.put(identifier, self.peek())
+        return self.put(identifier, self.pop)
 
     def put(self, identifier: str, value: Any) -> None:
         """Puts a value into the current stack frame's scope.

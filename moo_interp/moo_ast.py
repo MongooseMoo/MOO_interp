@@ -312,6 +312,9 @@ def compile(tree):
 def disassemble(frame: StackFrame):
     bc = frame.stack
     for instruction in bc:
+        if isinstance(instruction.opcode, int) and instruction.opcode >= 113:
+            print(f"Num            {instruction.opcode-113}")
+            continue
         print(
             f"{instruction.opcode.value} {instruction.opcode.name} {type(instruction.operand).__name__} {instruction.operand}")
 
