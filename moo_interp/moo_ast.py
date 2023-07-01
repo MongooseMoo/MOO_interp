@@ -266,7 +266,7 @@ class ToAst(Transformer):
         print(value)
         return _Assign(target=target, value=value)
 
-    def list(self, *args):
+    def list(self, args):
         return _List(args)
 
     def if_statement(self, if_clause, *elseif_clauses, else_clause=None):

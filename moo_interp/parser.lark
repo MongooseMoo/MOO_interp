@@ -108,7 +108,8 @@ call: IDENTIFIER "(" call_arguments ")"
 
 assign: expression "=" expression
 
-?literal: "error" | STRING | "object" | NUMBER | FLOAT | BOOLEAN | list | dict
+?literal: "error" | STRING | objnum | NUMBER | FLOAT | BOOLEAN | list | dict
+objnum: "#" NUMBER
 BOOLEAN: "true" | "false"
 
 call_arguments: (expression ("," expression)*)?
