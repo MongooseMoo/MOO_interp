@@ -443,7 +443,7 @@ class VM:
         return MOOList()
 
     @operator(Opcode.OP_LIST_ADD_TAIL)
-    def handle_list_add_tail(self, tail, lst: MOOList) -> MOOList:
+    def handle_list_add_tail(self, tail: Any, lst: MOOList) -> MOOList:
         if not isinstance(lst, MOOList):
             raise VMError("Expected list")
         lst.append(tail)
@@ -456,7 +456,7 @@ class VM:
         return lst1 + lst2
 
     @operator(Opcode.OP_MAKE_SINGLETON_LIST)
-    def handle_make_singleton_list(self, value) -> MOOList:
+    def handle_make_singleton_list(self, value: Any) -> MOOList:
         return MOOList([value])
 
     # Map operations
@@ -475,7 +475,7 @@ class VM:
     # Return Operations
 
     @operator(Opcode.OP_RETURN)
-    def handle_return(self, value):
+    def handle_return(self, value: Any):
         self.result = value
         self.state = VMOutcome.OUTCOME_DONE
         self.call_stack.pop()

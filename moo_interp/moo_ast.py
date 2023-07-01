@@ -114,11 +114,14 @@ class _List(_Expression):
         if (not self.value):
             # empty list
             return [Instruction(opcode=Opcode.OP_MAKE_EMPTY_LIST)]
-        if len(self.value) == 1:
-            # single element list
-            return self.value[0].to_bytecode(program) + [Instruction(opcode=Opcode.OP_MAKE_SINGLETON_LIST)]
-
-
+        result = []
+        for index, element in enumerate(self.value):
+            result += element.to_bytecode(program)
+            if index == 0:
+                result += [Instruction(opcode=Opcode.OP_MAKE_SINGLETON_LIST)]
+            else:
+                result += [Instruction(opcode=Opcode.OP_LIST_ADD_TAIL)]
+        return result
 @dataclass
 class UnaryExpression(_Expression):
     operator: str
@@ -263,7 +266,6 @@ class ToAst(Transformer):
 
     def assign(self, assignment):
         target, value = assignment
-        print(value)
         return _Assign(target=target, value=value)
 
     def list(self, args):
@@ -323,7 +325,8 @@ def run(frame: StackFrame):
     vm = VM()
     vm.call_stack = [frame]
     for top in vm.run():
-        print(top)
+        # print(top)
+        pass
     return vm
 
 
