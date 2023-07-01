@@ -80,10 +80,11 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | range
           | property
           | verb
+          | assign
           | unary_expression
           | binary_expression
           | call
-          | assign
+
           | literal
           | IDENTIFIER
 
