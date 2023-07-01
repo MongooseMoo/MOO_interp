@@ -309,7 +309,8 @@ def compile(tree):
     return frame
 
 
-def disassemble(bc: List[Instruction]):
+def disassemble(frame: StackFrame):
+    bc = frame.stack
     for instruction in bc:
         print(
             f"{instruction.opcode.value} {instruction.opcode.name} {type(instruction.operand).__name__} {instruction.operand}")
