@@ -44,7 +44,7 @@ unary_opcodes = {
 
 class _Ast(ast_utils.Ast):
 
-    def emit_byte(self, opcode: Opcode, operand: Union[int, float, MOOString]):
+    def emit_byte(self, opcode: Opcode, operand: Union[int, float, MOOString, None]):
         return Instruction(opcode=opcode, operand=operand)
 
     def emit_extended_byte(self, opcode: Extended_Opcode):
@@ -75,15 +75,12 @@ class _Literal(_Ast):
     value: any
 
     def to_bytecode(self, program: Program):
-        return [self.emit_byte(Opcode.OP_PUSH, self.value)]
+        return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
 
 @dataclass
 class StringLiteral(_Literal, _Expression):
     value: str
-
-    def to_bytecode(self, program: Program):
-        return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
 
 @dataclass
@@ -94,6 +91,11 @@ class BooleanLiteral(_Literal, _Expression):
 @dataclass
 class NumberLiteral(_Literal, _Expression):
     value: int
+
+    def to_bytecode(self, program: Program):
+        if self.value > -1 and self.value < 256:
+            return [self.emit_byte(113+self.value, None)]
+        return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
 
 @dataclass

@@ -212,7 +212,7 @@ class VM:
             self.result = self.call_stack[-1].stack[-1]
             self.state = VMOutcome.OUTCOME_DONE
             return
-
+        result = None
         instr = frame.stack[frame.ip]
         handler = self.opcode_handlers.get(instr.opcode)
         if not handler:
@@ -223,27 +223,29 @@ class VM:
                 if not handler:
                     raise VMError(f"Unknown extended opcode {instr.operand}")
             if not handler:
-                raise VMError(f"Unknown opcode {instr.opcode}")
-        logger.debug(f"Executing {instr.opcode} {instr.operand}")
-        args = []
-        if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM}:
-            args = [instr.operand]
-        elif handler.num_args:
-            args = self.stack[-handler.num_args:]
+                if instr.opcode > 113:
+                    result = instr.opcode - 113
+                else:
+                    raise VMError(f"Unknown opcode {instr.opcode}")
+        if result is None:
+            logger.debug(f"Executing {instr.opcode} {instr.operand}")
+            args = []
+            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM}:
+                args = [instr.operand]
+            elif handler.num_args:
+                args = self.stack[-handler.num_args:]
 
-        logger.debug(f"Args: {args}")
+            logger.debug(f"Args: {args}")
 
-        try:
-            if instr.opcode != Opcode.OP_POP:
-                result = handler(*args)
+            try:
+                if instr.opcode != Opcode.OP_POP:
+                    result = handler(*args)
 
-                if handler.num_args and instr.opcode not in {}: #Opcode.OP_PUSH}:
-                    del self.stack[-handler.num_args:]
-
-                self.stack.append(result)
-        except Exception as e:
-            raise VMError(f"Error executing opcode: {e}")
-
+                    if handler.num_args and instr.opcode not in {}:  # Opcode.OP_PUSH}:
+                        del self.stack[-handler.num_args:]
+            except Exception as e:
+                raise VMError(f"Error executing opcode: {e}")
+        self.stack.append(result)
         frame.ip += 1
         # pop the stack frame if we've reached the end of the stack
         if frame.ip >= len(frame.stack):
