@@ -100,6 +100,9 @@ class NumberLiteral(_Literal, _Expression):
 class FloatLiteral(_Literal, _Expression):
     value: float
 
+    def to_bytecode(self, program: Program):
+        return [self.emit_byte(Opcode.OP_IMM, self.value)]
+
 
 @dataclass
 class _List(_Expression):

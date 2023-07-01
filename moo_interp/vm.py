@@ -199,7 +199,7 @@ class VM:
         """Run the program"""
         while self.state is None:
             self.step()
-            yield self.peek()
+            yield self.stack
 
     def step(self) -> None:
         """Execute the next instruction in the current stack frame."""
@@ -237,7 +237,7 @@ class VM:
             if instr.opcode != Opcode.OP_POP:
                 result = handler(*args)
 
-                if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM}:
+                if handler.num_args and instr.opcode not in {}: #Opcode.OP_PUSH}:
                     del self.stack[-handler.num_args:]
 
                 self.stack.append(result)
@@ -287,7 +287,7 @@ class VM:
         # get the index of the variable in the variable names list
         var_index = frame.prog.var_names.index(var_name)
         # push the value at the same index in the runtime environment
-        self.push(frame.rt_env[var_index])
+        return frame.rt_env[var_index]
 
     @operator(Opcode.OP_PUSH_CLEAR)
     def handle_push_clear(self, var_name: str):
@@ -312,7 +312,7 @@ class VM:
         Args:
             value (int): The value to push.
         """
-        self.push(value)
+        return value
 
     @operator(Opcode.OP_POP)
     def handle_pop(self):
@@ -320,7 +320,7 @@ class VM:
 
     @operator(Opcode.OP_PUT)
     def handle_put(self, identifier: str):
-        self.put(identifier, self.peek)
+        return self.put(identifier, self.peek())
 
     def put(self, identifier: str, value: Any) -> None:
         """Puts a value into the current stack frame's scope.
@@ -332,6 +332,7 @@ class VM:
         frame = self.call_stack[-1]
         frame.prog.var_names.append(identifier)
         frame.rt_env.append(value)
+        return value
 
     @operator(Opcode.OP_ADD)
     def handle_add(self, op1, op2):
