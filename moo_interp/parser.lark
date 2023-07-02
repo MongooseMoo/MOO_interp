@@ -37,8 +37,7 @@ for_statement: for_clause statement* "endfor"
 body: statement*
 while_statement: while_clause body "endwhile"
 
-?fork_clause: FORK "(" expression ")"
-FORK: "fork"
+?fork_clause: "fork" IDENTIFIER? "(" expression ")"
 fork_statement: fork_clause statement* "endfork"
 
 return_statement: "return" expression?
