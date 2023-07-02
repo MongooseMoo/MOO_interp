@@ -83,7 +83,7 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | assign
           | unary_expression
           | binary_expression
-          | call
+          | function_call
           | literal
           | IDENTIFIER
           | scatter
@@ -104,7 +104,7 @@ property: expression "." (IDENTIFIER | "(" expression ")")
 
 verb: expression ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
 
-call: IDENTIFIER "(" call_arguments ")"
+function_call: IDENTIFIER "(" call_arguments ")"
 
 assign: expression "=" expression
 
