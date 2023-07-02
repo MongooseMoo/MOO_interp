@@ -1,3 +1,4 @@
+from typing import Iterable
 from attr import define, field
 from collections.abc import MutableSequence
 
@@ -32,3 +33,6 @@ class MOOList(MutableSequence):
 
     def __str__(self):
         return self.__repr__()
+
+    def __add__(self, other):
+        return MOOList(*self._list, *other._list)

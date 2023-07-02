@@ -287,8 +287,9 @@ class ToAst(Transformer):
     def list(self, args):
         return _List(args)
 
-    def dict        (self, entries):
+    def dict(self, entries):
         return Map(entries)
+
     def if_statement(self, if_clause, *elseif_clauses, else_clause=None):
         condition, then_block = if_clause[0].children
         if elseif_clauses:
