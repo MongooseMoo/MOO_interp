@@ -16,8 +16,7 @@ code:
 	| try_finally_statement
 	| break_statement _SEMI
 	| continue_statement _SEMI
-	| scatter_statement _SEMI
-
+	
 ?condition: expression
 
 then_block: statement*
@@ -43,7 +42,7 @@ fork_statement: fork_clause statement* "endfork"
 return_statement: "return" expression?
 
 
-scatter_statement: "{" scattering_target "}" "=" expression
+scatter: "{" scattering_target "}" "=" expression
 
 try_except_statement: "try" statement* except_statement+ "endtry"
 
@@ -85,9 +84,9 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | unary_expression
           | binary_expression
           | call
-
           | literal
           | IDENTIFIER
+          | scatter
 
 ?paren: "(" expression ")"
 
