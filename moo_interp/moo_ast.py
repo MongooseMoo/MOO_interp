@@ -328,7 +328,7 @@ def run(frame: StackFrame):
     vm.call_stack = [frame]
     try:
         for top in vm.run():
-            # print(top)
+            print(vm.stack)
             pass
     except Exception as e:
         raise VMRunError(vm, e)

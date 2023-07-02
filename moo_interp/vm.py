@@ -141,7 +141,7 @@ class VM:
     result: Any = field(default=0)
     state: Union[VMOutcome, None] = field(default=None)
     opcode_handlers: Dict[Union[Opcode, Extended_Opcode],
-                          Callable] = field(factory=dict)
+                          Callable] = field(factory=dict, repr=False)
 
     def __init__(self):
         super().__init__()
@@ -289,7 +289,9 @@ class VM:
         # get the index of the variable in the variable names list
         var_index = frame.prog.var_names.index(var_name)
         # push the value at the same index in the runtime environment
-        return frame.rt_env[var_index]
+        result = frame.rt_env[var_index]
+        logger.debug(f"Pushing {result} onto the stack from {var_name}")
+        return result
 
     @operator(Opcode.OP_PUSH_CLEAR)
     def handle_push_clear(self, var_name: str):
@@ -332,8 +334,16 @@ class VM:
             value (Any): The value to store.
         """
         frame = self.call_stack[-1]
-        frame.prog.var_names.append(identifier)
+        try:
+            index = frame.prog.var_names.index(identifier)
+        except ValueError:
+            frame.prog.var_names.append(identifier)
+            frame.rt_env.append(value)
+            logger.debug(f"Put {value} into {identifier}")
+            return value
+        frame.rt_env[index] = value
         frame.rt_env.append(value)
+        logger.debug(f"Put {value} into {identifier}")
         return value
 
     @operator(Opcode.OP_ADD)
