@@ -29,7 +29,7 @@ binary_opcodes = {
     'in': Opcode.OP_IN,
     '&&': Opcode.OP_AND,
     '||': Opcode.OP_OR,
-
+    '^': Extended_Opcode.EOP_EXP,
 }
 
 unary_opcodes = {
