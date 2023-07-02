@@ -223,7 +223,7 @@ class VM:
                 if not handler:
                     raise VMError(f"Unknown extended opcode {instr.operand}")
             if not handler:
-                if instr.opcode > 113:
+                if instr.opcode >= 113:
                     result = instr.opcode - 113
                 else:
                     raise VMError(f"Unknown opcode {instr.opcode}")
@@ -241,7 +241,8 @@ class VM:
                 if instr.opcode != Opcode.OP_POP:
                     result = handler(*args)
 
-                    if handler.num_args and instr.opcode not in {}:  # Opcode.OP_PUSH}:
+                    # Opcode.OP_PUSH}:
+                    if handler.num_args and instr.opcode not in {Opcode.OP_IMM}:
                         del self.stack[-handler.num_args:]
             except Exception as e:
                 raise VMError(f"Error executing opcode: {e}")
@@ -314,8 +315,10 @@ class VM:
         """Pushes an immediate value onto the stack.
 
         Args:
-            value (int): The value to push.
+            value (Any): The value to push.
         """
+        if isinstance(value, str):
+            value = MOOString(value)
         return value
 
     @operator(Opcode.OP_POP)
@@ -324,7 +327,7 @@ class VM:
 
     @operator(Opcode.OP_PUT)
     def handle_put(self, identifier: str):
-        return self.put(identifier, self.pop())
+        return self.put(identifier, self.peek())
 
     def put(self, identifier: str, value: Any) -> None:
         """Puts a value into the current stack frame's scope.
@@ -476,7 +479,7 @@ class VM:
         return MOOMap()
 
     @operator(Opcode.OP_MAP_INSERT)
-    def handle_map_insert(self, key: MOOString, value, mapping: MOOMap) -> MOOMap:
+    def handle_map_insert(self, mapping: MOOMap, key: MOOString, value: Any) -> MOOMap:
         if not isinstance(mapping, MOOMap):
             raise VMError("Expected map")
         mapping[key] = value

@@ -125,6 +125,20 @@ class _List(_Expression):
 
 
 @dataclass
+class Map(_Expression):
+    value: List
+
+    def to_bytecode(self, program: Program):
+        result = [Instruction(opcode=Opcode.OP_MAP_CREATE)]
+        for child in self.value:
+            key, value = child.children
+            result += key.to_bytecode(program)
+            result += value.to_bytecode(program)
+            result += [Instruction(opcode=Opcode.OP_MAP_INSERT)]
+        return result
+
+
+@dataclass
 class UnaryExpression(_Expression):
     operator: str
     operand: _Expression
@@ -273,6 +287,8 @@ class ToAst(Transformer):
     def list(self, args):
         return _List(args)
 
+    def dict        (self, entries):
+        return Map(entries)
     def if_statement(self, if_clause, *elseif_clauses, else_clause=None):
         condition, then_block = if_clause[0].children
         if elseif_clauses:
