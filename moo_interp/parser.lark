@@ -27,7 +27,7 @@ else_clause: "else" then_block
 
 if_statement: if_clause elseif_clause* else_clause? "endif"
 
-for_clause: "for" IDENTIFIER IN "(" expression ")" | "for" IDENTIFIER IN "[" (expression ".." (expression | "$")) "]"
+for_clause: "for" IDENTIFIER ("," IDENTIFIER)? IN "(" expression ")" | "for" IDENTIFIER ("," IDENTIFIER)? IN "[" (expression ".." (expression | "$")) "]"
 
 for_statement: for_clause statement* "endfor"
 
