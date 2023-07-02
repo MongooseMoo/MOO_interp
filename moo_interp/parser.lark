@@ -31,7 +31,7 @@ for_clause: "for" IDENTIFIER ("," IDENTIFIER)? IN "(" expression ")" | "for" IDE
 
 for_statement: for_clause statement* "endfor"
 
-?while_clause: "while" "(" condition ")"
+?while_clause: "while" IDENTIFIER? "(" condition ")"
 
 body: statement*
 while_statement: while_clause body "endwhile"
