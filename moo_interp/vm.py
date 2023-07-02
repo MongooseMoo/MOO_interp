@@ -242,7 +242,7 @@ class VM:
                     result = handler(*args)
 
                     # Opcode.OP_PUSH}:
-                    if handler.num_args and instr.opcode not in {Opcode.OP_IMM}:
+                    if handler.num_args and instr.opcode not in {Opcode.OP_PUSH,  Opcode.OP_IMM, }:
                         del self.stack[-handler.num_args:]
             except Exception as e:
                 raise VMError(f"Error executing opcode: {e}")
@@ -491,14 +491,12 @@ class VM:
     def handle_return(self, value: Any):
         self.result = value
         self.state = VMOutcome.OUTCOME_DONE
-        self.call_stack.pop()
         return value
 
     @operator(Opcode.OP_RETURN0)
     def handle_return0(self):
         self.state = VMOutcome.OUTCOME_DONE
         self.result = 0
-        self.call_stack.pop()
         return 0
 
     @operator(Opcode.OP_DONE)

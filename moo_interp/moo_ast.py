@@ -221,6 +221,18 @@ class _IfStatement(_Statement):
 
 
 @dataclass
+class FunctionCall(_Expression):
+    name: str
+    arguments: List[_Expression]
+
+    def to_bytecode(self, program: Program):
+        result = []
+        result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
+                               operand=self.name)]
+        return result
+
+
+@dataclass
 class ReturnStatement(_Statement):
     value: _Expression = None
 
