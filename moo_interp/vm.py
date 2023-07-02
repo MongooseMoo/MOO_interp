@@ -142,6 +142,7 @@ class VM:
     state: Union[VMOutcome, None] = field(default=None)
     opcode_handlers: Dict[Union[Opcode, Extended_Opcode],
                           Callable] = field(factory=dict, repr=False)
+    bi_funcs: Dict[int, Callable] = field(factory=dict, repr=False)
 
     def __init__(self):
         super().__init__()
@@ -150,6 +151,7 @@ class VM:
         self.result = None
         self.state = None
         self.opcode_handlers = {}
+        self.bi_funcs = {}
         handled_opcodes = set()
 
         # Register all opcode handlers
@@ -517,3 +519,17 @@ class VM:
             # Skip to after the end of the loop body
             while frame.ip < len(frame.stack) and frame.stack[frame.ip].opcode != Opcode.OP_JUMP:
                 frame.ip += 1
+            if frame.ip >= len(frame.stack):
+                raise VMError("No OP_JUMP found for OP_WHILE")
+            frame.ip += 1  # Skip the OP_JUMP
+
+    @operator(Opcode.OP_BI_FUNC_CALL)
+    def handle_bi_func_call(self, func_id: int, args: MOOList):
+        func = self.bi_funcs.get(func_id)
+        if func is None:
+            raise VMError("Unknown built-in function")
+        try:
+            result = func(self, args)
+        except Exception as e:
+            raise VMError("Error calling built-in function: {}".format(e))
+        return result
