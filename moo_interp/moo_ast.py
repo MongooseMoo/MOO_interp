@@ -222,9 +222,11 @@ class _IfStatement(_Statement):
 
 @dataclass
 class ReturnStatement(_Statement):
-    value: _Expression
+    value: _Expression = None
 
     def to_bytecode(self, program: Program):
+        if self.value is None:
+            return [Instruction(opcode=Opcode.OP_RETURN0)]
         value_bc = self.value.to_bytecode(program)
         return value_bc + [Instruction(opcode=Opcode.OP_RETURN)]
 

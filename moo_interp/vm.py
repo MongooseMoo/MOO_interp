@@ -497,6 +497,7 @@ class VM:
     @operator(Opcode.OP_RETURN0)
     def handle_return0(self):
         self.state = VMOutcome.OUTCOME_DONE
+        self.result = 0
         self.call_stack.pop()
         return 0
 
