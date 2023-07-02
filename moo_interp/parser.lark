@@ -68,7 +68,9 @@ dict : "[" map_entry_expression ("," map_entry_expression)* "]"
 list : "{" [expression ("," expression)*] "}"
 map_entry_expression : STRING "->" expression
 
-unary_expression: ("!" | "~" | "-") expression
+
+unary_expression: UNARY_OP expression
+UNARY_OP: ("!" | "~" | "-")
 binary_expression: expression BINARY_OP expression
 BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">" | "&&" | "||")
 
