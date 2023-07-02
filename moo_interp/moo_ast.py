@@ -221,12 +221,12 @@ class _IfStatement(_Statement):
 
 
 @dataclass
-class FunctionCall(_Expression):
+class _FunctionCall(_Expression):
     name: str
     arguments: List[_Expression]
 
     def to_bytecode(self, program: Program):
-        result = []
+        result = self.arguments.to_bytecode(program)
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
                                operand=self.name)]
         return result
@@ -312,7 +312,9 @@ class ToAst(Transformer):
         else_block = else_clause or None  # in case else_clause is not provided
         return _IfStatement(condition, then_block, elseif_clauses, else_block)
 
-    # ... other transformation functions ...
+    def function_call(self, call):
+        name, args = call
+        return _FunctionCall(name, _List(args.children))
 
     @v_args(inline=True)
     def start(self, x):
