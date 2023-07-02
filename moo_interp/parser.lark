@@ -66,7 +66,7 @@ continue_statement: "continue" IDENTIFIER?
 
 dict : "[" map_entry_expression ("," map_entry_expression)* "]"
 list : "{" [expression ("," expression)*] "}"
-map_entry_expression : STRING "->" expression
+map_entry_expression : ESCAPED_STRING "->" expression
 
 
 unary_expression: UNARY_OP expression
@@ -110,7 +110,7 @@ call: IDENTIFIER "(" call_arguments ")"
 
 assign: expression "=" expression
 
-?literal: "error" | STRING | objnum | NUMBER | FLOAT | BOOLEAN | list | dict
+?literal: "error" | ESCAPED_STRING | objnum | NUMBER | FLOAT | BOOLEAN | list | dict
 objnum: "#" NUMBER
 BOOLEAN: "true" | "false"
 
@@ -122,7 +122,7 @@ scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDEN
 
 _SEMI: ";"
 IDENTIFIER.-5: (("_"|"$"|LETTER) ("_"|LETTER|DIGIT)*)
-STRING: /".*?"|'.*?'/
+
 IN: "in"
 NUMBER: /-?[0-9]+/
 FLOAT: /-?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?/
@@ -130,5 +130,6 @@ LETTER: /[a-zA-Z]/
 DIGIT: /\d/
 WS: /[ \t\n\r\f]+/
 
+%import common.ESCAPED_STRING
 %ignore WS
 

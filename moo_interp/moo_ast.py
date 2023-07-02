@@ -273,7 +273,7 @@ class ToAst(Transformer):
             return BooleanLiteral(s.value == "true")
         return Identifier(s.value)
 
-    def STRING(self, s):
+    def ESCAPED_STRING(self, s):
         return StringLiteral(s[1:-1])
 
     def NUMBER(self, n):
