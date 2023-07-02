@@ -50,7 +50,7 @@ except_statement: except_clause statement*
 
 except_clause: "except" (IDENTIFIER)? "(" exception_codes ")"
 
-exception_code: IDENTIFIER | "error"
+exception_code: IDENTIFIER | "error" | ESCAPED_STRING
 
 exception_codes: "@" expression | "any" | exception_code ("," exception_code)*
 
