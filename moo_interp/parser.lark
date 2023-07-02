@@ -62,7 +62,7 @@ break_statement: "break" IDENTIFIER?
 
 continue_statement: "continue" IDENTIFIER?
 
-dict : "[" map_entry_expression ("," map_entry_expression)* "]"
+dict : "[" map_entry_expression? ("," map_entry_expression)* "]"
 list : "{" [expression ("," expression)*] "}"
 map_entry_expression : ESCAPED_STRING "->" expression
 
