@@ -9,6 +9,7 @@ from attr import define, field
 
 from moo_interp.string import MOOString
 
+from .builtin_functions import BF_REGISTRY
 from .list import MOOList
 from .map import MOOMap
 from .opcodes import Extended_Opcode, Opcode
@@ -524,12 +525,13 @@ class VM:
             frame.ip += 1  # Skip the OP_JUMP
 
     @operator(Opcode.OP_BI_FUNC_CALL)
-    def handle_bi_func_call(self, func_id: int, args: MOOList):
-        func = self.bi_funcs.get(func_id)
+    def handle_bi_func_call(self, args: MOOList):
+        func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
+        func = BF_REGISTRY.get_function_by_id(func_id)
         if func is None:
             raise VMError("Unknown built-in function")
         try:
-            result = func(self, args)
+            result = func(*args._list)
         except Exception as e:
             raise VMError("Error calling built-in function: {}".format(e))
         return result

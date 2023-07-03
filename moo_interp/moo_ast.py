@@ -9,6 +9,8 @@ from .vm import VM, Instruction, Program, StackFrame
 from .opcodes import Opcode, Extended_Opcode
 from .parser import parser
 from .string import MOOString
+from .builtin_functions import BF_REGISTRY
+
 
 this_module = sys.modules[__name__]
 
@@ -227,8 +229,9 @@ class _FunctionCall(_Expression):
 
     def to_bytecode(self, program: Program):
         result = self.arguments.to_bytecode(program)
+        builtin_id = BF_REGISTRY.get_id_by_name(self.name)
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
-                               operand=self.name)]
+                               operand=builtin_id)]
         return result
 
 
@@ -314,7 +317,7 @@ class ToAst(Transformer):
 
     def function_call(self, call):
         name, args = call
-        return _FunctionCall(name, _List(args.children))
+        return _FunctionCall(name.value, _List(args.children))
 
     @v_args(inline=True)
     def start(self, x):
