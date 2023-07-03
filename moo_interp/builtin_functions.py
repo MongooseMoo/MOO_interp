@@ -128,7 +128,10 @@ def toint(value):
     if isinstance(value, int):
         return value
     elif isinstance(value, MOOString):
-        return int(value)
+        try:
+            return int(value)
+        except ValueError:
+            return 0
     elif isinstance(value, float):
         return int(value)
     elif isinstance(value, MOOObj):
@@ -191,10 +194,10 @@ def sin(value):
 @BF_REGISTRY
 def cos(value):
     return math.cos(tofloat(value))
+
 @BF_REGISTRY
 def cosh(value):
     return math.cosh(tofloat(value))
-
 
 @BF_REGISTRY
 def distance(l1: MOOList, l2: MOOList) -> float:
