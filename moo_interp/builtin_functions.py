@@ -307,3 +307,15 @@ def index(str1, str2):
 def rindex(str1, str2):
     return str1.rfind(str2)
 
+_abs = abs
+@BF_REGISTRY
+def abs(x):
+    return _abs((x))
+
+@BF_REGISTRY
+def length(x):
+    return len(x)
+
+@BF_REGISTRY
+def toliteral(x):
+    return MOOString(x)
