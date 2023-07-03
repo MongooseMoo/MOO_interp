@@ -262,7 +262,6 @@ def log10(x):
 def sin(x):
     return math.sin(tofloat(x))
 
-
 @BF_REGISTRY
 def sqrt(x):
     return math.sqrt(tofloat(x))
@@ -293,9 +292,8 @@ def listinsert(list: MOOList, index: int, value) -> MOOList:
 def equal(x, y):
     return x == y
 
-
 @BF_REGISTRY
-def strcmp(str1, str2):
+def strcmp(str1: MOOString, str2: MOOString):
     if str1 < str2:
         return -1
     elif str1 == str2:
@@ -304,10 +302,11 @@ def strcmp(str1, str2):
         return 1
 
 @BF_REGISTRY
-def index(str1, str2):
+def index(str1: MOOString, str2: MOOString):
     return str1.find(str2)
+
 @BF_REGISTRY
-def rindex(str1, str2):
+def rindex(str1: MOOString, str2: MOOString):
     return str1.rfind(str2)
 
 _abs = abs

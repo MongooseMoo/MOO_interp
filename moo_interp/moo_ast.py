@@ -302,6 +302,8 @@ class ToAst(Transformer):
         return _Assign(target=target, value=value)
 
     def list(self, args):
+        if len(args) == 1 and args[0] == None:
+            return _List([])
         return _List(args)
 
     def dict(self, entries):

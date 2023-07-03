@@ -482,7 +482,7 @@ class VM:
         return MOOMap()
 
     @operator(Opcode.OP_MAP_INSERT)
-    def handle_map_insert(self, mapping: MOOMap, key: MOOString, value: Any) -> MOOMap:
+    def handle_map_insert(self, mapping: MOOMap, key: MOOString|int|float, value: Any) -> MOOMap:
         if not isinstance(mapping, MOOMap):
             raise VMError("Expected map")
         mapping[key] = value
