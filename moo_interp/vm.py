@@ -7,14 +7,13 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from attr import define, field
 
-from moo_interp.string import MOOString
-
 from .builtin_functions import BF_REGISTRY
 from .list import MOOList
 from .map import MOOMap
 from .opcodes import Extended_Opcode, Opcode
+from .string import MOOString
 
-basicConfig(level="DEBUG")
+# basicConfig(level="DEBUG")
 logger = getLogger(__name__)
 
 
@@ -152,7 +151,8 @@ class VM:
         self.result = None
         self.state = None
         self.opcode_handlers = {}
-        self.bi_funcs = {}
+        self.bi_funcs = BF_REGISTRY
+        self.db = None
         handled_opcodes = set()
 
         # Register all opcode handlers
@@ -204,12 +204,20 @@ class VM:
             self.step()
             yield self.stack
 
+    @property
+    def current_frame(self) -> StackFrame:
+        """The current stack frame"""
+        try:
+            return self.call_stack[-1]
+        except IndexError:
+            raise VMError("No current stack frame")
+
     def step(self) -> None:
         """Execute the next instruction in the current stack frame."""
         if not self.call_stack:
             return
 
-        frame = self.call_stack[-1]
+        frame = self.current_frame
 
         if frame.ip >= len(frame.stack):
             self.result = self.call_stack[-1].stack[-1]
@@ -233,7 +241,7 @@ class VM:
         if result is None:
             logger.debug(f"Executing {instr.opcode} {instr.operand}")
             args = []
-            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM}:
+            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP}:
                 args = [instr.operand]
             elif handler.num_args:
                 args = self.stack[-handler.num_args:]
@@ -263,8 +271,7 @@ class VM:
         Args:
             offset (int): The label or offset to jump to.
         """
-        frame = self.call_stack[-1]  # get current stack frame
-        frame.ip += offset  # adjust instruction pointer by offset
+        self.call_frame.ip += offset  # adjust instruction pointer by offset
 
     def read_bytes(self, num_bytes: int) -> int:
         """Reads the given number of bytes from the bytecode.
@@ -289,7 +296,7 @@ class VM:
         Args:
             var_name (str): The name of the variable to push.
         """
-        frame = self.call_stack[-1]
+        frame = self.current_frame
         # get the index of the variable in the variable names list
         var_index = frame.prog.var_names.index(var_name)
         # push the value at the same index in the runtime environment
@@ -304,7 +311,7 @@ class VM:
           Args:
             var_name (str): The name of the variable to push.
         """
-        frame = self.call_stack[-1]
+        frame = self.current_frame
         # get the index of the variable in the variable names list
         var_index = frame.prog.var_names.index(var_name)
         # push the value at the same index in the runtime environment
@@ -325,8 +332,9 @@ class VM:
         return value
 
     @operator(Opcode.OP_POP)
-    def handle_pop(self):
-        return self.pop()
+    def handle_pop(self, num: int = 1):
+        for _ in range(num):
+            self.pop()
 
     @operator(Opcode.OP_PUT)
     def handle_put(self, identifier: str):
@@ -339,7 +347,7 @@ class VM:
             identifier (str): The identifier to store the value under.
             value (Any): The value to store.
         """
-        frame = self.call_stack[-1]
+        frame = self.current_frame
         try:
             index = frame.prog.var_names.index(identifier)
         except ValueError:
@@ -482,7 +490,7 @@ class VM:
         return MOOMap()
 
     @operator(Opcode.OP_MAP_INSERT)
-    def handle_map_insert(self, mapping: MOOMap, key: MOOString|int|float, value: Any) -> MOOMap:
+    def handle_map_insert(self, mapping: MOOMap, key: MOOString | int | float, value: Any) -> MOOMap:
         if not isinstance(mapping, MOOMap):
             raise VMError("Expected map")
         mapping[key] = value
@@ -527,7 +535,7 @@ class VM:
     @operator(Opcode.OP_BI_FUNC_CALL)
     def handle_bi_func_call(self, args: MOOList):
         func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
-        func = BF_REGISTRY.get_function_by_id(func_id)
+        func = self.bi_funcs.get_function_by_id(func_id)
         if func is None:
             raise VMError("Unknown built-in function")
         try:
@@ -535,3 +543,20 @@ class VM:
         except Exception as e:
             raise VMError("Error calling built-in function: {}".format(e))
         return result
+
+    @operator(Opcode.OP_GET_PROP)
+    def handle_get_prop(self, obj: Any, prop: MOOString):
+        """Get the value of a property on an object"""
+        object = self.db.get_object(obj)
+        if object is None:
+            raise VMError("Object not found")
+        return object.get_prop(prop)
+
+    @operator(Opcode.OP_PUT_PROP)
+    def handle_put_prop(self, obj: Any, prop: MOOString, value: Any):
+        """Set the value of a property on an object"""
+        object = self.db.get_object(obj)
+        if object is None:
+            raise VMError("Object not found")
+        object.set_prop(prop, value)
+        return value

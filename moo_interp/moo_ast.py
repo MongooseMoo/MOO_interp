@@ -137,6 +137,7 @@ class Map(_Expression):
             result += key.to_bytecode(program)
             result += value.to_bytecode(program)
             result += [Instruction(opcode=Opcode.OP_MAP_INSERT)]
+            result += [Instruction(opcode=Opcode.OP_POP, operand=2)]
         return result
 
 
@@ -169,7 +170,10 @@ class _Assign(_Statement):
 
     def to_bytecode(self, program: Program):
         value_bc = self.value.to_bytecode(program)
-        return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=self.target.value)]
+        if isinstance(self.target, Identifier):
+            return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=self.target.value)]
+        elif isinstance(self.target, _Property):
+            return value_bc + self.target.object.to_bytecode(program) + self.target.name.to_bytecode(program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
 
 
 @dataclass
@@ -232,6 +236,32 @@ class _FunctionCall(_Expression):
         builtin_id = BF_REGISTRY.get_id_by_name(self.name)
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
                                operand=builtin_id)]
+        return result
+
+
+@dataclass
+class _Property(_Expression):
+    object: _Expression
+    name: str
+
+    def to_bytecode(self, program: Program):
+        result = self.object.to_bytecode(program)
+        result += self.name.to_bytecode(program)
+        result += [Instruction(opcode=Opcode.OP_GET_PROP)]
+        return result
+
+
+@dataclass
+class _VerbCall(_Expression):
+    object: _Expression
+    name: _Expression
+    arguments: List[_Expression]
+
+    def to_bytecode(self, program: Program):
+        result = self.object.to_bytecode(program)
+        result += self.name.to_bytecode(program)
+        result += self.arguments.to_bytecode(program)
+        result += [Instruction(opcode=Opcode.OP_CALL_VERB)]
         return result
 
 
@@ -321,6 +351,16 @@ class ToAst(Transformer):
         name, args = call
         return _FunctionCall(name.value, _List(args.children))
 
+    def property(self, access):
+        object, name = access
+        # the original /* Treat foo.bar like foo.("bar") for simplicity */ so we need to convert to string
+        name = StringLiteral(name.value)
+        return _Property(object, name)
+
+    def verb_call(self, call):
+        object, name, args = call
+        return _VerbCall(object, name, _List(args.children))
+
     @v_args(inline=True)
     def start(self, x):
         return x
@@ -342,6 +382,8 @@ def parse(text):
 
 
 def compile(tree):
+    if isinstance(tree, str):
+        tree = parse(tree)
     bc = []
     for node in tree.children:
         bc += node.to_bytecode(None)

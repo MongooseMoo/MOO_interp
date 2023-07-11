@@ -78,7 +78,7 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | index
           | range
           | property
-          | verb
+          | verb_call
           | assign
           | unary_expression
           | binary_expression
@@ -101,7 +101,7 @@ range: expression "[" ("^" | expression) ".." ("$" | expression) "]"
 
 property: expression "." (IDENTIFIER | "(" expression ")")
 
-verb: expression ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
+verb_call: expression ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
 
 function_call: IDENTIFIER "(" call_arguments ")"
 
