@@ -21,6 +21,8 @@ Addable = Union[MOONumber, MOOString, MOOList]
 Subtractable = Union[MOONumber, MOOList]
 Container = Union[MOOList, MOOMap, MOOString]
 
+MOOAny = Union[MOONumber, MOOString, Container, bool]
+
 """ LambdaMOO Virtual Machine
 
     This module implements the LambdaMOO Virtual Machine, which is
@@ -142,7 +144,7 @@ class VM:
 
     stack: List[Any] = field(factory=list)
     call_stack: List[StackFrame] = field(factory=list)
-    result: Any = field(default=0)
+    result: MOOAny = field(default=0)
     state: Union[VMOutcome, None] = field(default=None)
     opcode_handlers: Dict[Union[Opcode, Extended_Opcode],
                           Callable] = field(factory=dict, repr=False)
@@ -187,11 +189,11 @@ class VM:
             warnings.warn(
                 f"The following extended opcodes are not implemented: {[opcode.name for opcode in unhandled_eopcodes]}", UserWarning)
 
-    def push(self, value: Any) -> None:
+    def push(self, value: MOOAny) -> None:
         """Push a value onto the stack"""
         self.stack.append(value)
 
-    def pop(self) -> Any:
+    def pop(self) -> MOOAny:
         """Pop a value off the stack"""
         try:
             return self.stack.pop()
@@ -328,7 +330,7 @@ class VM:
         frame.rt_env.pop(var_index)
 
     @operator(Opcode.OP_IMM)
-    def exec_imm(self, value: Any):
+    def exec_imm(self, value: MOOAny):
         """Pushes an immediate value onto the stack.
 
         Args:
@@ -344,10 +346,10 @@ class VM:
             self.pop()
 
     @operator(Opcode.OP_PUT)
-    def exec_put(self, identifier: str):
+    def exec_put(self, identifier: MOOString):
         return self.put(identifier, self.peek())
 
-    def put(self, identifier: str, value: Any) -> None:
+    def put(self, identifier: MOOString, value: MOOAny) -> None:
         """Puts a value into the current stack frame's scope.
 
         Args:
@@ -394,11 +396,11 @@ class VM:
             raise VMError("Division by zero")
 
     @operator(Opcode.OP_EQ)
-    def exec_eq(self, op1: Any, op2: Any):
+    def exec_eq(self, op1: MOOAny, op2: MOOAny):
         return op1 == op2
 
     @operator(Opcode.OP_IN)
-    def exec_in(self, rhs: Any, lhs: Container):
+    def exec_in(self, rhs: MOOAny, lhs: Container):
         # either 0 if not in the list or the index if it is
         index = rhs.find(lhs)
         if index == -1:
@@ -406,7 +408,7 @@ class VM:
         return index
 
     @operator(Opcode.OP_NE)
-    def exec_ne(self, op1: Any, op2: Any):
+    def exec_ne(self, op1: MOOAny, op2: MOOAny):
         return op1 != op2
 
     @operator(Opcode.OP_LT)
