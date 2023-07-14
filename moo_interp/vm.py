@@ -6,7 +6,7 @@ from logging import basicConfig, getLogger
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from attr import define, field
-
+from lambdamoo_db.database import MooDatabase
 from .builtin_functions import BF_REGISTRY
 from .list import MOOList
 from .map import MOOMap
@@ -16,6 +16,10 @@ from .string import MOOString
 # basicConfig(level="DEBUG")
 logger = getLogger(__name__)
 
+MOONumber = Union[int, float]
+Addable = Union[MOONumber, MOOString, MOOList]
+Subtractable = Union[MOONumber, MOOList]
+Container = Union[MOOList, MOOMap, MOOString]
 
 """ LambdaMOO Virtual Machine
 
@@ -142,21 +146,24 @@ class VM:
     state: Union[VMOutcome, None] = field(default=None)
     opcode_handlers: Dict[Union[Opcode, Extended_Opcode],
                           Callable] = field(factory=dict, repr=False)
+    db: Optional[MooDatabase] = field(default=None)
     bi_funcs: Dict[int, Callable] = field(factory=dict, repr=False)
 
-    def __init__(self):
+    def __init__(self, db=None, bi_funcs=BF_REGISTRY):
         super().__init__()
         self.stack = []
         self.call_stack = []
         self.result = None
         self.state = None
         self.opcode_handlers = {}
-        self.bi_funcs = BF_REGISTRY
-        self.db = None
+        self.bi_funcs = bi_funcs
+        self.db = db
         handled_opcodes = set()
 
         # Register all opcode handlers
         for name in dir(self):
+            if not name.startswith('exec'):
+                continue
             method = getattr(self, name, None)
             if hasattr(method, 'opcode') or hasattr(method, 'eopcode'):
                 opcode = method.opcode if hasattr(
@@ -265,7 +272,7 @@ class VM:
 
     # Basic opcode implementations
     @operator(Opcode.OP_JUMP)
-    def handle_jump(self, offset: int):
+    def exec_jump(self, offset: int):
         """Jumps to a different instruction in the bytecode.
 
         Args:
@@ -290,7 +297,7 @@ class VM:
         return value
 
     @operator(Opcode.OP_PUSH)
-    def handle_push(self, var_name: str):
+    def exec_push(self, var_name: str):
         """Pushes a value onto the stack.
 
         Args:
@@ -305,7 +312,7 @@ class VM:
         return result
 
     @operator(Opcode.OP_PUSH_CLEAR)
-    def handle_push_clear(self, var_name: str):
+    def exec_push_clear(self, var_name: str):
         """ called the last time the variable is referenced in the program.
 
           Args:
@@ -321,7 +328,7 @@ class VM:
         frame.rt_env.pop(var_index)
 
     @operator(Opcode.OP_IMM)
-    def handle_imm(self, value: Any):
+    def exec_imm(self, value: Any):
         """Pushes an immediate value onto the stack.
 
         Args:
@@ -332,12 +339,12 @@ class VM:
         return value
 
     @operator(Opcode.OP_POP)
-    def handle_pop(self, num: int = 1):
+    def exec_pop(self, num: int = 1):
         for _ in range(num):
             self.pop()
 
     @operator(Opcode.OP_PUT)
-    def handle_put(self, identifier: str):
+    def exec_put(self, identifier: str):
         return self.put(identifier, self.peek())
 
     def put(self, identifier: str, value: Any) -> None:
@@ -361,37 +368,37 @@ class VM:
         return value
 
     @operator(Opcode.OP_ADD)
-    def handle_add(self, op1, op2):
+    def exec_add(self, op1: Addable, op2: Addable):
         return op1 + op2
 
     @operator(Opcode.OP_MINUS)
-    def handle_subtract(self, op1, op2):
+    def exec_subtract(self, op1: Subtractable, op2: Subtractable):
         return op1 - op2
 
     @operator(Opcode.OP_MULT)
-    def handle_multiply(self, op1, op2):
+    def exec_multiply(self, op1: MOONumber, op2: MOONumber):
         return op1 * op2
 
     @operator(Opcode.OP_DIV)
-    def handle_divide(self, op1, op2):
+    def exec_divide(self, op1: MOONumber, op2: MOONumber):
         try:
             return op1 / op2
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
     @operator(Opcode.OP_MOD)
-    def handle_mod(self, op1, op2):
+    def exec_mod(self, op1: MOONumber, op2: MOONumber):
         try:
             return op1 % op2
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
     @operator(Opcode.OP_EQ)
-    def handle_eq(self, op1, op2):
+    def exec_eq(self, op1: Any, op2: Any):
         return op1 == op2
 
     @operator(Opcode.OP_IN)
-    def handle_in(self, rhs, lhs):
+    def exec_in(self, rhs: Any, lhs: Container):
         # either 0 if not in the list or the index if it is
         index = rhs.find(lhs)
         if index == -1:
@@ -399,98 +406,98 @@ class VM:
         return index
 
     @operator(Opcode.OP_NE)
-    def handle_ne(self, op1, op2):
+    def exec_ne(self, op1: Any, op2: Any):
         return op1 != op2
 
     @operator(Opcode.OP_LT)
-    def handle_lt(self, op1, op2):
+    def exec_lt(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
         return op1 < op2
 
     @operator(Opcode.OP_LE)
-    def handle_le(self, op1, op2):
+    def exec_le(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
         return op1 <= op2
 
     @operator(Opcode.OP_GT)
-    def handle_gt(self, op1, op2):
+    def exec_gt(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
         return op1 > op2
 
     @operator(Opcode.OP_GE)
-    def handle_ge(self, op1, op2):
+    def exec_ge(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
         return op1 >= op2
 
     @operator(Opcode.OP_AND)
-    def handle_and(self, op1, op2):
+    def exec_and(self, op1: Any, op2: Any) -> bool:
         return op1 and op2
 
     @operator(Opcode.OP_OR)
-    def handle_or(self, op1, op2):
+    def exec_or(self, op1: Any, op2: Any) -> bool:
         return op1 or op2
 
     @operator(Opcode.OP_NOT)
-    def handle_not(self, op1):
-        return not op1
+    def exec_not(self, operand: Any) -> bool:
+        return not operand
 
     @operator(Opcode.OP_UNARY_MINUS)
-    def handle_unary_minus(self, op1):
+    def exec_unary_minus(self, op1: MOONumber):
         return -op1
 
     # Extended opcode implementations
 
     @operator(Extended_Opcode.EOP_BITOR)
-    def handle_bitor(self, op1, op2):
+    def exec_bitor(self, op1: int, op2: int):
         return op1 | op2
 
     @operator(Extended_Opcode.EOP_BITAND)
-    def handle_bitand(self, op1: int, op2: int):
+    def exec_bitand(self, op1: int, op2: int):
         return op1 & op2
 
     @operator(Extended_Opcode.EOP_BITXOR)
-    def handle_bitxor(self, op1, op2):
+    def exec_bitxor(self, op1: int, op2: int):
         return op1 ^ op2
 
     @operator(Extended_Opcode.EOP_BITSHL)
-    def handle_bitshl(self, op1, op2):
+    def exec_bitshl(self, op1: int, op2: int):
         return op1 << op2
 
     @operator(Extended_Opcode.EOP_BITSHR)
-    def handle_bitshr(self, op1, op2):
+    def exec_bitshr(self, op1: int, op2: int):
         return op1 >> op2
 
     @operator(Extended_Opcode.EOP_EXP)
-    def handle_exp(self, lhs,   rhs):
+    def exec_exp(self, lhs: MOONumber,   rhs: MOONumber):
         return lhs ** rhs
 
     # List operations
 
     @operator(Opcode.OP_MAKE_EMPTY_LIST)
-    def handle_make_empty_list(self) -> MOOList:
+    def exec_make_empty_list(self) -> MOOList:
         return MOOList()
 
     @operator(Opcode.OP_LIST_ADD_TAIL)
-    def handle_list_add_tail(self, lst: MOOList, tail: Any) -> MOOList:
+    def exec_list_add_tail(self, lst: MOOList, tail: Any) -> MOOList:
         if not isinstance(lst, MOOList):
             raise VMError("Expected list")
         lst.append(tail)
         return lst
 
     @operator(Opcode.OP_LIST_APPEND)  # extend in Python
-    def handle_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
+    def exec_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
         if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
             raise VMError("Expected list")
         return lst1 + lst2
 
     @operator(Opcode.OP_MAKE_SINGLETON_LIST)
-    def handle_make_singleton_list(self, value: Any) -> MOOList:
+    def exec_make_singleton_list(self, value: Any) -> MOOList:
         return MOOList(value)
 
     # Map operations
 
     @operator(Opcode.OP_MAP_CREATE)
-    def handle_make_empty_map(self) -> MOOMap:
+    def exec_make_empty_map(self) -> MOOMap:
         return MOOMap()
 
     @operator(Opcode.OP_MAP_INSERT)
-    def handle_map_insert(self, mapping: MOOMap, key: MOOString | int | float, value: Any) -> MOOMap:
+    def exec_map_insert(self, mapping: MOOMap, key: MOOString | int | float, value: Any) -> MOOMap:
         if not isinstance(mapping, MOOMap):
             raise VMError("Expected map")
         mapping[key] = value
@@ -499,26 +506,26 @@ class VM:
     # Return Operations
 
     @operator(Opcode.OP_RETURN)
-    def handle_return(self, value: Any):
+    def exec_return(self, value: Any):
         self.result = value
         self.state = VMOutcome.OUTCOME_DONE
         return value
 
     @operator(Opcode.OP_RETURN0)
-    def handle_return0(self):
+    def exec_return0(self):
         self.state = VMOutcome.OUTCOME_DONE
         self.result = 0
         return 0
 
     @operator(Opcode.OP_DONE)
-    def handle_done(self):
+    def exec_done(self):
         self.state = VMOutcome.OUTCOME_DONE
         return 0
 
     # Control Flow Operations
 
     @operator(Opcode.OP_WHILE)
-    def handle_while(self):
+    def exec_while(self):
         frame = self.call_stack[-1]
         condition = self.pop()  # Pop the condition off the stack
         if not isinstance(condition, bool):
@@ -533,7 +540,7 @@ class VM:
             frame.ip += 1  # Skip the OP_JUMP
 
     @operator(Opcode.OP_BI_FUNC_CALL)
-    def handle_bi_func_call(self, args: MOOList):
+    def exec_bi_func_call(self, args: MOOList):
         func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
         func = self.bi_funcs.get_function_by_id(func_id)
         if func is None:
@@ -545,7 +552,7 @@ class VM:
         return result
 
     @operator(Opcode.OP_GET_PROP)
-    def handle_get_prop(self, obj: Any, prop: MOOString):
+    def exec_get_prop(self, obj: Any, prop: MOOString):
         """Get the value of a property on an object"""
         object = self.db.get_object(obj)
         if object is None:
@@ -553,7 +560,7 @@ class VM:
         return object.get_prop(prop)
 
     @operator(Opcode.OP_PUT_PROP)
-    def handle_put_prop(self, obj: Any, prop: MOOString, value: Any):
+    def exec_put_prop(self, obj: Any, prop: MOOString, value: Any):
         """Set the value of a property on an object"""
         object = self.db.get_object(obj)
         if object is None:
