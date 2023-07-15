@@ -20,6 +20,7 @@ MOONumber = Union[int, float]
 Addable = Union[MOONumber, MOOString, MOOList]
 Subtractable = Union[MOONumber, MOOList]
 Container = Union[MOOList, MOOMap, MOOString]
+Comparable = Union[MOONumber, MOOString]
 
 MOOAny = Union[MOONumber, MOOString, Container, bool]
 
@@ -412,31 +413,31 @@ class VM:
         return op1 != op2
 
     @operator(Opcode.OP_LT)
-    def exec_lt(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
+    def exec_lt(self, op1: Comparable, op2: Comparable):
         return op1 < op2
 
     @operator(Opcode.OP_LE)
-    def exec_le(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
+    def exec_le(self, op1: Comparable, op2: Comparable):
         return op1 <= op2
 
     @operator(Opcode.OP_GT)
-    def exec_gt(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
+    def exec_gt(self, op1: Comparable, op2: Comparable):
         return op1 > op2
 
     @operator(Opcode.OP_GE)
-    def exec_ge(self, op1: Union[MOOString, MOONumber], op2: Union[MOOString, MOONumber]):
+    def exec_ge(self, op1: Comparable, op2: Comparable):
         return op1 >= op2
 
     @operator(Opcode.OP_AND)
-    def exec_and(self, op1: Any, op2: Any) -> bool:
+    def exec_and(self, op1: MOOAny, op2: MOOAny) -> bool:
         return op1 and op2
 
     @operator(Opcode.OP_OR)
-    def exec_or(self, op1: Any, op2: Any) -> bool:
+    def exec_or(self, op1: MOOAny, op2: MOOAny) -> bool:
         return op1 or op2
 
     @operator(Opcode.OP_NOT)
-    def exec_not(self, operand: Any) -> bool:
+    def exec_not(self, operand: MOOAny) -> bool:
         return not operand
 
     @operator(Opcode.OP_UNARY_MINUS)
@@ -476,7 +477,7 @@ class VM:
         return MOOList()
 
     @operator(Opcode.OP_LIST_ADD_TAIL)
-    def exec_list_add_tail(self, lst: MOOList, tail: Any) -> MOOList:
+    def exec_list_add_tail(self, lst: MOOList, tail: MOOAny) -> MOOList:
         if not isinstance(lst, MOOList):
             raise VMError("Expected list")
         lst.append(tail)
@@ -489,7 +490,7 @@ class VM:
         return lst1 + lst2
 
     @operator(Opcode.OP_MAKE_SINGLETON_LIST)
-    def exec_make_singleton_list(self, value: Any) -> MOOList:
+    def exec_make_singleton_list(self, value: MOOAny) -> MOOList:
         return MOOList(value)
 
     # Map operations
@@ -515,8 +516,8 @@ class VM:
 
     @operator(Opcode.OP_RETURN0)
     def exec_return0(self):
-        self.state = VMOutcome.OUTCOME_DONE
         self.result = 0
+        self.state = VMOutcome.OUTCOME_DONE
         return 0
 
     @operator(Opcode.OP_DONE)
