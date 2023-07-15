@@ -358,6 +358,10 @@ class VM:
     def exec_put(self, identifier: MOOString):
         return self.put(identifier, self.peek())
 
+    @operator(Opcode.OP_PUT_TEMP)
+    def exec_put_temp(self):
+        self.current_frame.temp = self.peek()
+
     def put(self, identifier: MOOString, value: MOOAny) -> None:
         """Puts a value into the current stack frame's scope.
 
@@ -501,6 +505,29 @@ class VM:
     def exec_make_singleton_list(self, value: MOOAny) -> MOOList:
         return MOOList(value)
 
+    @operator(Opcode.OP_CHECK_LIST_FOR_SPLICE)
+    def exec_check_list_for_splice(self):
+        if not isinstance(self.stack[-1], MOOList):
+            raise VMError("Expected list")
+
+    @operator(Opcode.OP_REF)
+    def exec_ref(self, lst: Container, index: int) -> MOOAny:
+        return lst[index]
+
+    @operator(Opcode.OP_PUSH_REF)
+    def exec_push_ref(self, lst: Container, index: int) -> MOOAny:
+        raise NotImplementedError()
+
+    @operator(Opcode.OP_RANGE_REF)
+    def exec_range_ref(self, lst: Container, start: int, end: int) -> MOOAny:
+        if isinstance(lst, MOOString):
+            return MOOString(lst[start:end])
+        elif isinstance(lst, MOOList):
+            return MOOList(lst[start:end])
+        else:
+            # the keys in our maps are ordered,     
+            return MOOMap(list(lst.items())[start:end])
+        
     # Map operations
 
     @operator(Opcode.OP_MAP_CREATE)
