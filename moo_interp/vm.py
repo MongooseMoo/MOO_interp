@@ -330,6 +330,14 @@ class VM:
         frame.prog.var_names.pop(var_index)
         frame.rt_env.pop(var_index)
 
+    @operator(Opcode.OP_PUSH_TEMP)
+    def exec_push_temp(self):
+        """Pushes the temporary value onto the stack."""
+        val = self.current_frame.temp
+        self.current_frame.temp = None
+        logger.debug(f"Pushing {val} onto the stack from temp")
+        return val
+
     @operator(Opcode.OP_IMM)
     def exec_imm(self, value: MOOAny):
         """Pushes an immediate value onto the stack.
