@@ -339,13 +339,15 @@ class ToAst(Transformer):
     def dict(self, entries):
         return Map(entries)
 
-    def if_statement(self, if_clause, *elseif_clauses, else_clause=None):
+    def if_statement(self, if_clause):
         condition, then_block = if_clause[0].children
-        if elseif_clauses:
-            elseif_clauses = [ElseIfClause(*clause)
-                              for clause in elseif_clauses]
-        else_block = else_clause or None  # in case else_clause is not provided
-        return _IfStatement(condition, then_block, elseif_clauses, else_block)
+        if len(if_clause) > 2:
+            elseif_clauses = [ElseIfClause(clause.children[0], clause.children[1])
+                              for clause in if_clause[1:-1]]
+        else:
+            elseif_clauses = []
+        else_clause = if_clause[-1] if len(if_clause) > 1 else None
+        return _IfStatement(condition, then_block, elseif_clauses, else_clause)
 
     def function_call(self, call):
         name, args = call
