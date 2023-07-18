@@ -9,6 +9,7 @@ from .string import MOOString
 
 logger = getLogger(__name__)
 
+
 class FunctionRegistry:
     def __init__(self):
         self.functions = {}  # Stores function_name: function pairs
@@ -34,7 +35,8 @@ class FunctionRegistry:
         elif isinstance(key, int):
             return self.get_function_by_id(key)
         else:
-            raise KeyError(f"Invalid key type. Expected str or int, got {type(key).__name__}")
+            raise KeyError(
+                f"Invalid key type. Expected str or int, got {type(key).__name__}")
 
     def __setitem__(self, key, value):
         self(value)
@@ -53,11 +55,13 @@ class FunctionRegistry:
             if fn is None:
                 raise KeyError(f"No function with id {key}")
             del self.id_to_function[key]
-            name = next(name for name, function in self.functions.items() if function == fn)
+            name = next(name for name,
+                        function in self.functions.items() if function == fn)
             del self.functions[name]
             del self.function_to_id[fn]
         else:
-            raise KeyError(f"Invalid key type. Expected str or int, got {type(key).__name__}")
+            raise KeyError(
+                f"Invalid key type. Expected str or int, got {type(key).__name__}")
 
     def __contains__(self, item):
         return item in self.functions or item in self.id_to_function
@@ -81,8 +85,8 @@ class FunctionRegistry:
         return self.get_id_by_function(fn) if fn else None
 
 
-
 BF_REGISTRY = FunctionRegistry()
+
 
 @BF_REGISTRY
 def mapdelete(map: MOOMap, key: MOOString) -> MOOMap:
@@ -90,11 +94,6 @@ def mapdelete(map: MOOMap, key: MOOString) -> MOOMap:
     del map[key]
     return map
 
-@BF_REGISTRY
-def mapinsert(map: MOOMap, key: MOOString, value) -> MOOMap:
-    """Insert key/value pair into map."""
-    map[key] = value
-    return map
 
 @BF_REGISTRY
 def to_string(value):
@@ -119,9 +118,11 @@ def to_string(value):
     else:
         logger.error("TOSTR: Unknown Var type")
 
+
 @BF_REGISTRY
 def tostr(*args):
     return MOOString(" ".join(map(to_string, args)))
+
 
 @BF_REGISTRY
 def toint(value):
@@ -140,10 +141,11 @@ def toint(value):
         return unparse_error(value)
     elif isinstance(value, bool):
         return 1 if value else 0
-    #elif isinstance(value, MOOAnon):
-        #return 0
+    # elif isinstance(value, MOOAnon):
+        # return 0
     else:
         logger.error("TOINT: Unknown Var type")
+
 
 @BF_REGISTRY
 def tofloat(value):
@@ -164,40 +166,49 @@ def tofloat(value):
     else:
         logger.error("TOFLOAT: Unknown Var type")
 
+
 @BF_REGISTRY
 def floor(value):
     return float(math.floor(tofloat(value)))
 
+
 @BF_REGISTRY
 def ceil(value):
     return float(math.ceil(tofloat(value)))
+
 
 @BF_REGISTRY
 def time():
     import time
     return int(time.time())
 
+
 @BF_REGISTRY
 def ftime():
     import time
     return float(time.time())
+
 
 @BF_REGISTRY
 def ctime(value):
     import time
     return MOOString(time.ctime(tofloat(value)))
 
+
 @BF_REGISTRY
 def sin(value):
     return math.sin(tofloat(value))
+
 
 @BF_REGISTRY
 def cos(value):
     return math.cos(tofloat(value))
 
+
 @BF_REGISTRY
 def cosh(value):
     return math.cosh(tofloat(value))
+
 
 @BF_REGISTRY
 def distance(l1: MOOList, l2: MOOList) -> float:
@@ -205,6 +216,7 @@ def distance(l1: MOOList, l2: MOOList) -> float:
     if len(l1) != len(l2):
         raise MOOError("distance", "Lists must be the same length")
     return math.sqrt(sum((l1[i] - l2[i]) ** 2 for i in range(len(l1))))
+
 
 @BF_REGISTRY
 def floatstr(x, precision, scientific=False):
@@ -217,6 +229,7 @@ def floatstr(x, precision, scientific=False):
 
     # Regular float to string conversion
     return MOOString(format(x, f".{precision}f"))
+
 
 @BF_REGISTRY
 def string_hash(string, algo='SHA256'):
@@ -231,9 +244,11 @@ def string_hash(string, algo='SHA256'):
 
     return hash_object.hexdigest()
 
+
 @BF_REGISTRY
 def exp(x):
     return math.exp(tofloat(x))
+
 
 @BF_REGISTRY
 def trunc(x):
@@ -242,33 +257,41 @@ def trunc(x):
     else:
         return floor(x)
 
+
 @BF_REGISTRY
 def acos(x):
     return math.acos(tofloat(x))
+
 
 @BF_REGISTRY
 def asin(x):
     return math.asin(tofloat(x))
 
+
 @BF_REGISTRY
 def atan(x):
     return math.atan(tofloat(x))
-    
+
+
 @BF_REGISTRY
 def log10(x):
     return math.log10(tofloat(x))
+
 
 @BF_REGISTRY
 def sin(x):
     return math.sin(tofloat(x))
 
+
 @BF_REGISTRY
 def sqrt(x):
     return math.sqrt(tofloat(x))
 
+
 @BF_REGISTRY
 def tan(x):
     return math.tan(tofloat(x))
+
 
 @BF_REGISTRY
 def listappend(list: MOOList, value):
@@ -276,11 +299,13 @@ def listappend(list: MOOList, value):
     list.append(value)
     return list
 
+
 @BF_REGISTRY
 def listdelete(list: MOOList, index: int) -> MOOList:
     """Delete index from list."""
     del list[index]
     return list
+
 
 @BF_REGISTRY
 def listinsert(list: MOOList, index: int, value) -> MOOList:
@@ -288,9 +313,30 @@ def listinsert(list: MOOList, index: int, value) -> MOOList:
     list.insert(index, value)
     return list
 
+
+@BF_REGISTRY
+def listset(list: MOOList, index: int, value) -> MOOList:
+    """Set value at index in list."""
+    list[index] = value
+    return list
+
+
+@BF_REGISTRY
+def explode(string: MOOString, separator: MOOString) -> MOOList:
+    """Split string by separator."""
+    return MOOList(string.split(separator))
+
+
+@BF_REGISTRY
+def bf_reverse(list: MOOList) -> MOOList:
+    """Reverse list."""
+    return MOOList(list[::-1])
+
+
 @BF_REGISTRY
 def equal(x, y):
     return x == y
+
 
 @BF_REGISTRY
 def strcmp(str1: MOOString, str2: MOOString):
@@ -301,23 +347,89 @@ def strcmp(str1: MOOString, str2: MOOString):
     else:
         return 1
 
+
+@BF_REGISTRY
+def strtr(str1: MOOString, str2: MOOString, str3: MOOString, case_matters = False):
+    """
+        Transforms the string source by replacing the characters specified by str1 with the corresponding characters specified by str2. All other characters are not transformed. If str2 has fewer characters than str1 the unmatched characters are simply removed from source. By default the transformation is done on both upper and lower case characters no matter the case. If case-matters is provided and true, then case is treated as significant.
+    """
+    if case_matters:
+        return str1.translate(str.maketrans(str2, str3))
+    else:
+        return str1.translate(str.maketrans(str2, str3, str2.upper() + str2.lower()))
+    
+
+_chr = chr
+
+@BF_REGISTRY
+def chr(x):
+    return _chr(x)
+
 @BF_REGISTRY
 def index(str1: MOOString, str2: MOOString):
     return str1.find(str2)
+
 
 @BF_REGISTRY
 def rindex(str1: MOOString, str2: MOOString):
     return str1.rfind(str2)
 
+
+@BF_REGISTRY
+def strsub(str1: MOOString, str2: MOOString, str3: MOOString):
+    return str1.replace(str2, str3)
+
+
+@BF_REGISTRY
+def strcmp(str1: MOOString, str2: MOOString):
+    if str1 < str2:
+        return -1
+    elif str1 == str2:
+        return 0
+    else:
+        return 1
+
+
 _abs = abs
+
+
 @BF_REGISTRY
 def abs(x):
     return _abs((x))
+
 
 @BF_REGISTRY
 def length(x):
     return len(x)
 
+
 @BF_REGISTRY
 def toliteral(x):
     return MOOString(x)
+
+
+@BF_REGISTRY
+def mapkeys(x):
+    return MOOList(x.keys())
+
+
+@BF_REGISTRY
+def mapvalues(x):
+    return MOOList(x.values())
+
+
+@BF_REGISTRY
+def mapdelete(x, y):
+    del x[y]
+    return x
+
+
+@BF_REGISTRY
+def mapinsert(x, y, z):
+    x[y] = z
+    return x
+
+
+@BF_REGISTRY
+def maphaskey(x, y):
+    return y in x
