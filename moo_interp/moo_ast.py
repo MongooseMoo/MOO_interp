@@ -71,6 +71,12 @@ class Identifier(_Expression):
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_PUSH, self.value)]
 
+@dataclass
+class Splicer(_Expression):
+    expression: _Expression
+
+    def to_bytecode(self, program: Program):
+        return self.expression.to_bytecode(program) + [self.emit_byte(Opcode.OP_CHECK_LIST_FOR_SPLICE, None)]
 
 @dataclass
 class _Literal(_Ast):
