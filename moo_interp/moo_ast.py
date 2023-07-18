@@ -107,6 +107,13 @@ class FloatLiteral(_Literal, _Expression):
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
+@dataclass
+class ObjnumLiteral(_Literal, _Expression):
+    value: int
+
+    def to_bytecode(self, program: Program):
+        return [self.emit_byte(Opcode.OP_IMM, self.value)]
+    
 
 @dataclass
 class _List(_Expression):
@@ -327,6 +334,9 @@ class ToAst(Transformer):
     def FLOAT(self, n):
         return FloatLiteral(float(n))
 
+    def objnum(self, n):
+        return ObjnumLiteral(int(n[0].value))
+    
     def assign(self, assignment):
         target, value = assignment
         return _Assign(target=target, value=value)
