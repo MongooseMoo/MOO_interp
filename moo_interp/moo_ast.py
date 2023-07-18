@@ -346,7 +346,7 @@ class ToAst(Transformer):
                               for clause in if_clause[1:-1]]
         else:
             elseif_clauses = []
-        else_clause = if_clause[-1] if len(if_clause) > 1 else None
+        else_clause = if_clause[-1].children[0] if len(if_clause) > 1 else None
         return _IfStatement(condition, then_block, elseif_clauses, else_clause)
 
     def function_call(self, call):
@@ -384,7 +384,9 @@ def parse(text):
 
 
 def compile(tree):
-    if isinstance(tree, str):
+    if isinstance(tree, list):
+        tree = parse("".join(tree))
+    elif isinstance(tree, str):
         tree = parse(tree)
     bc = []
     for node in tree.children:
