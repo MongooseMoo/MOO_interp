@@ -1,4 +1,5 @@
 from collections.abc import MutableMapping
+
 from attr import define, field
 
 

@@ -71,12 +71,14 @@ class Identifier(_Expression):
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_PUSH, self.value)]
 
+
 @dataclass
 class Splicer(_Expression):
     expression: _Expression
 
     def to_bytecode(self, program: Program):
         return self.expression.to_bytecode(program) + [self.emit_byte(Opcode.OP_CHECK_LIST_FOR_SPLICE, None)]
+
 
 @dataclass
 class _Literal(_Ast):
@@ -119,7 +121,6 @@ class ObjnumLiteral(_Literal, _Expression):
 
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
-    
 
 @dataclass
 class _List(_Expression):
@@ -342,7 +343,7 @@ class ToAst(Transformer):
 
     def objnum(self, n):
         return ObjnumLiteral(int(n[0].value))
-    
+
     def assign(self, assignment):
         target, value = assignment
         return _Assign(target=target, value=value)
@@ -358,7 +359,7 @@ class ToAst(Transformer):
     def if_statement(self, if_clause):
         condition, then_block = if_clause[0].children
         if len(if_clause) > 2:
-            elseif_clauses = [ElseIfClause(clause.children[0], clause.children[1])
+            elseif_clauses = [ElseIfClause(clause.children[0], clause.children[1].children)
                               for clause in if_clause[1:-1]]
         else:
             elseif_clauses = []
@@ -391,6 +392,8 @@ transformer = ast_utils.create_transformer(this_module, ToAst())
 
 
 def parse(text):
+    if isinstance(text, list):
+        text = "".join(text)
     tree = parser.parse(text)
     return transformer.transform(tree)
 
@@ -423,7 +426,10 @@ def disassemble(frame: StackFrame):
             f"{instruction.opcode.value} {instruction.opcode.name} {type(instruction.operand).__name__} {instruction.operand}")
 
 
-def run(frame: StackFrame):
+def run(frame: StackFrame, debug=True, player=-1, this=-1):
+    frame.debug = debug
+    frame.player = player
+    frame.this = this
     vm = VM()
     vm.call_stack = [frame]
     try:

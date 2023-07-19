@@ -1,6 +1,7 @@
-from typing import Iterable
-from attr import define, field
 from collections.abc import MutableSequence
+from typing import Iterable
+
+from attr import define, field
 
 
 @define(repr=False)
