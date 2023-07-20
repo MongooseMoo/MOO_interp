@@ -9,7 +9,7 @@ from .vm import VM, Instruction, Program, StackFrame
 from .opcodes import Opcode, Extended_Opcode
 from .parser import parser
 from .string import MOOString
-from .builtin_functions import BF_REGISTRY
+from .builtin_functions import BuiltinFunctions
 
 
 this_module = sys.modules[__name__]
@@ -115,12 +115,14 @@ class FloatLiteral(_Literal, _Expression):
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
+
 @dataclass
 class ObjnumLiteral(_Literal, _Expression):
     value: int
 
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
+
 
 @dataclass
 class _List(_Expression):
@@ -247,7 +249,7 @@ class _FunctionCall(_Expression):
 
     def to_bytecode(self, program: Program):
         result = self.arguments.to_bytecode(program)
-        builtin_id = BF_REGISTRY.get_id_by_name(self.name)
+        builtin_id = BuiltinFunctions().get_id_by_name(self.name)
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
                                operand=builtin_id)]
         return result
@@ -427,6 +429,8 @@ def disassemble(frame: StackFrame):
 
 
 def run(frame: StackFrame, debug=True, player=-1, this=-1):
+    if isinstance(frame, str):
+        frame = compile(frame)
     frame.debug = debug
     frame.player = player
     frame.this = this

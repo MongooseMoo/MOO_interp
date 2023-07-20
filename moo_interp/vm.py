@@ -1,28 +1,24 @@
 import inspect
+import traceback
 import warnings
 from enum import Enum
 from functools import wraps
 from logging import basicConfig, getLogger
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import (Any, Callable, Dict, List, Mapping, Optional,
+                    Tuple, Union)
 
 from attr import define, field
 from lambdamoo_db.database import MooDatabase
-from .builtin_functions import BF_REGISTRY
+
+from .builtin_functions import BuiltinFunctions
 from .list import MOOList
 from .map import MOOMap
+from .moo_types import Addable, Comparable, Container, MOOAny, MOONumber, Subtractable
 from .opcodes import Extended_Opcode, Opcode
 from .string import MOOString
 
 # basicConfig(level="DEBUG")
 logger = getLogger(__name__)
-
-MOONumber = Union[int, float]
-Addable = Union[MOONumber, MOOString, MOOList]
-Subtractable = Union[MOONumber, MOOList]
-Container = Union[MOOList, MOOMap, MOOString]
-Comparable = Union[MOONumber, MOOString]
-
-MOOAny = Union[MOONumber, MOOString, Container, bool]
 
 """ LambdaMOO Virtual Machine
 
@@ -152,14 +148,14 @@ class VM:
     db: Optional[MooDatabase] = field(default=None)
     bi_funcs: Dict[int, Callable] = field(factory=dict, repr=False)
 
-    def __init__(self, db=None, bi_funcs=BF_REGISTRY):
+    def __init__(self, db=None, bi_funcs=None):
         super().__init__()
         self.stack = []
         self.call_stack = []
         self.result = None
         self.state = None
         self.opcode_handlers = {}
-        self.bi_funcs = bi_funcs
+        self.bi_funcs = bi_funcs if bi_funcs else BuiltinFunctions()
         self.db = db
         handled_opcodes = set()
 
@@ -525,9 +521,9 @@ class VM:
         elif isinstance(lst, MOOList):
             return MOOList(lst[start:end])
         else:
-            # the keys in our maps are ordered,     
+            # the keys in our maps are ordered,
             return MOOMap(list(lst.items())[start:end])
-        
+
     # Map operations
 
     @operator(Opcode.OP_MAP_CREATE)
@@ -586,7 +582,10 @@ class VM:
         try:
             result = func(*args._list)
         except Exception as e:
-            raise VMError("Error calling built-in function: {}".format(e))
+            func_name = func.__name__
+            tb = traceback.format_exc()
+            raise VMError(
+                f"Error calling built-in function {func_name}: {e} {tb}")
         return result
 
     @operator(Opcode.OP_GET_PROP)
