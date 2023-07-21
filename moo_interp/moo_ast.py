@@ -52,6 +52,10 @@ class _Ast(ast_utils.Ast):
     def emit_extended_byte(self, opcode: Extended_Opcode):
         return Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode)
 
+    def to_moo(self) -> str:
+        raise NotImplementedError(
+            f"to_moo not implemented for {self.__class__.__name__}")
+
 
 class _Expression(_Ast):
     pass
@@ -71,6 +75,9 @@ class Identifier(_Expression):
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_PUSH, self.value)]
 
+    def to_moo(self):
+        return self.value
+
 
 @dataclass
 class Splicer(_Expression):
@@ -79,6 +86,9 @@ class Splicer(_Expression):
     def to_bytecode(self, program: Program):
         return self.expression.to_bytecode(program) + [self.emit_byte(Opcode.OP_CHECK_LIST_FOR_SPLICE, None)]
 
+    def to_moo(self) -> str:
+        return '@' + self.expression.to_moo()
+
 
 @dataclass
 class _Literal(_Ast):
@@ -86,6 +96,9 @@ class _Literal(_Ast):
 
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
+
+    def to_moo(self) -> MOOString:
+        return str(self.value)
 
 
 @dataclass
@@ -96,6 +109,9 @@ class StringLiteral(_Literal, _Expression):
 @dataclass
 class BooleanLiteral(_Literal, _Expression):
     value: bool
+
+    def to_moo(self):
+        return str(self.value).lower()
 
 
 @dataclass
@@ -123,6 +139,9 @@ class ObjnumLiteral(_Literal, _Expression):
     def to_bytecode(self, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
+    def to_moo(self) -> str:
+        return "#" + str(self.value)
+
 
 @dataclass
 class _List(_Expression):
@@ -141,6 +160,9 @@ class _List(_Expression):
                 result += [Instruction(opcode=Opcode.OP_LIST_ADD_TAIL)]
         return result
 
+    def to_moo(self) -> str:
+        return "{" + ", ".join([element.to_moo() for element in self.value]) + "}"
+
 
 @dataclass
 class Map(_Expression):
@@ -156,6 +178,9 @@ class Map(_Expression):
             result += [Instruction(opcode=Opcode.OP_POP, operand=2)]
         return result
 
+    def to_moo(self) -> str:
+        return "[" + ", ".join([f"{key.to_moo()}: {value.to_moo()}" for key, value in self.value]) + "]"
+
 
 @dataclass
 class UnaryExpression(_Expression):
@@ -165,6 +190,9 @@ class UnaryExpression(_Expression):
     def to_bytecode(self, program: Program):
         operand_bc = self.operand.to_bytecode(program)
         return operand_bc + [Instruction(opcode=unary_opcodes[self.operator])]
+
+    def to_moo(self) -> str:
+        return f"{self.operator}{self.operand.to_moo()}"
 
 
 @dataclass
@@ -178,6 +206,9 @@ class BinaryExpression(_Expression):
         right_bc = self.right.to_bytecode(program)
         return left_bc + right_bc + [Instruction(opcode=binary_opcodes[self.operator])]
 
+    def to_moo(self) -> str:
+        return f"{self.left.to_moo()} {self.operator} {self.right.to_moo()}"
+
 
 @dataclass
 class _Assign(_Statement):
@@ -190,6 +221,9 @@ class _Assign(_Statement):
             return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=self.target.value)]
         elif isinstance(self.target, _Property):
             return value_bc + self.target.object.to_bytecode(program) + self.target.name.to_bytecode(program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
+
+    def to_moo(self) -> str:
+        return f"{self.target.to_moo()} = {self.value.to_moo()}"
 
 
 @dataclass
@@ -280,6 +314,10 @@ class _VerbCall(_Expression):
         result += [Instruction(opcode=Opcode.OP_CALL_VERB)]
         return result
 
+    def to_moo(self) -> str:
+        arguments = ", ".join([arg.to_moo() for arg in self.arguments.value])
+        return f"{self.object.to_moo()}:{self.name.to_moo()}({arguments})"
+
 
 @dataclass
 class ReturnStatement(_Statement):
@@ -290,6 +328,9 @@ class ReturnStatement(_Statement):
             return [Instruction(opcode=Opcode.OP_RETURN0)]
         value_bc = self.value.to_bytecode(program)
         return value_bc + [Instruction(opcode=Opcode.OP_RETURN)]
+
+    def to_moo(self) -> str:
+        return f"return {self.value.to_moo()}"
 
 
 @dataclass
@@ -326,6 +367,7 @@ class WhileStatement(_Statement):
 
 
 class ToAst(Transformer):
+
     def BOOLEAN(self, b):
         return BooleanLiteral(b == "true")
 
