@@ -4,8 +4,7 @@ import warnings
 from enum import Enum
 from functools import wraps
 from logging import basicConfig, getLogger
-from typing import (Any, Callable, Dict, List, Mapping, Optional,
-                    Tuple, Union)
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from attr import define, field
 from lambdamoo_db.database import MooDatabase
@@ -13,7 +12,8 @@ from lambdamoo_db.database import MooDatabase
 from .builtin_functions import BuiltinFunctions
 from .list import MOOList
 from .map import MOOMap
-from .moo_types import Addable, Comparable, Container, MOOAny, MOONumber, Subtractable
+from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
+                        MOONumber, Subtractable)
 from .opcodes import Extended_Opcode, Opcode
 from .string import MOOString
 
@@ -296,7 +296,7 @@ class VM:
         return value
 
     @operator(Opcode.OP_PUSH)
-    def exec_push(self, var_name: str):
+    def exec_push(self, var_name: MOOString):
         """Pushes a value onto the stack.
 
         Args:
@@ -311,7 +311,7 @@ class VM:
         return result
 
     @operator(Opcode.OP_PUSH_CLEAR)
-    def exec_push_clear(self, var_name: str):
+    def exec_push_clear(self, var_name: MOOString):
         """ called the last time the variable is referenced in the program.
 
           Args:
@@ -355,7 +355,7 @@ class VM:
         return self.put(identifier, self.peek())
 
     @operator(Opcode.OP_PUT_TEMP)
-    def exec_put_temp(self):
+    def exec_put_temp(self) -> None:
         self.current_frame.temp = self.peek()
 
     def put(self, identifier: MOOString, value: MOOAny) -> None:
@@ -383,33 +383,33 @@ class VM:
         return op1 + op2
 
     @operator(Opcode.OP_MINUS)
-    def exec_subtract(self, op1: Subtractable, op2: Subtractable):
+    def exec_subtract(self, op1: Subtractable, op2: Subtractable) -> Subtractable:
         return op1 - op2
 
     @operator(Opcode.OP_MULT)
-    def exec_multiply(self, op1: MOONumber, op2: MOONumber):
+    def exec_multiply(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
         return op1 * op2
 
     @operator(Opcode.OP_DIV)
-    def exec_divide(self, op1: MOONumber, op2: MOONumber):
+    def exec_divide(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
         try:
             return op1 / op2
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
     @operator(Opcode.OP_MOD)
-    def exec_mod(self, op1: MOONumber, op2: MOONumber):
+    def exec_mod(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
         try:
             return op1 % op2
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
     @operator(Opcode.OP_EQ)
-    def exec_eq(self, op1: MOOAny, op2: MOOAny):
+    def exec_eq(self, op1: MOOAny, op2: MOOAny) -> bool:
         return op1 == op2
 
     @operator(Opcode.OP_IN)
-    def exec_in(self, rhs: MOOAny, lhs: Container):
+    def exec_in(self, rhs: MOOAny, lhs: Container) -> int:
         # either 0 if not in the list or the index if it is
         index = rhs.find(lhs)
         if index == -1:
@@ -417,23 +417,23 @@ class VM:
         return index
 
     @operator(Opcode.OP_NE)
-    def exec_ne(self, op1: MOOAny, op2: MOOAny):
+    def exec_ne(self, op1: MOOAny, op2: MOOAny) -> bool:
         return op1 != op2
 
     @operator(Opcode.OP_LT)
-    def exec_lt(self, op1: Comparable, op2: Comparable):
+    def exec_lt(self, op1: Comparable, op2: Comparable) -> bool:
         return op1 < op2
 
     @operator(Opcode.OP_LE)
-    def exec_le(self, op1: Comparable, op2: Comparable):
+    def exec_le(self, op1: Comparable, op2: Comparable) -> bool:
         return op1 <= op2
 
     @operator(Opcode.OP_GT)
-    def exec_gt(self, op1: Comparable, op2: Comparable):
+    def exec_gt(self, op1: Comparable, op2: Comparable) -> bool:
         return op1 > op2
 
     @operator(Opcode.OP_GE)
-    def exec_ge(self, op1: Comparable, op2: Comparable):
+    def exec_ge(self, op1: Comparable, op2: Comparable) -> bool:
         return op1 >= op2
 
     @operator(Opcode.OP_AND)
@@ -459,19 +459,19 @@ class VM:
         return op1 | op2
 
     @operator(Extended_Opcode.EOP_BITAND)
-    def exec_bitand(self, op1: int, op2: int):
+    def exec_bitand(self, op1: int, op2: int) -> int:
         return op1 & op2
 
     @operator(Extended_Opcode.EOP_BITXOR)
-    def exec_bitxor(self, op1: int, op2: int):
+    def exec_bitxor(self, op1: int, op2: int) -> int:
         return op1 ^ op2
 
     @operator(Extended_Opcode.EOP_BITSHL)
-    def exec_bitshl(self, op1: int, op2: int):
+    def exec_bitshl(self, op1: int, op2: int) -> int:
         return op1 << op2
 
     @operator(Extended_Opcode.EOP_BITSHR)
-    def exec_bitshr(self, op1: int, op2: int):
+    def exec_bitshr(self, op1: int, op2: int) -> int:
         return op1 >> op2
 
     @operator(Extended_Opcode.EOP_EXP)
@@ -503,7 +503,7 @@ class VM:
 
     @operator(Opcode.OP_CHECK_LIST_FOR_SPLICE)
     def exec_check_list_for_splice(self):
-        if not isinstance(self.stack[-1], MOOList):
+        if not isinstance(self.peek(), MOOList):
             raise VMError("Expected list")
 
     @operator(Opcode.OP_REF)
@@ -531,7 +531,7 @@ class VM:
         return MOOMap()
 
     @operator(Opcode.OP_MAP_INSERT)
-    def exec_map_insert(self, mapping: MOOMap, key: MOOString | int | float, value: Any) -> MOOMap:
+    def exec_map_insert(self, mapping: MOOMap, key: MapKey, value: Any) -> MOOMap:
         if not isinstance(mapping, MOOMap):
             raise VMError("Expected map")
         mapping[key] = value
@@ -540,13 +540,13 @@ class VM:
     # Return Operations
 
     @operator(Opcode.OP_RETURN)
-    def exec_return(self, value: Any):
+    def exec_return(self, value: MOOAny) -> MOOAny:
         self.result = value
         self.state = VMOutcome.OUTCOME_DONE
         return value
 
     @operator(Opcode.OP_RETURN0)
-    def exec_return0(self):
+    def exec_return0(self) -> int:
         self.result = 0
         self.state = VMOutcome.OUTCOME_DONE
         return 0
@@ -574,7 +574,7 @@ class VM:
             frame.ip += 1  # Skip the OP_JUMP
 
     @operator(Opcode.OP_BI_FUNC_CALL)
-    def exec_bi_func_call(self, args: MOOList):
+    def exec_bi_func_call(self, args: MOOList) -> MOOAny:
         func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
         func = self.bi_funcs.get_function_by_id(func_id)
         if func is None:
@@ -589,18 +589,26 @@ class VM:
         return result
 
     @operator(Opcode.OP_GET_PROP)
-    def exec_get_prop(self, obj: Any, prop: MOOString):
+    def exec_get_prop(self, obj: MOOAny, prop: MOOString) -> MOOAny:
         """Get the value of a property on an object"""
-        object = self.db.get_object(obj)
+
+        object = self.db.objects.get(obj)
         if object is None:
             raise VMError("Object not found")
-        return object.get_prop(prop)
+        property = object.get_prop(prop)
+        if property is None:
+            raise VMError("Property not found")
+        return property.value
 
     @operator(Opcode.OP_PUT_PROP)
-    def exec_put_prop(self, obj: Any, prop: MOOString, value: Any):
+    def exec_put_prop(self, obj: MOOAny, prop: MOOString, value: MOOAny):
         """Set the value of a property on an object"""
-        object = self.db.get_object(obj)
+        object = self.db.objects.get(obj)
         if object is None:
             raise VMError("Object not found")
-        object.set_prop(prop, value)
+        property = object.get_prop(prop)
+        if property is None:
+            raise VMError("Property not found")
+
+        property.value = value
         return value
