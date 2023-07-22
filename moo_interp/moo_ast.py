@@ -5,12 +5,12 @@ from typing import List, Union
 from lark import Lark, Transformer, ast_utils, v_args
 from lark.tree import Meta
 
-from .vm import VM, Instruction, Program, StackFrame
-from .opcodes import Opcode, Extended_Opcode
+from .builtin_functions import BuiltinFunctions
+from .moo_types import to_moo
+from .opcodes import Extended_Opcode, Opcode
 from .parser import parser
 from .string import MOOString
-from .builtin_functions import BuiltinFunctions
-
+from .vm import VM, Instruction, Program, StackFrame
 
 this_module = sys.modules[__name__]
 
@@ -55,6 +55,7 @@ class _Ast(ast_utils.Ast):
     def to_moo(self) -> str:
         raise NotImplementedError(
             f"to_moo not implemented for {self.__class__.__name__}")
+
 
 @dataclass
 class VerbCode(_Ast):
@@ -119,7 +120,7 @@ class _Literal(_Ast):
     value: any
 
     def to_bytecode(self, program: Program):
-        return [self.emit_byte(Opcode.OP_IMM, self.value)]
+        return [self.emit_byte(Opcode.OP_IMM, to_moo(self.value))]
 
     def to_moo(self) -> MOOString:
         return str(self.value)
@@ -345,6 +346,39 @@ class _Property(_Expression):
 
 
 @dataclass
+class DollarProperty(_Ast):
+    name: StringLiteral
+    
+    def to_bytecode(self, program: Program):
+        # $prop means #0.prop
+        result = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
+        result += self.name.to_bytecode(program)
+        result += [Instruction(opcode=Opcode.OP_GET_PROP)]
+        return result
+
+    def to_moo(self) -> str:
+        return f"${self.name.to_moo()}"
+
+
+@dataclass
+class DollarVerbCall(_Ast):
+    name = StringLiteral
+    arguments = List[_Expression]
+
+    def to_bytecode(self, program: Program):
+        # $verb() means #0:verb()
+        result = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
+        result += self.name.to_bytecode(program)
+        result += self.arguments.to_bytecode(program)
+        result += [Instruction(opcode=Opcode.OP_CALL_VERB)]
+        return result
+
+    def to_moo(self) -> str:
+        arguments = ", ".join([arg.to_moo() for arg in self.arguments.value])
+        return f"${self.name.to_moo()}({arguments})"
+
+
+@dataclass
 class _VerbCall(_Expression):
     object: _Expression
     name: _Expression
@@ -360,6 +394,21 @@ class _VerbCall(_Expression):
     def to_moo(self) -> str:
         arguments = ", ".join([arg.to_moo() for arg in self.arguments.value])
         return f"{self.object.to_moo()}:{self.name.to_moo()}({arguments})"
+
+
+@dataclass
+class Index(_Expression):
+    object: _Expression
+    index: _Expression
+
+    def to_bytecode(self, program: Program):
+        result = self.object.to_bytecode(program)
+        result += self.index.to_bytecode(program)
+        result += self.emit_extended_byte(Extended_Opcode.EOP_INDEX)
+        return result
+
+    def to_moo(self) -> str:
+        return f"{self.object.to_moo()}[{self.index.to_moo()}]"
 
 
 @dataclass

@@ -83,6 +83,9 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | binary_expression
           | function_call
           | literal
+          | dollar_property
+          | dollar_verb_call
+          | dollar
           | IDENTIFIER
           | scatter
 
@@ -121,7 +124,8 @@ scattering_target: scattering_target_item ("," scattering_target_item)*
 scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDENTIFIER
 
 _SEMI: ";"
-IDENTIFIER.-5: (("_"|"$"|LETTER) ("_"|LETTER|DIGIT)*)
+IDENTIFIER: (("_"|LETTER) ("_"|LETTER|DIGIT)*)
+dollar: "$"
 
 IN: "in"
 NUMBER: /-?[0-9]+/

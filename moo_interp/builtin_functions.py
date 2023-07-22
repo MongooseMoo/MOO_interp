@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import re
 from logging import getLogger
 from typing import Union
@@ -12,27 +13,9 @@ from .errors import MOOError
 from .list import MOOList
 from .map import MOOMap
 from .string import MOOString
-from .moo_types import MOOAny, MOONumber
+from .moo_types import MOOAny, MOONumber, to_moo
 
 logger = getLogger(__name__)
-
-
-def to_moo(py_obj: Union[str, int, float, bool, list, dict]) -> MOOAny:
-    py_type = type(py_obj)
-    if py_type is str:
-        return MOOString(py_obj)
-    elif py_type is int:
-        return py_obj
-    elif py_type is float:
-        return py_obj
-    elif py_type is bool:
-        return py_obj
-    elif py_type is list:
-        return MOOList(*[to_moo(item) for item in py_obj])
-    elif py_type is dict:
-        return MOOMap(**{key: to_moo(value) for key, value in py_obj.items()})
-    else:
-        raise TypeError(f"Cannot convert {py_type.__name__} to MOO type.")
 
 
 class BuiltinFunctions:
@@ -462,10 +445,9 @@ class BuiltinFunctions:
     def parse_json(self, x):
         return to_moo(json.loads(x))
 
-
     def remove_ansi(self, input_string):
         return reduce(lambda s, tag: s.replace(tag, ''), BuiltinFunctions.ANSI_TAGS, input_string)
-    
+
     def parse_ansi(self, input_string):
         result_string = input_string
         for tag, code in BuiltinFunctions.ANSI_TAGS.items():
@@ -474,7 +456,7 @@ class BuiltinFunctions:
             random_code = random.choice(BuiltinFunctions.RANDOM_CODES)
             result_string = result_string.replace("[random]", random_code, 1)
         return result_string
-    
+
     # Fileio functions
 
     # Note: Need to add permissions checks and further compatibility to these functions
