@@ -9,6 +9,7 @@ import re
 from logging import getLogger
 from typing import Union
 
+from lambdamoo_db.database import MooDatabase, MooObject
 from .errors import MOOError
 from .list import MOOList
 from .map import MOOMap
@@ -375,7 +376,7 @@ class BuiltinFunctions:
             return MOOString("{" + ", ".join([str(self.toliteral(y)) for y in x]) + "}")
         elif isinstance(x, MOOMap):
             return MOOString("[" + ", ".join([self.toliteral(y) + ": " + self.toliteral(z) for y, z in x.items()]) + "]")
-        elif isinstance(x, MOOObject):
+        elif isinstance(x, MooObject):
             return MOOString("#" + str(x))
         elif isinstance(x, bool):
             return MOOString(str(x).lower())
@@ -506,3 +507,13 @@ class BuiltinFunctions:
     def file_tell(self, fd: int):
         open_file = os.fdopen(fd)
         return open_file.tell()
+
+    # property functions
+
+    def property_info(self, obj: MooObject, prop_name: MOOString):
+        prop = obj.get_prop(prop_name)
+        if prop is None:
+            # need to raise E_PROPNF
+            raise RuntimeError(
+                f"Property {prop_name} does not exist on object {obj.id}")
+        return MOOList([prop.owner, prop.perms])
