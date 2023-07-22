@@ -101,6 +101,10 @@ range: expression "[" ("^" | expression) ".." ("$" | expression) "]"
 
 property: expression "." (IDENTIFIER | "(" expression ")")
 
+dollar_property: "$" IDENTIFIER
+
+dollar_verb_call: "$" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
+
 verb_call: expression ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
 
 function_call: IDENTIFIER "(" call_arguments ")"

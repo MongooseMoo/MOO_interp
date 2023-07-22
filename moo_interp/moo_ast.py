@@ -231,6 +231,9 @@ class ElseIfClause(_Ast):
     condition: _Expression
     then_block: List[_Statement]
 
+    def to_moo(self) -> str:
+        return f"elseif ({self.condition.to_moo()}) {self.then_block.to_moo()}"
+
 
 @dataclass
 class _IfStatement(_Statement):
@@ -275,6 +278,15 @@ class _IfStatement(_Statement):
         # Combine all the bytecode together and return it
         return if_then_bc + done_bc
 
+    def to_moo(self) -> str:
+        result = f"if ({self.condition.to_moo()}) {self.then_block.to_moo()}"
+        for elseif in self.elseif_clauses:
+            result += f" {elseif.to_moo()}"
+        if self.else_block is not None:
+            result += f" else {self.else_block.to_moo()}"
+        result += " endif"
+        return result
+
 
 @dataclass
 class _FunctionCall(_Expression):
@@ -288,17 +300,24 @@ class _FunctionCall(_Expression):
                                operand=builtin_id)]
         return result
 
+    def to_moo(self) -> str:
+        arguments = ", ".join([arg.to_moo() for arg in self.arguments.value])
+        return f"{self.name}({arguments})"
+
 
 @dataclass
 class _Property(_Expression):
     object: _Expression
-    name: str
+    name: _Expression
 
     def to_bytecode(self, program: Program):
         result = self.object.to_bytecode(program)
         result += self.name.to_bytecode(program)
         result += [Instruction(opcode=Opcode.OP_GET_PROP)]
         return result
+
+    def to_moo(self) -> str:
+        return f"{self.object.to_moo()}.{self.name.to_moo()}"
 
 
 @dataclass
@@ -338,12 +357,6 @@ class WhileStatement(_Statement):
     condition: _Expression
     body: List[_Statement]
 
-
-@dataclass
-class WhileStatement(_Statement):
-    condition: _Expression
-    body: List[_Statement]
-
     def to_bytecode(self, program: Program):
         # First generate bytecode for condition and body
         condition_bc = self.condition.to_bytecode(program)
@@ -364,6 +377,9 @@ class WhileStatement(_Statement):
             + body_bc
             + [Instruction(opcode=Opcode.OP_JUMP, operand=jump_to_start)]
         )
+
+    def to_moo(self) -> str:
+        return f"while ({self.condition.to_moo()}) {self.body.to_moo()} endwhile"
 
 
 class ToAst(Transformer):
@@ -426,7 +442,7 @@ class ToAst(Transformer):
 
     @v_args(inline=True)
     def start(self, x):
-        return x
+        return x.children[0]
 
 
 #
