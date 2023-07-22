@@ -6,17 +6,16 @@ code:
 
 
 ?statement:
-	| expression _SEMI
+	| single_statement
 	| if_statement
-	| return_statement _SEMI
 	| for_statement
 	| while_statement
 	| fork_statement
 	| try_except_statement
 	| try_finally_statement
-	| break_statement _SEMI
-	| continue_statement _SEMI
 	
+single_statement: (expression | return_statement | fork_statement | break_statement | continue_statement) _SEMI
+
 ?condition: expression
 
 then_block: statement*

@@ -56,6 +56,19 @@ class _Ast(ast_utils.Ast):
         raise NotImplementedError(
             f"to_moo not implemented for {self.__class__.__name__}")
 
+@dataclass
+class VerbCode(_Ast):
+    children: List[_Ast]
+
+    def to_bytecode(self, program: Program):
+        result = []
+        for node in self.children:
+            result += node.to_bytecode(program)
+        return result
+
+    def to_moo(self) -> str:
+        return "\n".join([node.to_moo() for node in self.children])
+
 
 class _Expression(_Ast):
     pass
@@ -66,6 +79,17 @@ class _Statement(_Ast):
     def to_bytecode(self, program: Program):
         raise NotImplementedError(
             f"to_bytecode not implemented for {self.__class__.__name__}")
+
+
+@dataclass
+class SingleStatement(_Ast):
+    statement: _Statement
+
+    def to_bytecode(self, program: Program):
+        return self.statement.to_bytecode(program)
+
+    def to_moo(self) -> str:
+        return self.statement.to_moo() + ";"
 
 
 @dataclass
@@ -442,7 +466,7 @@ class ToAst(Transformer):
 
     @v_args(inline=True)
     def start(self, x):
-        return x.children[0]
+        return VerbCode(x.children)
 
 
 #
