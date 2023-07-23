@@ -517,3 +517,4 @@ class BuiltinFunctions:
             raise RuntimeError(
                 f"Property {prop_name} does not exist on object {obj.id}")
         return MOOList([prop.owner, prop.perms])
+

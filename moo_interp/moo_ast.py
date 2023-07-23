@@ -256,8 +256,21 @@ class ElseIfClause(_Ast):
     condition: _Expression
     then_block: List[_Statement]
 
+    def to_bytecode(self, program: Program):
+        condition_bc = self.condition.to_bytecode(program)
+        then_block_bc = []
+        if self.then_block is not None and len(self.then_block) == 1 and hasattr(self.then_block[0], "children") and not self.then_block[0].children:
+            self.then_block = None
+        if self.then_block is not None:
+            for stmt in self.then_block:
+                then_block_bc += stmt.to_bytecode(program)
+        return condition_bc + [Instruction(opcode=Opcode.OP_EIF, operand=len(then_block_bc) + 1)] + then_block_bc
+
     def to_moo(self) -> str:
-        return f"elseif ({self.condition.to_moo()}) {self.then_block.to_moo()}"
+        result = f"elseif ({self.condition.to_moo()})\n"
+        if self.then_block is not None:
+            result += "\n".join([stmt.to_moo() for stmt in self.then_block])
+        return result
 
 
 @dataclass
@@ -265,12 +278,12 @@ class _IfStatement(_Statement):
     condition: _Expression
     then_block: List[_Statement]
     elseif_clauses: List[ElseIfClause]
-    else_block: Union[List[_Statement], None]
+    otherwise: Union[List[_Statement], None]
 
     def to_bytecode(self, program: Program):
         condition_bc = self.condition.to_bytecode(program)
         then_block_bc = []
-        for stmt in self.then_block.children:
+        for stmt in self.then_block:
             then_block_bc += stmt.to_bytecode(program)
         # Add IF/EIF bytecode instruction
         if_then_bc = condition_bc + \
@@ -285,9 +298,9 @@ class _IfStatement(_Statement):
         else_block_bc = []
 
         # Add bytecode for ELSE block if it exists
-        if self.else_block is not None:
+        if self.otherwise is not None:
             else_block_bc = []
-            for stmt in self.else_block.children:
+            for stmt in self.otherwise:
                 else_block_bc += stmt.to_bytecode(program)
             done_bc = else_block_bc
 
@@ -304,12 +317,13 @@ class _IfStatement(_Statement):
         return if_then_bc + done_bc
 
     def to_moo(self) -> str:
-        result = f"if ({self.condition.to_moo()}) {self.then_block.to_moo()}"
+        nl = "\n"
+        result = f"if ({self.condition.to_moo()}) {nl.join([stmt.to_moo() for stmt in self.then_block])}"
         for elseif in self.elseif_clauses:
-            result += f" {elseif.to_moo()}"
-        if self.else_block is not None:
-            result += f" else {self.else_block.to_moo()}"
-        result += " endif"
+            result += f"\n{elseif.to_moo()}"
+            if self.otherwise is not None:
+                result += f"\nelse\n{nl.join([stmt.to_moo() for stmt in self.otherwise])}"
+        result += "\nendif"
         return result
 
 
@@ -348,7 +362,7 @@ class _Property(_Expression):
 @dataclass
 class DollarProperty(_Ast):
     name: StringLiteral
-    
+
     def to_bytecode(self, program: Program):
         # $prop means #0.prop
         result = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
@@ -491,12 +505,22 @@ class ToAst(Transformer):
 
     def if_statement(self, if_clause):
         condition, then_block = if_clause[0].children
+        then_block = then_block.children
+        if len(then_block) == 1 and hasattr(then_block[0], "children") and not then_block[0].children:
+            then_block = []
         if len(if_clause) > 2:
             elseif_clauses = [ElseIfClause(clause.children[0], clause.children[1].children)
                               for clause in if_clause[1:-1]]
+            # replace empty elseif clauses 'then block' with None
+            for clause in elseif_clauses:
+                if len(clause.then_block) == 1 and hasattr(clause.then_block[0], "children") and not clause.then_block[0].children:
+                    clause.then_block = None
         else:
             elseif_clauses = []
-        else_clause = if_clause[-1].children[0] if len(if_clause) > 1 else None
+        else_clause = if_clause[-1].children[0].children if len(
+            if_clause) > 1 else None
+        if else_clause and len(else_clause) == 1 and hasattr(else_clause[0], "children") and not else_clause[0].children:
+            else_clause = None
         return _IfStatement(condition, then_block, elseif_clauses, else_clause)
 
     def function_call(self, call):
