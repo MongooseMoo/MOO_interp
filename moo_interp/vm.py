@@ -106,6 +106,14 @@ def operator(opcode):
             warnings.warn(
                 f"Parameter(s) {', '.join(unannotated_params)} of {func.__name__} are not annotated, will be considered as 'Any'")
 
+        def typecheck(args, func_params):
+            for arg, param in zip(args, func_params):
+                if param.annotation not in {inspect._empty, Any}:
+                    continue
+                if not isinstance(arg, param.annotation):
+                    raise VMError(
+                        f"Expected {param.annotation} for parameter {param.name}, got {type(arg)}")
+        
         @wraps(func)
         def wrapper(self, *args):
             # Check for stack underflow
@@ -113,14 +121,8 @@ def operator(opcode):
                 if len(self.stack) < num_args:
                     raise VMError(
                         f"Stack underflow in opcode {opcode} in function {func.__name__}")
-
-            # Check types match annotations
-            for (param, arg) in zip(func_params, args):
-                if param.annotation not in {inspect._empty, Any}:
-                    if not isinstance(arg, param.annotation):
-                        raise VMError(
-                            f"Argument {arg} in function {func.__name__} is not of expected type {param.annotation}")
-
+                
+                typecheck(self.stack[-num_args:], func_params)
             # Call the function
             return func(self, *args)
 
@@ -240,8 +242,8 @@ class VM:
                 if not handler:
                     raise VMError(f"Unknown extended opcode {instr.operand}")
             if not handler:
-                if instr.opcode >= 113:
-                    result = instr.opcode - 113
+                if type(instr.opcode) == int:
+                    result = int(instr.opcode) - 113
                 else:
                     raise VMError(f"Unknown opcode {instr.opcode}")
         if result is None:

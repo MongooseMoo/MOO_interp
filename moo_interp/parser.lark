@@ -14,7 +14,7 @@ code:
 	| try_except_statement
 	| try_finally_statement
 	
-single_statement: (expression | return_statement | fork_statement | break_statement | continue_statement) _SEMI
+single_statement: (return_statement | expression | fork_statement | break_statement | continue_statement) _SEMI
 
 ?condition: expression
 

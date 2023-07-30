@@ -98,7 +98,7 @@ class Identifier(_Expression):
     value: str
 
     def to_bytecode(self, program: Program):
-        return [self.emit_byte(Opcode.OP_PUSH, self.value)]
+        return [self.emit_byte(Opcode.OP_PUSH, MOOString(self.value))]
 
     def to_moo(self):
         return self.value
