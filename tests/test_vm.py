@@ -56,7 +56,7 @@ def test_vm_math_operations(values, opcode):
         else:
             instruction_list.append(Instruction(opcode=opcode))
         prog = Program()
-        frame1 = StackFrame(prog, 0, ip=0, stack=instruction_list)
+        frame1 = StackFrame(0, prog=prog, ip=0, stack=instruction_list)
         vm.call_stack.append(frame1)
 
         # Perform the operation using operator module
