@@ -14,6 +14,17 @@ from .vm import VM, Instruction, Program, StackFrame
 
 this_module = sys.modules[__name__]
 
+
+@dataclass
+class CompilerState:
+    last_label = 0
+    
+    def next_label(self):
+        self.last_label += 1
+        return self.last_label
+
+
+
 # operator to opcode mapping
 
 binary_opcodes = {
@@ -46,11 +57,11 @@ unary_opcodes = {
 
 class _Ast(ast_utils.Ast):
 
-    def emit_byte(self, opcode: Opcode, operand: Union[int, float, MOOString, None]):
-        return Instruction(opcode=opcode, operand=operand)
+    def emit_byte(self, opcode: Opcode, operand: Union[int, float, MOOString, None], label: str = None):
+        return Instruction(opcode=opcode, operand=operand, label=label)
 
-    def emit_extended_byte(self, opcode: Extended_Opcode):
-        return Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode)
+    def emit_extended_byte(self, opcode: Extended_Opcode, label: str = None):
+        return Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode, label=label)
 
     def to_moo(self) -> str:
         raise NotImplementedError(
@@ -61,10 +72,10 @@ class _Ast(ast_utils.Ast):
 class VerbCode(_Ast):
     children: List[_Ast]
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         result = []
         for node in self.children:
-            result += node.to_bytecode(program)
+            result += node.to_bytecode(state, program)
         return result
 
     def to_moo(self) -> str:
@@ -77,7 +88,7 @@ class _Expression(_Ast):
 
 class _Statement(_Ast):
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         raise NotImplementedError(
             f"to_bytecode not implemented for {self.__class__.__name__}")
 
@@ -86,8 +97,8 @@ class _Statement(_Ast):
 class SingleStatement(_Ast):
     statement: _Statement
 
-    def to_bytecode(self, program: Program):
-        return self.statement.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        return self.statement.to_bytecode(state, program)
 
     def to_moo(self) -> str:
         return self.statement.to_moo() + ";"
@@ -97,7 +108,7 @@ class SingleStatement(_Ast):
 class Identifier(_Expression):
     value: str
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         return [self.emit_byte(Opcode.OP_PUSH, MOOString(self.value))]
 
     def to_moo(self):
@@ -108,8 +119,8 @@ class Identifier(_Expression):
 class Splicer(_Expression):
     expression: _Expression
 
-    def to_bytecode(self, program: Program):
-        return self.expression.to_bytecode(program) + [self.emit_byte(Opcode.OP_CHECK_LIST_FOR_SPLICE, None)]
+    def to_bytecode(self, state: CompilerState, program: Program):
+        return self.expression.to_bytecode(state, program) + [self.emit_byte(Opcode.OP_CHECK_LIST_FOR_SPLICE, None)]
 
     def to_moo(self) -> str:
         return '@' + self.expression.to_moo()
@@ -119,7 +130,7 @@ class Splicer(_Expression):
 class _Literal(_Ast):
     value: any
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, to_moo(self.value))]
 
     def to_moo(self) -> MOOString:
@@ -143,7 +154,7 @@ class BooleanLiteral(_Literal, _Expression):
 class NumberLiteral(_Literal, _Expression):
     value: int
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         if self.value > -1 and self.value < 256:
             return [self.emit_byte(113+self.value, None)]
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
@@ -153,7 +164,7 @@ class NumberLiteral(_Literal, _Expression):
 class FloatLiteral(_Literal, _Expression):
     value: float
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
 
@@ -161,7 +172,7 @@ class FloatLiteral(_Literal, _Expression):
 class ObjnumLiteral(_Literal, _Expression):
     value: int
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
     def to_moo(self) -> str:
@@ -172,13 +183,13 @@ class ObjnumLiteral(_Literal, _Expression):
 class _List(_Expression):
     value: list
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         if (not self.value):
             # empty list
             return [Instruction(opcode=Opcode.OP_MAKE_EMPTY_LIST)]
         result = []
         for index, element in enumerate(self.value):
-            result += element.to_bytecode(program)
+            result += element.to_bytecode(state, program)
             if index == 0:
                 result += [Instruction(opcode=Opcode.OP_MAKE_SINGLETON_LIST)]
             else:
@@ -193,12 +204,12 @@ class _List(_Expression):
 class Map(_Expression):
     value: List
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         result = [Instruction(opcode=Opcode.OP_MAP_CREATE)]
         for child in self.value:
             key, value = child.children
-            result += key.to_bytecode(program)
-            result += value.to_bytecode(program)
+            result += key.to_bytecode(state, program)
+            result += value.to_bytecode(state, program)
             result += [Instruction(opcode=Opcode.OP_MAP_INSERT)]
             result += [Instruction(opcode=Opcode.OP_POP, operand=2)]
         return result
@@ -212,8 +223,8 @@ class UnaryExpression(_Expression):
     operator: str
     operand: _Expression
 
-    def to_bytecode(self, program: Program):
-        operand_bc = self.operand.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        operand_bc = self.operand.to_bytecode(state, program)
         return operand_bc + [Instruction(opcode=unary_opcodes[self.operator])]
 
     def to_moo(self) -> str:
@@ -226,9 +237,9 @@ class BinaryExpression(_Expression):
     operator: str
     right: _Expression
 
-    def to_bytecode(self, program: Program):
-        left_bc = self.left.to_bytecode(program)
-        right_bc = self.right.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        left_bc = self.left.to_bytecode(state, program)
+        right_bc = self.right.to_bytecode(state, program)
         return left_bc + right_bc + [Instruction(opcode=binary_opcodes[self.operator])]
 
     def to_moo(self) -> str:
@@ -240,12 +251,12 @@ class _Assign(_Statement):
     target: Identifier
     value: _Expression
 
-    def to_bytecode(self, program: Program):
-        value_bc = self.value.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        value_bc = self.value.to_bytecode(state, program)
         if isinstance(self.target, Identifier):
             return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=self.target.value)]
         elif isinstance(self.target, _Property):
-            return value_bc + self.target.object.to_bytecode(program) + self.target.name.to_bytecode(program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
+            return value_bc + self.target.object.to_bytecode(state, program) + self.target.name.to_bytecode(state, program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
 
     def to_moo(self) -> str:
         return f"{self.target.to_moo()} = {self.value.to_moo()}"
@@ -256,14 +267,14 @@ class ElseIfClause(_Ast):
     condition: _Expression
     then_block: List[_Statement]
 
-    def to_bytecode(self, program: Program):
-        condition_bc = self.condition.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        condition_bc = self.condition.to_bytecode(state, program)
         then_block_bc = []
         if self.then_block is not None and len(self.then_block) == 1 and hasattr(self.then_block[0], "children") and not self.then_block[0].children:
             self.then_block = None
         if self.then_block is not None:
             for stmt in self.then_block:
-                then_block_bc += stmt.to_bytecode(program)
+                then_block_bc += stmt.to_bytecode(state, program)
         return condition_bc + [Instruction(opcode=Opcode.OP_EIF, operand=len(then_block_bc) + 1)] + then_block_bc
 
     def to_moo(self) -> str:
@@ -280,11 +291,11 @@ class _IfStatement(_Statement):
     elseif_clauses: List[ElseIfClause]
     otherwise: Union[List[_Statement], None]
 
-    def to_bytecode(self, program: Program):
-        condition_bc = self.condition.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        condition_bc = self.condition.to_bytecode(state, program)
         then_block_bc = []
         for stmt in self.then_block:
-            then_block_bc += stmt.to_bytecode(program)
+            then_block_bc += stmt.to_bytecode(state, program)
         # Add IF/EIF bytecode instruction
         if_then_bc = condition_bc + \
             [Instruction(opcode=Opcode.OP_IF, operand=len(then_block_bc) + 1)]
@@ -301,12 +312,12 @@ class _IfStatement(_Statement):
         if self.otherwise is not None:
             else_block_bc = []
             for stmt in self.otherwise:
-                else_block_bc += stmt.to_bytecode(program)
+                else_block_bc += stmt.to_bytecode(state, program)
             done_bc = else_block_bc
 
         # Add bytecode for ELSEIF clauses if they exist
         for elseif in self.elseif_clauses:
-            elseif_bc = elseif.to_bytecode(program)
+            elseif_bc = elseif.to_bytecode(state, program)
             if_then_bc += elseif_bc
             done_bc = elseif_bc  # Update 'done' bytecode
 
@@ -332,8 +343,8 @@ class _FunctionCall(_Expression):
     name: str
     arguments: List[_Expression]
 
-    def to_bytecode(self, program: Program):
-        result = self.arguments.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        result = self.arguments.to_bytecode(state, program)
         builtin_id = BuiltinFunctions().get_id_by_name(self.name)
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
                                operand=builtin_id)]
@@ -349,9 +360,9 @@ class _Property(_Expression):
     object: _Expression
     name: _Expression
 
-    def to_bytecode(self, program: Program):
-        result = self.object.to_bytecode(program)
-        result += self.name.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        result = self.object.to_bytecode(state, program)
+        result += self.name.to_bytecode(state, program)
         result += [Instruction(opcode=Opcode.OP_GET_PROP)]
         return result
 
@@ -363,10 +374,10 @@ class _Property(_Expression):
 class DollarProperty(_Ast):
     name: StringLiteral
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         # $prop means #0.prop
         result = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
-        result += self.name.to_bytecode(program)
+        result += self.name.to_bytecode(state, program)
         result += [Instruction(opcode=Opcode.OP_GET_PROP)]
         return result
 
@@ -379,11 +390,11 @@ class DollarVerbCall(_Ast):
     name = StringLiteral
     arguments = List[_Expression]
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         # $verb() means #0:verb()
         result = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
-        result += self.name.to_bytecode(program)
-        result += self.arguments.to_bytecode(program)
+        result += self.name.to_bytecode(state, program)
+        result += self.arguments.to_bytecode(state, program)
         result += [Instruction(opcode=Opcode.OP_CALL_VERB)]
         return result
 
@@ -398,10 +409,10 @@ class _VerbCall(_Expression):
     name: _Expression
     arguments: List[_Expression]
 
-    def to_bytecode(self, program: Program):
-        result = self.object.to_bytecode(program)
-        result += self.name.to_bytecode(program)
-        result += self.arguments.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        result = self.object.to_bytecode(state, program)
+        result += self.name.to_bytecode(state, program)
+        result += self.arguments.to_bytecode(state, program)
         result += [Instruction(opcode=Opcode.OP_CALL_VERB)]
         return result
 
@@ -415,9 +426,9 @@ class Index(_Expression):
     object: _Expression
     index: _Expression
 
-    def to_bytecode(self, program: Program):
-        result = self.object.to_bytecode(program)
-        result += self.index.to_bytecode(program)
+    def to_bytecode(self, state: CompilerState, program: Program):
+        result = self.object.to_bytecode(state, program)
+        result += self.index.to_bytecode(state, program)
         result += self.emit_extended_byte(Extended_Opcode.EOP_INDEX)
         return result
 
@@ -429,10 +440,10 @@ class Index(_Expression):
 class ReturnStatement(_Statement):
     value: _Expression = None
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         if self.value is None:
             return [Instruction(opcode=Opcode.OP_RETURN0)]
-        value_bc = self.value.to_bytecode(program)
+        value_bc = self.value.to_bytecode(state, program)
         return value_bc + [Instruction(opcode=Opcode.OP_RETURN)]
 
     def to_moo(self) -> str:
@@ -444,12 +455,12 @@ class WhileStatement(_Statement):
     condition: _Expression
     body: List[_Statement]
 
-    def to_bytecode(self, program: Program):
+    def to_bytecode(self, state: CompilerState, program: Program):
         # First generate bytecode for condition and body
-        condition_bc = self.condition.to_bytecode(program)
+        condition_bc = self.condition.to_bytecode(state, program)
         body_bc = []
         for stmt in self.body.children:
-            body_bc += stmt.to_bytecode(program)
+            body_bc += stmt.to_bytecode(state, program)
 
         # Calculate the relative jump points
         # +1 accounts for the OP_JUMP instruction at the end
@@ -467,6 +478,7 @@ class WhileStatement(_Statement):
 
     def to_moo(self) -> str:
         return f"while ({self.condition.to_moo()}) {self.body.to_moo()} endwhile"
+
 
 
 class ToAst(Transformer):
@@ -565,8 +577,9 @@ def compile(tree):
     elif isinstance(tree, str):
         tree = parse(tree)
     bc = []
+    state = CompilerState()
     for node in tree.children:
-        bc += node.to_bytecode(None)
+        bc += node.to_bytecode(state, None)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
     prog = Program()
     frame = StackFrame(func_id=0, prog=prog, ip=0, stack=bc)
@@ -605,8 +618,6 @@ class VMRunError(Exception):
     def __init__(self, vm, message):
         self.vm = vm
         self.message = message
-
-
 if __name__ == '__main__':
     print(parse("""
         if (1==1) player:tell("hello"); endif

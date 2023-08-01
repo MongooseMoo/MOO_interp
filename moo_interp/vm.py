@@ -55,14 +55,9 @@ class Instruction:
     """Represents a single bytecode instruction"""
     opcode: Opcode
     operand: Optional[int] = None
-    numbytes_label: int = field(default=0)
-    numbytes_literal: int = field(default=0)
-    numbytes_fork: int = field(default=0)
-    numbytes_var_name: int = field(default=0)
-    numbytes_stack: int = field(default=0)
-    size: int = field(default=0)
-    max_stack: int = field(default=0)
+    label: Optional[int] = None
 
+    
 
 @define
 class Program:
