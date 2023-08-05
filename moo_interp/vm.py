@@ -13,7 +13,7 @@ from .builtin_functions import BuiltinFunctions
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
-                        MOONumber, Subtractable)
+                        MOONumber, Subtractable, is_truthy)
 from .opcodes import Extended_Opcode, Opcode
 from .string import MOOString
 
@@ -57,7 +57,6 @@ class Instruction:
     operand: Optional[int] = None
     label: Optional[int] = None
 
-    
 
 @define
 class Program:
@@ -108,7 +107,7 @@ def operator(opcode):
                 if not isinstance(arg, param.annotation):
                     raise VMError(
                         f"Expected {param.annotation} for parameter {param.name}, got {type(arg)}")
-        
+
         @wraps(func)
         def wrapper(self, *args):
             # Check for stack underflow
@@ -116,7 +115,7 @@ def operator(opcode):
                 if len(self.stack) < num_args:
                     raise VMError(
                         f"Stack underflow in opcode {opcode} in function {func.__name__}")
-                
+
                 typecheck(self.stack[-num_args:], func_params)
             # Call the function
             return func(self, *args)
@@ -173,7 +172,7 @@ class VM:
 
         if unhandled_opcodes:
             warnings.warn(
-                f"The following opcodes are not implemented: {[opcode.name for opcode in unhandled_opcodes]}", UserWarning)
+                f"The following {len(unhandled_opcodes)} opcodes are not implemented: {[opcode.name for opcode in unhandled_opcodes]}", UserWarning)
 
         # Set of all extended opcodes
         all_eopcodes = set(Extended_Opcode)
@@ -181,7 +180,7 @@ class VM:
 
         if unhandled_eopcodes:
             warnings.warn(
-                f"The following extended opcodes are not implemented: {[opcode.name for opcode in unhandled_eopcodes]}", UserWarning)
+                f"The following {len(unhandled_eopcodes)} extended opcodes are not implemented: {[opcode.name for opcode in unhandled_eopcodes]}", UserWarning)
 
     def push(self, value: MOOAny) -> None:
         """Push a value onto the stack"""
@@ -555,20 +554,25 @@ class VM:
 
     # Control Flow Operations
 
-    @operator(Opcode.OP_WHILE)
-    def exec_while(self):
-        frame = self.call_stack[-1]
-        condition = self.pop()  # Pop the condition off the stack
-        if not isinstance(condition, bool):
-            raise VMError("Expected boolean condition for OP_WHILE")
+    @operator(Opcode.OP_IF)
+    def exec_if(self, jump_to: int):
+        condition = self.pop()
+        if (is_truthy(condition)):
+            self.call_stack[-1].ip += jump_to
 
-        if not condition:
-            # Skip to after the end of the loop body
-            while frame.ip < len(frame.stack) and frame.stack[frame.ip].opcode != Opcode.OP_JUMP:
-                frame.ip += 1
-            if frame.ip >= len(frame.stack):
-                raise VMError("No OP_JUMP found for OP_WHILE")
-            frame.ip += 1  # Skip the OP_JUMP
+    @operator(Opcode.OP_EIF)
+    def exec_eif(self, jump_to: int):
+        condition = self.pop()
+        if (is_truthy(condition)):
+            self.call_stack[-1].ip += jump_to
+
+    @operator(Opcode.OP_WHILE)
+    def exec_while(self, jump_to: int):
+        condition = self.pop()
+        if (is_truthy(condition)):
+            self.call_stack[-1].ip += jump_to
+        else:
+            self.call_stack[-1].ip -= 1
 
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:

@@ -30,3 +30,20 @@ def to_moo(py_obj: Union[str, int, float, bool, list, dict]) -> MOOAny:
         return MOOMap(**{key: to_moo(value) for key, value in py_obj.items()})
     else:
         raise TypeError(f"Cannot convert {py_type.__name__} to MOO type.")
+
+
+def is_truthy(value: MOOAny) -> bool:
+    if isinstance(value, MOOString):
+        return bool(value)
+    elif isinstance(value, MOOList):
+        return bool(value)
+    elif isinstance(value, MOOMap):
+        return bool(value)
+    elif isinstance(value, bool):
+        return value
+    elif isinstance(value, int):
+        return bool(value)
+    elif isinstance(value, float):
+        return bool(value)
+    else:
+        raise TypeError(f"Cannot check truthiness of {type(value).__name__}.")
