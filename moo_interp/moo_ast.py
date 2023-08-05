@@ -1,6 +1,6 @@
 import sys
 from dataclasses import dataclass, field
-from typing import List, Union
+from typing import List, Optional, Union
 import lark
 from lark import Lark, Transformer, ast_utils, v_args
 from lark.tree import Meta
@@ -261,7 +261,6 @@ class BinaryExpression(_Expression):
         return f"{self.left.to_moo()} {self.operator} {self.right.to_moo()}"
 
 
-
 @dataclass
 class _Assign(_Statement):
     target: Identifier
@@ -294,6 +293,7 @@ class ElseifClause(_Ast):
             result = result + self.then_block.to_moo()
         return result
 
+
 @dataclass
 class IfClause(_Ast):
     condition: _Expression
@@ -301,9 +301,7 @@ class IfClause(_Ast):
 
     def to_bytecode(self, state: CompilerState, program: Program):
         condition_bc = self.condition.to_bytecode(state, program)
-        then_block_bc = []
-        if self.then_block is not None:
-            then_block = self.then_block.to_bytecode(state, program)
+        then_block_bc = self.then_block.to_bytecode(state, program)
         return condition_bc + [Instruction(opcode=Opcode.OP_IF, operand=len(then_block_bc) + 1)] + then_block_bc
 
     def to_moo(self) -> str:
@@ -311,6 +309,7 @@ class IfClause(_Ast):
         if self.then_block is not None:
             result += self.then_block.to_moo()
         return result
+
 
 @dataclass
 class ElseClause(_Ast):
@@ -333,17 +332,28 @@ class ElseClause(_Ast):
 class _IfStatement(_Statement):
     if_clause: IfClause
     elseif_clauses: List[ElseifClause] = field(default_factory=list)
-    else_clause: ElseClause = None
+    else_clause: Optional[ElseClause] = None
 
     def to_bytecode(self, state: CompilerState, program: Program):
-        if_clause_bc = self.if_clause.to_bytecode(state, program)
+        end_label = state.next_label()
+        if_clause_bc = self.if_clause.to_bytecode(
+            state, program) + [Instruction(opcode=Opcode.OP_JUMP, operand=end_label)]
+
         elseif_clauses_bc = []
         for elseif in self.elseif_clauses:
             elseif_clauses_bc += elseif.to_bytecode(state, program)
+            elseif_clauses_bc += [Instruction(
+                opcode=Opcode.OP_JUMP, operand=end_label)]
         else_clause_bc = []
         if self.else_clause is not None:
             else_clause_bc = self.else_clause.to_bytecode(state, program)
-        return if_clause_bc + elseif_clauses_bc + else_clause_bc
+        full_bc = if_clause_bc + elseif_clauses_bc + else_clause_bc
+        # update end label for jumps relative to the end of the if statement
+        # (i.e. jumps to the end of the if statement before the elseif or else clauses)
+        for index, instruction in enumerate(full_bc):
+            if instruction.opcode == Opcode.OP_JUMP:
+                instruction.operand = len(full_bc) - index
+        return full_bc 
 
     def to_moo(self) -> str:
         nl = "\n"
