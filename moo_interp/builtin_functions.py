@@ -518,3 +518,10 @@ class BuiltinFunctions:
                 f"Property {prop_name} does not exist on object {obj.id}")
         return MOOList([prop.owner, prop.perms])
 
+    # Miscellaneous functions
+
+    def random(self, x: int):
+        return random.randint(0, x)
+
+    def frandom(self) -> float:
+        return random.random()
