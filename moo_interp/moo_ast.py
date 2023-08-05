@@ -1,7 +1,7 @@
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Union
-
+import lark
 from lark import Lark, Transformer, ast_utils, v_args
 from lark.tree import Meta
 
@@ -18,15 +18,13 @@ this_module = sys.modules[__name__]
 @dataclass
 class CompilerState:
     last_label = 0
-    
+
     def next_label(self):
         self.last_label += 1
         return self.last_label
 
 
-
 # operator to opcode mapping
-
 binary_opcodes = {
     '+': Opcode.OP_ADD,
     '-': Opcode.OP_MINUS,
@@ -102,6 +100,23 @@ class SingleStatement(_Ast):
 
     def to_moo(self) -> str:
         return self.statement.to_moo() + ";"
+
+
+@dataclass(init=False)
+class _Body(_Ast):
+    statements: List[_Statement]
+
+    def __init__(self, *statements: List[_Statement]):
+        self.statements = statements
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        result = []
+        for stmt in self.statements:
+            result += stmt.to_bytecode(state, program)
+        return result
+
+    def to_moo(self) -> str:
+        return "\n".join([stmt.to_moo() for stmt in self.statements])
 
 
 @dataclass
@@ -246,6 +261,7 @@ class BinaryExpression(_Expression):
         return f"{self.left.to_moo()} {self.operator} {self.right.to_moo()}"
 
 
+
 @dataclass
 class _Assign(_Statement):
     target: Identifier
@@ -263,77 +279,79 @@ class _Assign(_Statement):
 
 
 @dataclass
-class ElseIfClause(_Ast):
+class ElseifClause(_Ast):
     condition: _Expression
-    then_block: List[_Statement]
+    then_block:         _Body
 
     def to_bytecode(self, state: CompilerState, program: Program):
         condition_bc = self.condition.to_bytecode(state, program)
-        then_block_bc = []
-        if self.then_block is not None and len(self.then_block) == 1 and hasattr(self.then_block[0], "children") and not self.then_block[0].children:
-            self.then_block = None
-        if self.then_block is not None:
-            for stmt in self.then_block:
-                then_block_bc += stmt.to_bytecode(state, program)
+        then_block_bc = self.then_block.to_bytecode(state, program)
         return condition_bc + [Instruction(opcode=Opcode.OP_EIF, operand=len(then_block_bc) + 1)] + then_block_bc
 
     def to_moo(self) -> str:
         result = f"elseif ({self.condition.to_moo()})\n"
         if self.then_block is not None:
-            result += "\n".join([stmt.to_moo() for stmt in self.then_block])
+            result = result + self.then_block.to_moo()
+        return result
+
+@dataclass
+class IfClause(_Ast):
+    condition: _Expression
+    then_block: _Body
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        condition_bc = self.condition.to_bytecode(state, program)
+        then_block_bc = []
+        if self.then_block is not None:
+            then_block = self.then_block.to_bytecode(state, program)
+        return condition_bc + [Instruction(opcode=Opcode.OP_IF, operand=len(then_block_bc) + 1)] + then_block_bc
+
+    def to_moo(self) -> str:
+        result = f"if ({self.condition.to_moo()})\n"
+        if self.then_block is not None:
+            result += self.then_block.to_moo()
+        return result
+
+@dataclass
+class ElseClause(_Ast):
+    then_block: _Body
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        then_block_bc = []
+        if self.then_block is not None:
+            then_block_bc = self.then_block.to_bytecode(state, program)
+        return then_block_bc
+
+    def to_moo(self) -> str:
+        result = "else\n"
+        if self.then_block is not None:
+            result += self.then_block.to_moo()
         return result
 
 
 @dataclass
 class _IfStatement(_Statement):
-    condition: _Expression
-    then_block: List[_Statement]
-    elseif_clauses: List[ElseIfClause]
-    otherwise: Union[List[_Statement], None]
+    if_clause: IfClause
+    elseif_clauses: List[ElseifClause] = field(default_factory=list)
+    else_clause: ElseClause = None
 
     def to_bytecode(self, state: CompilerState, program: Program):
-        condition_bc = self.condition.to_bytecode(state, program)
-        then_block_bc = []
-        for stmt in self.then_block:
-            then_block_bc += stmt.to_bytecode(state, program)
-        # Add IF/EIF bytecode instruction
-        if_then_bc = condition_bc + \
-            [Instruction(opcode=Opcode.OP_IF, operand=len(then_block_bc) + 1)]
-
-        # Add then block and JUMP bytecode instruction
-        # Operand for JUMP will be filled in later
-        if_then_bc += then_block_bc + \
-            [Instruction(opcode=Opcode.OP_JUMP, operand=None)]
-
-        done_bc = []  # Placeholder for 'done' bytecode, will be filled in later
-        else_block_bc = []
-
-        # Add bytecode for ELSE block if it exists
-        if self.otherwise is not None:
-            else_block_bc = []
-            for stmt in self.otherwise:
-                else_block_bc += stmt.to_bytecode(state, program)
-            done_bc = else_block_bc
-
-        # Add bytecode for ELSEIF clauses if they exist
+        if_clause_bc = self.if_clause.to_bytecode(state, program)
+        elseif_clauses_bc = []
         for elseif in self.elseif_clauses:
-            elseif_bc = elseif.to_bytecode(state, program)
-            if_then_bc += elseif_bc
-            done_bc = elseif_bc  # Update 'done' bytecode
-
-        # Now that we know the length of the bytecode for the 'done' block, we can fill in the operand for the JUMP instruction
-        if_then_bc[-1].operand = len(done_bc)
-
-        # Combine all the bytecode together and return it
-        return if_then_bc + done_bc
+            elseif_clauses_bc += elseif.to_bytecode(state, program)
+        else_clause_bc = []
+        if self.else_clause is not None:
+            else_clause_bc = self.else_clause.to_bytecode(state, program)
+        return if_clause_bc + elseif_clauses_bc + else_clause_bc
 
     def to_moo(self) -> str:
         nl = "\n"
-        result = f"if ({self.condition.to_moo()}) {nl.join([stmt.to_moo() for stmt in self.then_block])}"
-        for elseif in self.elseif_clauses:
-            result += f"\n{elseif.to_moo()}"
-            if self.otherwise is not None:
-                result += f"\nelse\n{nl.join([stmt.to_moo() for stmt in self.otherwise])}"
+        result = self.if_clause.to_moo()
+        result += "\n".join([elseif.to_moo()
+                             for elseif in self.elseif_clauses])
+        if self.else_clause is not None:
+            result += f"\n{self.else_clause.to_moo()}"
         result += "\nendif"
         return result
 
@@ -480,7 +498,6 @@ class WhileStatement(_Statement):
         return f"while ({self.condition.to_moo()}) {self.body.to_moo()} endwhile"
 
 
-
 class ToAst(Transformer):
 
     def BOOLEAN(self, b):
@@ -515,25 +532,18 @@ class ToAst(Transformer):
     def dict(self, entries):
         return Map(entries)
 
-    def if_statement(self, if_clause):
-        condition, then_block = if_clause[0].children
-        then_block = then_block.children
-        if len(then_block) == 1 and hasattr(then_block[0], "children") and not then_block[0].children:
-            then_block = []
-        if len(if_clause) > 2:
-            elseif_clauses = [ElseIfClause(clause.children[0], clause.children[1].children)
-                              for clause in if_clause[1:-1]]
-            # replace empty elseif clauses 'then block' with None
-            for clause in elseif_clauses:
-                if len(clause.then_block) == 1 and hasattr(clause.then_block[0], "children") and not clause.then_block[0].children:
-                    clause.then_block = None
-        else:
-            elseif_clauses = []
-        else_clause = if_clause[-1].children[0].children if len(
-            if_clause) > 1 else None
-        if else_clause and len(else_clause) == 1 and hasattr(else_clause[0], "children") and not else_clause[0].children:
-            else_clause = None
-        return _IfStatement(condition, then_block, elseif_clauses, else_clause)
+    def if_statement(self, args):
+        if_clause = args[0]
+        extra_clauses = args[1:]
+        else_clause = None
+        if extra_clauses and isinstance(extra_clauses[-1], ElseClause):
+            else_clause = extra_clauses.pop()
+        return _IfStatement(if_clause, extra_clauses, else_clause)
+
+    def body(self, block):
+        if len(block) == 1 and isinstance(block[0], lark.tree.Tree) and block[0].children == []:
+            return _Body()
+        return _Body(*block)
 
     def function_call(self, call):
         name, args = call
@@ -618,6 +628,8 @@ class VMRunError(Exception):
     def __init__(self, vm, message):
         self.vm = vm
         self.message = message
+
+
 if __name__ == '__main__':
     print(parse("""
         if (1==1) player:tell("hello"); endif

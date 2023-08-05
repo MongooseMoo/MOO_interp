@@ -3,8 +3,6 @@ start: code
 code:
 	| statement*
 
-
-
 ?statement:
 	| single_statement
 	| if_statement
@@ -18,17 +16,15 @@ single_statement: (return_statement | expression | fork_statement | break_statem
 
 ?condition: expression
 
-then_block: statement*
-
-if_clause: "if" "(" condition ")" then_block
-elseif_clause: "elseif" "(" condition ")" then_block
-else_clause: "else" then_block
+if_clause: "if" "(" condition ")" body
+elseif_clause: "elseif" "(" condition ")" body
+else_clause: "else" body
 
 if_statement: if_clause elseif_clause* else_clause? "endif"
 
 for_clause: "for" IDENTIFIER ("," IDENTIFIER)? IN "(" expression ")" | "for" IDENTIFIER ("," IDENTIFIER)? IN "[" (expression ".." (expression | "$")) "]"
 
-for_statement: for_clause statement* "endfor"
+for_statement: for_clause body "endfor"
 
 ?while_clause: "while" IDENTIFIER? "(" condition ")"
 
