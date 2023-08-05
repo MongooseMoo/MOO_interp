@@ -566,6 +566,12 @@ class VM:
         if (is_truthy(condition)):
             self.call_stack[-1].ip += jump_to
 
+    @operator(Opcode.OP_IF_QUES) #ternary operator
+    def exec_if_ques(self, jump_to: int):
+        condition = self.pop()
+        if (is_truthy(condition)):
+            self.call_stack[-1].ip += jump_to
+
     @operator(Opcode.OP_WHILE)
     def exec_while(self, jump_to: int):
         condition = self.pop()
