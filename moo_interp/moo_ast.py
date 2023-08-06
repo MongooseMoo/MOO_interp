@@ -1,6 +1,7 @@
 import sys
 from dataclasses import dataclass, field
 from typing import List, Optional, Union
+
 import lark
 from lark import Lark, Transformer, ast_utils, v_args
 from lark.tree import Meta
@@ -353,7 +354,7 @@ class _IfStatement(_Statement):
         for index, instruction in enumerate(full_bc):
             if instruction.opcode == Opcode.OP_JUMP:
                 instruction.operand = len(full_bc) - index
-        return full_bc 
+        return full_bc
 
     def to_moo(self) -> str:
         nl = "\n"
@@ -364,6 +365,38 @@ class _IfStatement(_Statement):
             result += f"\n{self.else_clause.to_moo()}"
         result += "\nendif"
         return result
+
+
+@dataclass
+class _ForClause(_Ast):
+    id: Identifier
+    index: Optional[Identifier]
+    iterable: _Expression
+
+    def to_moo(self) -> str:
+        index = ""
+        if self.index is not None:
+            index = f", {self.index.to_moo()}"
+        return f"for {self.id.to_moo()}{index} in ({self.iterable.to_moo()})"
+
+
+@dataclass
+class ContinueStatement(_Statement):
+    id: Optional[Identifier] = None
+
+    def to_moo(self) -> str:
+        if self.id is not None:
+            return f"continue {self.id.to_moo()}"
+        return "continue"
+
+
+@dataclass
+class ForStatement(_Statement):
+    condition: _ForClause
+    body: _Body
+
+    def to_moo(self) -> str:
+        return f"{self.condition.to_moo()}\n{self.body.to_moo()}\nendfor"
 
 
 @dataclass
@@ -554,6 +587,14 @@ class ToAst(Transformer):
         if len(block) == 1 and isinstance(block[0], lark.tree.Tree) and block[0].children == []:
             return _Body()
         return _Body(*block)
+
+    def for_clause(self, args):
+        if len(args) == 4:
+            [identifier, index, token, lst] = args
+            return _ForClause(identifier, index, lst)
+        else:
+            [identifier, token, lst] = args
+            return _ForClause(identifier, None, lst)
 
     def function_call(self, call):
         name, args = call

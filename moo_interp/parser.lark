@@ -11,8 +11,8 @@ code:
 	| fork_statement
 	| try_except_statement
 	| try_finally_statement
-	
-single_statement: (return_statement | expression | fork_statement | break_statement | continue_statement) _SEMI
+
+single_statement: (return_statement | fork_statement | break_statement | continue_statement| expression ) _SEMI
 
 ?condition: expression
 
@@ -22,7 +22,7 @@ else_clause: "else" body
 
 if_statement: if_clause elseif_clause* else_clause? "endif"
 
-for_clause: "for" IDENTIFIER ("," IDENTIFIER)? IN "(" expression ")" | "for" IDENTIFIER ("," IDENTIFIER)? IN "[" (expression ".." (expression | "$")) "]"
+for_clause: "for" IDENTIFIER ("," IDENTIFIER)? IN "(" expression ")" | "for" IDENTIFIER ("," IDENTIFIER)? "in" "[" (expression ".." (expression | dollar)) "]"
 
 for_statement: for_clause body "endfor"
 
