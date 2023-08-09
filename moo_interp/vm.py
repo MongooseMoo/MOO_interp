@@ -53,8 +53,8 @@ class VMOutcome(Enum):
 @define
 class Instruction:
     """Represents a single bytecode instruction"""
-    opcode: Opcode
-    operand: Optional[int] = None
+    opcode: Union[Opcode, int]
+    operand: Optional[MOOAny] = None
     label: Optional[int] = None
 
 
@@ -273,7 +273,7 @@ class VM:
         Args:
             offset (int): The label or offset to jump to.
         """
-        self.call_frame.ip += offset  # adjust instruction pointer by offset
+        self.current_frame.ip += offset  # adjust instruction pointer by offset
 
     def read_bytes(self, num_bytes: int) -> int:
         """Reads the given number of bytes from the bytecode.
@@ -566,7 +566,7 @@ class VM:
         if (is_truthy(condition)):
             self.call_stack[-1].ip += jump_to
 
-    @operator(Opcode.OP_IF_QUES) #ternary operator
+    @operator(Opcode.OP_IF_QUES)  # ternary operator
     def exec_if_ques(self, jump_to: int):
         condition = self.pop()
         if (is_truthy(condition)):
