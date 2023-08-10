@@ -83,7 +83,7 @@ class _AstNode(ast_utils.Ast):
 
     def get_children(node: '_AstNode'):
         for field, value in node.__dict__.items():
-            if isinstance(value, list):
+            if isinstance(value, tuple) or isinstance(value, list):
                 for item in value:
                     if isinstance(item, _AstNode):
                         yield item
@@ -380,7 +380,6 @@ class _IfStatement(_Statement):
         return full_bc
 
     def to_moo(self) -> str:
-        nl = "\n"
         result = self.if_clause.to_moo()
         result += "\n".join([elseif.to_moo()
                              for elseif in self.elseif_clauses])
