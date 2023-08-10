@@ -50,12 +50,20 @@ unary_opcodes = {
     '!': Opcode.OP_NOT,
 }
 
+# utility functions
+
+def walk_ast(node: '_AstNode'):
+    if isinstance(node, _AstNode):
+        yield node
+        for child in node.get_children():
+            yield from walk_ast(child)
+
 #
 # Define AST
 #
 
 
-class _Ast(ast_utils.Ast):
+class _AstNode(ast_utils.Ast):
 
     def emit_byte(self, opcode: Union[Opcode, int], operand: Optional[MOOAny] = None):
         return Instruction(opcode=opcode, operand=operand)
@@ -68,14 +76,23 @@ class _Ast(ast_utils.Ast):
         raise NotImplementedError(
             f"to_bytecode not implemented for {self.__class__.__name__}")
 
+    @abstractmethod
     def to_moo(self) -> str:
         raise NotImplementedError(
             f"to_moo not implemented for {self.__class__.__name__}")
 
+    def get_children(node: '_AstNode'):
+        for field, value in node.__dict__.items():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, _AstNode):
+                        yield item
+            elif isinstance(value, _AstNode):
+                yield value
 
 @dataclass
-class VerbCode(_Ast):
-    children: List[_Ast]
+class VerbCode(_AstNode):
+    children: List[_AstNode]
 
     def to_bytecode(self, state: CompilerState, program: Program):
         result = []
@@ -87,11 +104,11 @@ class VerbCode(_Ast):
         return "\n".join([node.to_moo() for node in self.children])
 
 
-class _Expression(_Ast):
+class _Expression(_AstNode):
     pass
 
 
-class _Statement(_Ast):
+class _Statement(_AstNode):
 
     def to_bytecode(self, state: CompilerState, program: Program):
         raise NotImplementedError(
@@ -99,7 +116,7 @@ class _Statement(_Ast):
 
 
 @dataclass
-class SingleStatement(_Ast):
+class SingleStatement(_AstNode):
     statement: _Statement
 
     def to_bytecode(self, state: CompilerState, program: Program):
@@ -110,7 +127,7 @@ class SingleStatement(_Ast):
 
 
 @dataclass(init=False)
-class _Body(_Ast):
+class _Body(_AstNode):
     statements: Tuple[_Statement]
 
     def __init__(self, *statements: _Statement):
@@ -149,7 +166,7 @@ class Splicer(_Expression):
 
 
 @dataclass
-class _Literal(_Ast):
+class _Literal(_AstNode):
     value: Any
 
     def to_bytecode(self, state: CompilerState, program: Program):
@@ -285,7 +302,7 @@ class _Assign(_Statement):
 
 
 @dataclass
-class ElseifClause(_Ast):
+class ElseifClause(_AstNode):
     condition: _Expression
     then_block:         _Body
 
@@ -302,7 +319,7 @@ class ElseifClause(_Ast):
 
 
 @dataclass
-class IfClause(_Ast):
+class IfClause(_AstNode):
     condition: _Expression
     then_block: _Body
 
@@ -319,7 +336,7 @@ class IfClause(_Ast):
 
 
 @dataclass
-class ElseClause(_Ast):
+class ElseClause(_AstNode):
     then_block: _Body
 
     def to_bytecode(self, state: CompilerState, program: Program):
@@ -374,7 +391,7 @@ class _IfStatement(_Statement):
 
 
 @dataclass
-class _ForClause(_Ast):
+class _ForClause(_AstNode):
     id: Identifier
     index: Optional[Identifier]
     iterable: _Expression
@@ -464,7 +481,7 @@ class _Property(_Expression):
 
 
 @dataclass
-class DollarProperty(_Ast):
+class DollarProperty(_AstNode):
     name: StringLiteral
 
     def to_bytecode(self, state: CompilerState, program: Program):
@@ -479,7 +496,7 @@ class DollarProperty(_Ast):
 
 
 @dataclass
-class DollarVerbCall(_Ast):
+class DollarVerbCall(_AstNode):
     name: StringLiteral
     arguments: List[_Expression]
 
