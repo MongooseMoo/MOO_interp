@@ -103,6 +103,10 @@ class VerbCode(_AstNode):
     def to_moo(self) -> str:
         return "\n".join([node.to_moo() for node in self.children])
 
+    def rename_property(self, old_name: str, new_name: str):
+        for node in walk_ast(self):
+            if isinstance(node, _Property) and hasattr(node.name, 'value') and  node.name.value == old_name:
+                node.name.value = new_name
 
 class _Expression(_AstNode):
     pass
@@ -444,7 +448,7 @@ class ForStatement(_Statement):
         return result
 
     def to_moo(self) -> str:
-        return f"{self.condition.to_moo()}\n{self.body.to_moo()}\nendfor"
+        return f"{self.condition.to_moo()}\n{self.body.to_moo()}\nendfor\n"
 
 
 @dataclass
@@ -585,7 +589,11 @@ class WhileStatement(_Statement):
         )
 
     def to_moo(self) -> str:
-        return f"while ({self.condition.to_moo()}) {self.body.to_moo()} endwhile"
+        res = f"while ({self.condition.to_moo()})\n"
+        res += self.body.to_moo()
+        res += "\nendwhile\n"
+        return res
+    
 
 
 class ToAst(Transformer):
