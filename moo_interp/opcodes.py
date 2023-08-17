@@ -70,11 +70,11 @@ class Opcode(Enum):
     OP_UNARY_MINUS = 33  # unary ops -- 1 tick:
     OP_NOT = 34
     OP_PUT = 35  # assignments, 1 tick:
-    OP_G_PUT = OP_PUT + NUM_READY_VARS  # variable references, no tick:
+    OP_G_PUT = OP_PUT + NUM_READY_VARS  # variable references, no tick #type: ignore
     OP_PUSH = 36
-    OP_G_PUSH = OP_PUSH + NUM_READY_VARS
+    OP_G_PUSH = OP_PUSH + NUM_READY_VARS  # type: ignore
     OP_PUSH_CLEAR = 37  # final variable references, no tick:
-    OP_G_PUSH_CLEAR = OP_PUSH_CLEAR + NUM_READY_VARS
+    OP_G_PUSH_CLEAR = OP_PUSH_CLEAR + NUM_READY_VARS  # type: ignore
     OP_IMM = 38  # expr-related opcodes with no tick:
     OP_MAKE_EMPTY_LIST = 39
     OP_LIST_ADD_TAIL = 40
@@ -92,6 +92,10 @@ class Opcode(Enum):
     OP_MAP_INSERT = 52
     OPTIM_NUM_START = 53
     Last_Opcode = 255
-
+    # storage optimized imm-numbers can occupy 113-255, for 143 of them
 # OPTIM_NUM_LOW = -10
 # OPTIM_NUM_HI = Opcode.Last_Opcode - Opcode.OPTIM_NUM_START + OPTIM_NUM_LOW
+
+
+def is_push_n(
+    op): return op >= Opcode.OP_PUSH.value and op.value <= Opcode.OP_PUSH.value + NUM_READY_VARS

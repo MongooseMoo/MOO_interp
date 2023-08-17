@@ -454,7 +454,7 @@ class ForStatement(_Statement):
 @dataclass
 class _FunctionCall(_Expression):
     name: str
-    arguments: List[_Expression]
+    arguments: _List
 
     def to_bytecode(self, state: CompilerState, program: Program):
         result = self.arguments.to_bytecode(state, program)
@@ -464,7 +464,7 @@ class _FunctionCall(_Expression):
         return result
 
     def to_moo(self) -> str:
-        arguments = ", ".join([arg.to_moo() for arg in self.arguments.value])
+        arguments = self.arguments.to_moo()[1:-1]
         return f"{self.name}({arguments})"
 
 
@@ -498,6 +498,13 @@ class DollarProperty(_AstNode):
         return f"${self.name.to_moo()}"
 
 
+@dataclass
+class CallArguments(_AstNode):
+    arguments: List[_Expression]
+
+    def to_moo(self) -> str:
+        return ", ".join([arg.to_moo() for arg in self.arguments]) 
+        
 @dataclass
 class DollarVerbCall(_AstNode):
     name: StringLiteral

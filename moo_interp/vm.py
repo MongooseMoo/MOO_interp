@@ -54,7 +54,7 @@ class VMOutcome(Enum):
 class Instruction:
     """Represents a single bytecode instruction"""
     opcode: Union[Opcode, int]
-    operand: Optional[MOOAny] = None
+    operand: Optional[MOOAny | Extended_Opcode] = None
     label: Optional[int] = None
 
 
@@ -63,7 +63,7 @@ class Program:
     first_lineno: int = field(default=1)
     literals: List[Any] = field(factory=list)
     fork_vectors: List[int] = field(factory=list)
-    var_names: List[str] = field(factory=list)
+    var_names: List[MOOString] = field(factory=list)
 
 
 @define
@@ -83,6 +83,10 @@ class StackFrame:
     debug: bool = field(default=False)
     threaded: bool = field(default=False)
 
+    @property
+    def current_instruction(self) -> Instruction:
+        """The current instruction"""       
+        return self.stack[self.ip]
 
 def operator(opcode):
     """Operator decorator.
@@ -148,7 +152,7 @@ class VM:
         super().__init__()
         self.stack = []
         self.call_stack = []
-        self.result = None
+        self.result = 0
         self.state = None
         self.opcode_handlers = {}
         self.bi_funcs = bi_funcs if bi_funcs else BuiltinFunctions()
@@ -226,7 +230,7 @@ class VM:
             self.state = VMOutcome.OUTCOME_DONE
             return
         result = None
-        instr = frame.stack[frame.ip]
+        instr = frame.current_instruction
         handler = self.opcode_handlers.get(instr.opcode)
         if not handler:
             # Handle extended opcode
@@ -245,21 +249,21 @@ class VM:
             args = []
             if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP}:
                 args = [instr.operand]
-            elif handler.num_args:
+            elif handler is not None and handler.num_args:
                 args = self.stack[-handler.num_args:]
 
             logger.debug(f"Args: {args}")
 
             try:
-                if instr.opcode != Opcode.OP_POP:
+                if instr.opcode != Opcode.OP_POP and handler is not None:
                     result = handler(*args)
 
-                    # Opcode.OP_PUSH}:
                     if handler.num_args and instr.opcode not in {Opcode.OP_PUSH,  Opcode.OP_IMM, }:
                         del self.stack[-handler.num_args:]
             except Exception as e:
                 raise VMError(f"Error executing opcode: {e}")
-        self.stack.append(result)
+            if result is not None:
+                self.push(result)
         frame.ip += 1
         # pop the stack frame if we've reached the end of the stack
         if frame.ip >= len(frame.stack):
