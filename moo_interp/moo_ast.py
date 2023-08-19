@@ -52,6 +52,7 @@ unary_opcodes = {
 
 # utility functions
 
+
 def walk_ast(node: '_AstNode'):
     if isinstance(node, _AstNode):
         yield node
@@ -90,6 +91,7 @@ class _AstNode(ast_utils.Ast):
             elif isinstance(value, _AstNode):
                 yield value
 
+
 @dataclass
 class VerbCode(_AstNode):
     children: List[_AstNode]
@@ -105,8 +107,19 @@ class VerbCode(_AstNode):
 
     def rename_property(self, old_name: str, new_name: str):
         for node in walk_ast(self):
-            if isinstance(node, _Property) and hasattr(node.name, 'value') and  node.name.value == old_name:
+            if isinstance(node, _Property) and hasattr(node.name, 'value') and node.name.value == old_name:
                 node.name.value = new_name
+
+    def rename_variable(self, old_name: str, new_name: str):
+        for node in walk_ast(self):
+            if isinstance(node, Identifier) and node.value == old_name:
+                node.value = new_name
+
+    def rename_verb(self, old_name: str, new_name: str):
+        for node in walk_ast(self):
+            if isinstance(node, _VerbCall) and hasattr(node.name, 'value') and node.name.value == old_name:
+                node.name.value = new_name
+
 
 class _Expression(_AstNode):
     pass
@@ -403,8 +416,16 @@ class _ForClause(_AstNode):
         iterable_bc = self.iterable.to_bytecode(state, program)
         result = iterable_bc + \
             [Instruction(opcode=Opcode.OP_IMM, operand=None)]
-        result = result + \
-            [self.emit_extended_byte(Extended_Opcode.EOP_FOR_LIST_2)]
+        opcode = Extended_Opcode.EOP_FOR_LIST_1
+        var = MOOString(self.id.value)
+        index = None
+        if self.index is not None:
+            opcode = Extended_Opcode.EOP_FOR_LIST_2
+            index = MOOString(self.index.value)
+        instruction = Instruction(opcode=Opcode.OP_EXTENDED, operand=opcode)
+        instruction.loop_index = index
+        instruction.loop_var = var
+        result += [instruction]
         return result
 
     def to_moo(self) -> str:
@@ -500,11 +521,14 @@ class DollarProperty(_AstNode):
 
 @dataclass
 class CallArguments(_AstNode):
-    arguments: List[_Expression]
+    arguments: Optional[List[_Expression]] = None
 
     def to_moo(self) -> str:
-        return ", ".join([arg.to_moo() for arg in self.arguments]) 
-        
+        if self.arguments is None:
+            return ""
+        return ", ".join([arg.to_moo() for arg in self.arguments])
+
+
 @dataclass
 class DollarVerbCall(_AstNode):
     name: StringLiteral
@@ -600,7 +624,6 @@ class WhileStatement(_Statement):
         res += self.body.to_moo()
         res += "\nendwhile\n"
         return res
-    
 
 
 class ToAst(Transformer):
@@ -660,7 +683,7 @@ class ToAst(Transformer):
 
     def function_call(self, call):
         name, args = call
-        return _FunctionCall(name.value, _List(args.children))
+        return _FunctionCall(name.value, args)
 
     def property(self, access):
         object, name = access

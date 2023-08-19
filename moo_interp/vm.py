@@ -56,7 +56,9 @@ class Instruction:
     opcode: Union[Opcode, int]
     operand: Optional[MOOAny | Extended_Opcode] = None
     label: Optional[int] = None
-
+    loop_var: Optional[MOOString] = None # i
+    loop_index: Optional[MOOString] = None # j
+    jump_target: Optional[int] = None
 
 @define
 class Program:
@@ -75,7 +77,7 @@ class StackFrame:
     stack: List[Any] = field(factory=list)
     rt_env: List[Any] = field(factory=list)
     bf_ip: int = field(default=0)
-    temp: int = field(default=0)
+    temp: Optional[int] = field(default=0)
     this: int = field(default=0)
     player: int = field(default=0)
     verb: str = field(default="")
@@ -358,12 +360,12 @@ class VM:
     def exec_put_temp(self) -> None:
         self.current_frame.temp = self.peek()
 
-    def put(self, identifier: MOOString, value: MOOAny) -> None:
+    def put(self, identifier: MOOString, value: MOOAny) -> MOOAny:
         """Puts a value into the current stack frame's scope.
 
         Args:
             identifier (str): The identifier to store the value under.
-            value (Any): The value to store.
+            value (MOOAny): The value to store.
         """
         frame = self.current_frame
         try:
