@@ -259,6 +259,18 @@ class BuiltinFunctions:
         # For now, return empty list (correct for top-level server calls)
         return MOOList([])
 
+    def caller_perms(self):
+        """Return the object whose permissions apply to the current verb call.
+
+        For top-level server calls from #0, returns #0 (which is typically wizard).
+        Returns:
+            Object ID whose permissions are in effect
+        """
+        # For top-level server calls, the permissions come from the object
+        # the verb is defined on. Since do_login_command is on #0, return #0.
+        # TODO: Track actual caller permissions through the call stack
+        return 0  # #0 is typically wizard
+
     def sin(self, value):
         return math.sin(self.tofloat(value))
 
