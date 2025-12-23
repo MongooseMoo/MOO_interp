@@ -246,6 +246,19 @@ class BuiltinFunctions:
             return MOOString(time.ctime())
         return MOOString(time.ctime(self.tofloat(value)))
 
+    def callers(self, include_line_numbers: int = 0):
+        """Return the call stack as a list of {player, this, verb, programmer, line}.
+
+        For top-level server calls, returns an empty list.
+        Args:
+            include_line_numbers: If true, include line numbers (not implemented yet)
+        Returns:
+            MOOList of call stack entries
+        """
+        # TODO: Implement full call stack tracking
+        # For now, return empty list (correct for top-level server calls)
+        return MOOList([])
+
     def sin(self, value):
         return math.sin(self.tofloat(value))
 

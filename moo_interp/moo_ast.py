@@ -341,6 +341,15 @@ class _Assign(_Statement):
             return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value))]
         elif isinstance(self.target, _Property):
             return value_bc + self.target.object.to_bytecode(state, program) + self.target.name.to_bytecode(state, program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
+        elif isinstance(self.target, _Index):
+            # Indexed assignment: obj[index] = value
+            # Stack: push obj, push index, push value, then INDEXSET
+            obj_bc = self.target.object.to_bytecode(state, program)
+            index_bc = self.target.index.to_bytecode(state, program)
+            return obj_bc + index_bc + value_bc + [Instruction(opcode=Opcode.OP_INDEXSET)]
+        else:
+            # Unknown target type - return empty (will cause error)
+            return []
 
     def to_moo(self) -> str:
         return f"{self.target.to_moo()} = {self.value.to_moo()}"
@@ -976,7 +985,17 @@ class ToAst(Transformer):
         # except_clause: "except" [IDENTIFIER] "(" exception_codes ")"
         children = tree.children
         except_clause_tree = children[0]
-        body_stmts = children[1:]
+        body_stmts_raw = children[1:]
+
+        # Transform body statements - they may still be Tree objects
+        body_stmts = []
+        for stmt in body_stmts_raw:
+            if isinstance(stmt, lark.tree.Tree):
+                # Transform the tree to get the AST node
+                transformed = transformer.transform(stmt)
+                body_stmts.append(transformed)
+            else:
+                body_stmts.append(stmt)
 
         # Parse except_clause
         var = None
