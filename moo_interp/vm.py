@@ -84,6 +84,7 @@ class StackFrame:
     verb_name: str = field(default="")
     debug: bool = field(default=False)
     threaded: bool = field(default=False)
+    loop_stack: List[Any] = field(factory=list)  # Stack for loop state tracking
 
     @property
     def current_instruction(self) -> Instruction:
