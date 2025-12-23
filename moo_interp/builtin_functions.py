@@ -1,11 +1,15 @@
 import base64
+import crypt
 from functools import reduce
 import hashlib
+import hmac
 import json
 import math
 import os
 import random
 import re
+import sys
+import urllib.parse
 from logging import getLogger
 from typing import Union
 
@@ -313,9 +317,11 @@ class BuiltinFunctions:
         """Split string by separator."""
         return MOOList(string.split(separator))
 
-    def bf_reverse(self, list: MOOList) -> MOOList:
-        """Reverse list."""
-        return MOOList(list[::-1])
+    def reverse(self, lst: MOOList) -> MOOList:
+        """Reverse a list or string."""
+        if isinstance(lst, (str, MOOString)):
+            return MOOString(str(lst)[::-1])
+        return MOOList(list(lst)[::-1])
 
     def equal(self, x, y):
         return x == y
@@ -525,3 +531,430 @@ class BuiltinFunctions:
 
     def frandom(self) -> float:
         return random.random()
+
+    # =========================================================================
+    # NEW BUILTINS - Math functions
+    # =========================================================================
+
+    _round = round
+
+    def round(self, x):
+        """Round to nearest integer."""
+        return float(self._round(self.tofloat(x)))
+
+    def cbrt(self, x):
+        """Cube root."""
+        val = self.tofloat(x)
+        return math.copysign(abs(val) ** (1/3), val)
+
+    def log(self, x):
+        """Natural logarithm."""
+        return math.log(self.tofloat(x))
+
+    def sinh(self, x):
+        """Hyperbolic sine."""
+        return math.sinh(self.tofloat(x))
+
+    def tanh(self, x):
+        """Hyperbolic tangent."""
+        return math.tanh(self.tofloat(x))
+
+    def asinh(self, x):
+        """Inverse hyperbolic sine."""
+        return math.asinh(self.tofloat(x))
+
+    def acosh(self, x):
+        """Inverse hyperbolic cosine."""
+        return math.acosh(self.tofloat(x))
+
+    def atanh(self, x):
+        """Inverse hyperbolic tangent."""
+        return math.atanh(self.tofloat(x))
+
+    def random_bytes(self, n: int) -> MOOString:
+        """Generate n cryptographically secure random bytes as hex string."""
+        return MOOString(os.urandom(n).hex())
+
+    def reseed_random(self):
+        """Reseed the random number generator."""
+        random.seed()
+        return 0
+
+    def relative_heading(self, p1: MOOList, p2: MOOList) -> float:
+        """Calculate heading from p1 to p2 in degrees (0-360, north=0)."""
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        angle = math.degrees(math.atan2(dy, dx))
+        return (90 - angle) % 360
+
+    # =========================================================================
+    # Type/Utility functions
+    # =========================================================================
+
+    # MOO type codes (toaststunt compatible)
+    TYPE_INT = 0
+    TYPE_OBJ = 1
+    TYPE_STR = 2
+    TYPE_ERR = 3
+    TYPE_LIST = 4
+    TYPE_FLOAT = 9
+    TYPE_MAP = 10
+    TYPE_BOOL = 14
+
+    def typeof(self, x) -> int:
+        """Return the MOO type code for a value."""
+        if isinstance(x, bool):
+            return self.TYPE_BOOL
+        elif isinstance(x, int):
+            return self.TYPE_INT
+        elif isinstance(x, float):
+            return self.TYPE_FLOAT
+        elif isinstance(x, (str, MOOString)):
+            return self.TYPE_STR
+        elif isinstance(x, (list, MOOList)):
+            return self.TYPE_LIST
+        elif isinstance(x, (dict, MOOMap)):
+            return self.TYPE_MAP
+        elif isinstance(x, MooObject):
+            return self.TYPE_OBJ
+        elif isinstance(x, MOOError):
+            return self.TYPE_ERR
+        else:
+            return self.TYPE_INT  # fallback
+
+    def toobj(self, x):
+        """Convert a value to an object reference."""
+        if isinstance(x, MooObject):
+            return x
+        elif isinstance(x, int):
+            return x  # Return int as object number for now
+        elif isinstance(x, (str, MOOString)):
+            s = str(x).strip()
+            if s.startswith('#'):
+                s = s[1:]
+            try:
+                return int(s)
+            except ValueError:
+                return -1
+        elif isinstance(x, float):
+            return int(x)
+        else:
+            return -1
+
+    def maphaskey(self, m: MOOMap, key, case_matters: int = 1) -> int:
+        """Check if a map contains a key. Returns 1 if found, 0 otherwise."""
+        if case_matters or not isinstance(key, (str, MOOString)):
+            return 1 if key in m else 0
+        # Case-insensitive string key search
+        key_lower = str(key).lower()
+        return 1 if any(str(k).lower() == key_lower for k in m.keys()) else 0
+
+    def is_member(self, val, lst: MOOList, case_matters: int = 1) -> int:
+        """Return 1-based index of val in lst, or 0 if not found."""
+        if case_matters or not isinstance(val, (str, MOOString)):
+            try:
+                return lst._list.index(val) + 1  # MOO uses 1-based indexing
+            except (ValueError, AttributeError):
+                try:
+                    return list(lst).index(val) + 1
+                except ValueError:
+                    return 0
+        # Case-insensitive string search
+        val_lower = str(val).lower()
+        for i, item in enumerate(lst):
+            if isinstance(item, (str, MOOString)) and str(item).lower() == val_lower:
+                return i + 1
+        return 0
+
+    def value_bytes(self, x) -> int:
+        """Return approximate memory size of a value in bytes."""
+        return sys.getsizeof(x)
+
+    # =========================================================================
+    # List/Set functions
+    # =========================================================================
+
+    def setadd(self, lst: MOOList, val) -> MOOList:
+        """Add val to lst if not already present. Returns new list."""
+        result = MOOList(list(lst))
+        if val not in result:
+            result.append(val)
+        return result
+
+    def setremove(self, lst: MOOList, val) -> MOOList:
+        """Remove first occurrence of val from lst. Returns new list."""
+        result = list(lst)
+        try:
+            result.remove(val)
+        except ValueError:
+            pass  # Not found, return unchanged
+        return MOOList(result)
+
+    _slice = slice  # Save builtin
+
+    def slice(self, lst: MOOList, index: int, length: int = None) -> MOOList:
+        """Extract a sublist starting at index (1-based) with optional length."""
+        start = index - 1 if index > 0 else index
+        if length is None:
+            return MOOList(list(lst)[start:])
+        return MOOList(list(lst)[start:start + length])
+
+    # =========================================================================
+    # Crypto/HMAC functions
+    # =========================================================================
+
+    def _get_hash_algo(self, algo: str):
+        """Get hashlib algorithm by name."""
+        algo = str(algo).upper()
+        algos = {'MD5': 'md5', 'SHA1': 'sha1', 'SHA256': 'sha256',
+                 'SHA512': 'sha512', 'SHA224': 'sha224', 'SHA384': 'sha384'}
+        return algos.get(algo, 'sha256')
+
+    def binary_hash(self, data, algo: str = 'SHA256', binary: int = 0) -> MOOString:
+        """Hash binary/string data. Returns hex unless binary=1."""
+        h = hashlib.new(self._get_hash_algo(algo))
+        h.update(str(data).encode('latin-1'))
+        return MOOString(h.digest() if binary else h.hexdigest())
+
+    def value_hash(self, val, algo: str = 'SHA256', binary: int = 0) -> MOOString:
+        """Hash any MOO value by converting to literal first."""
+        literal = str(self.toliteral(val))
+        h = hashlib.new(self._get_hash_algo(algo))
+        h.update(literal.encode('utf-8'))
+        return MOOString(h.digest() if binary else h.hexdigest())
+
+    def string_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
+        """Compute HMAC of string data."""
+        h = hmac.new(str(key).encode('utf-8'), str(data).encode('utf-8'),
+                     self._get_hash_algo(algo))
+        return MOOString(h.digest() if binary else h.hexdigest())
+
+    def binary_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
+        """Compute HMAC of binary data."""
+        h = hmac.new(str(key).encode('latin-1'), str(data).encode('latin-1'),
+                     self._get_hash_algo(algo))
+        return MOOString(h.digest() if binary else h.hexdigest())
+
+    def value_hmac(self, val, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
+        """Compute HMAC of any MOO value."""
+        literal = str(self.toliteral(val))
+        h = hmac.new(str(key).encode('utf-8'), literal.encode('utf-8'),
+                     self._get_hash_algo(algo))
+        return MOOString(h.digest() if binary else h.hexdigest())
+
+    # =========================================================================
+    # Regex functions
+    # =========================================================================
+
+    def match(self, subject: MOOString, pattern: MOOString, case_matters: int = 0) -> MOOList:
+        """
+        Match pattern against subject. Returns {start, end, replacements, subject}
+        where start/end are 1-based indices, or empty list if no match.
+        """
+        flags = 0 if case_matters else re.IGNORECASE
+        try:
+            m = re.search(str(pattern), str(subject), flags)
+            if not m:
+                return MOOList([])
+            # Build replacements list from groups
+            replacements = MOOList([
+                MOOList([m.start(i) + 1, m.end(i)])
+                for i in range(1, m.lastindex + 1)
+            ] if m.lastindex else [])
+            return MOOList([m.start() + 1, m.end(), replacements, MOOString(subject)])
+        except re.error:
+            return MOOList([])
+
+    def rmatch(self, subject: MOOString, pattern: MOOString, case_matters: int = 0) -> MOOList:
+        """Match pattern from end of subject."""
+        flags = 0 if case_matters else re.IGNORECASE
+        try:
+            matches = list(re.finditer(str(pattern), str(subject), flags))
+            if not matches:
+                return MOOList([])
+            m = matches[-1]
+            replacements = MOOList([
+                MOOList([m.start(i) + 1, m.end(i)])
+                for i in range(1, m.lastindex + 1)
+            ] if m.lastindex else [])
+            return MOOList([m.start() + 1, m.end(), replacements, MOOString(subject)])
+        except re.error:
+            return MOOList([])
+
+    def substitute(self, template: MOOString, subs: MOOList) -> MOOString:
+        """
+        Apply substitutions from a match result.
+        %1-%9 replaced with captured groups, %% is literal %.
+        """
+        result = str(template)
+        if len(subs) >= 4:
+            subject = str(subs[3])
+            repls = subs[2] if len(subs) > 2 else MOOList([])
+            for i, repl in enumerate(repls):
+                if isinstance(repl, (list, MOOList)) and len(repl) >= 2:
+                    start, end = int(repl[0]) - 1, int(repl[1])
+                    if start >= 0:
+                        result = result.replace(f'%{i+1}', subject[start:end])
+        return MOOString(result.replace('%%', '%'))
+
+    def pcre_match(self, subject: MOOString, pattern: MOOString,
+                   options: int = 0, offset: int = 0) -> MOOList:
+        """PCRE-style regex match."""
+        flags = 0
+        if options & 1:
+            flags |= re.IGNORECASE
+        if options & 2:
+            flags |= re.MULTILINE
+        if options & 4:
+            flags |= re.DOTALL
+        try:
+            m = re.search(str(pattern), str(subject)[offset:], flags)
+            if not m:
+                return MOOList([])
+            groups = MOOList([MOOString(g or "") for g in m.groups()])
+            return MOOList([
+                MOOString(m.group(0)),
+                MOOList([m.start() + offset + 1, m.end() + offset]),
+                groups
+            ])
+        except re.error:
+            return MOOList([])
+
+    def pcre_replace(self, subject: MOOString, pattern: MOOString) -> MOOString:
+        """PCRE-style replace. Pattern: s/pattern/replacement/flags"""
+        s = str(pattern)
+        if not s.startswith('s/'):
+            return subject
+        parts = s[2:].split('/')
+        if len(parts) < 2:
+            return subject
+        pat, repl = parts[0], parts[1]
+        flags_str = parts[2] if len(parts) > 2 else ""
+        flags = re.IGNORECASE if 'i' in flags_str else 0
+        count = 0 if 'g' in flags_str else 1
+        try:
+            return MOOString(re.sub(pat, repl, str(subject), count=count, flags=flags))
+        except re.error:
+            return subject
+
+    # =========================================================================
+    # Enhanced sort
+    # =========================================================================
+
+    def _natural_key(self, s):
+        """Key function for natural sorting (handles numbers in strings)."""
+        return [int(c) if c.isdigit() else c.lower()
+                for c in re.split(r'(\d+)', str(s))]
+
+    def sort(self, lst: MOOList, keys: MOOList = None, natural: int = 0,
+             reverse: int = 0) -> MOOList:
+        """
+        Sort a list with optional key extraction, natural sort, and reverse.
+        keys: 1-based indices to use as sort keys for nested lists
+        natural: sort strings naturally ("a2" < "a10")
+        reverse: descending order
+        """
+        items = list(lst)
+
+        def get_key(item):
+            if keys:
+                if isinstance(item, (list, MOOList)):
+                    extracted = tuple(
+                        item[k - 1] if 0 < k <= len(item) else None
+                        for k in keys
+                    )
+                else:
+                    extracted = (item,)
+                if natural:
+                    return tuple(self._natural_key(v) for v in extracted)
+                return extracted
+            elif natural:
+                return self._natural_key(item)
+            return item
+
+        try:
+            sorted_items = sorted(items, key=get_key, reverse=bool(reverse))
+        except TypeError:
+            sorted_items = sorted(items, key=lambda x: str(x), reverse=bool(reverse))
+
+        return MOOList(sorted_items)
+
+    # =========================================================================
+    # Binary encode/decode
+    # =========================================================================
+
+    def encode_binary(self, *args) -> MOOString:
+        """
+        Encode values to a binary string.
+        Each arg is either an int (0-255 byte) or a string (embedded directly).
+        """
+        result = bytearray()
+        for arg in args:
+            if isinstance(arg, int):
+                result.append(arg & 0xFF)
+            elif isinstance(arg, (str, MOOString)):
+                result.extend(str(arg).encode('latin-1'))
+            elif isinstance(arg, (list, MOOList)):
+                for item in arg:
+                    if isinstance(item, int):
+                        result.append(item & 0xFF)
+                    else:
+                        result.extend(str(item).encode('latin-1'))
+        return MOOString(result.decode('latin-1'))
+
+    def decode_binary(self, data, fully: int = 0) -> MOOList:
+        """
+        Decode a binary string to a list of byte values.
+        If fully=1, returns list of integers. Otherwise returns mixed.
+        """
+        binary = str(data).encode('latin-1')
+        if fully:
+            return MOOList([b for b in binary])
+        result = []
+        for b in binary:
+            if 32 <= b < 127:
+                result.append(MOOString(chr(b)))
+            else:
+                result.append(b)
+        return MOOList(result)
+
+    # =========================================================================
+    # URL encoding
+    # =========================================================================
+
+    def url_encode(self, s: MOOString) -> MOOString:
+        """URL-encode a string."""
+        return MOOString(urllib.parse.quote(str(s), safe=''))
+
+    def url_decode(self, s: MOOString) -> MOOString:
+        """URL-decode a string."""
+        return MOOString(urllib.parse.unquote(str(s)))
+
+    # =========================================================================
+    # Password hashing (crypt)
+    # =========================================================================
+
+    def salt(self, method: MOOString = "SHA512", prefix: MOOString = "") -> MOOString:
+        """
+        Generate a salt for use with crypt().
+        Methods: DES, MD5, SHA256, SHA512, BLOWFISH
+        """
+        method = str(method).upper()
+        methods = {
+            'DES': crypt.METHOD_CRYPT if hasattr(crypt, 'METHOD_CRYPT') else None,
+            'MD5': crypt.METHOD_MD5 if hasattr(crypt, 'METHOD_MD5') else None,
+            'SHA256': crypt.METHOD_SHA256 if hasattr(crypt, 'METHOD_SHA256') else None,
+            'SHA512': crypt.METHOD_SHA512 if hasattr(crypt, 'METHOD_SHA512') else None,
+            'BLOWFISH': crypt.METHOD_BLOWFISH if hasattr(crypt, 'METHOD_BLOWFISH') else None,
+        }
+        m = methods.get(method) or crypt.METHOD_SHA512
+        return MOOString(crypt.mksalt(m))
+
+    def crypt(self, password: MOOString, salt: MOOString = None) -> MOOString:
+        """
+        Hash a password using Unix crypt.
+        If salt is not provided, generates a SHA512 salt.
+        """
+        if salt is None:
+            salt = self.salt()
+        return MOOString(crypt.crypt(str(password), str(salt)))
