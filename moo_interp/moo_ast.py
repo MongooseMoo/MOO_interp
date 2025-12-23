@@ -755,29 +755,33 @@ class ToAst(Transformer):
         return _Body(*block)
 
     def for_clause(self, args):
-        # for-list: [identifier, expression] or [identifier, index, expression]
-        # for-range: [identifier, start, end] or [identifier, index, start, end]
-        # Note: The "in" token is NOT passed through by Lark
+        # for-list uses IN terminal (passed as Token), for-range uses "in" literal (NOT passed)
+        # for-list: [id, IN_token, expr] or [id, idx, IN_token, expr]
+        # for-range: [id, start, end] or [id, idx, start, end]
+        from lark import Token
         if len(args) == 4:
-            # for-range with index: for i, idx in [start..end]
-            [identifier, index, start, end] = args
-            return _ForRangeClause(identifier, start, end)
-        elif len(args) == 3:
-            # Could be for-list with index [id, idx, expr] OR for-range without index [id, start, end]
-            # For-range: args[1] and args[2] are both expressions (start, end)
-            # For-list with index: args[1] is Identifier, args[2] is expression
-            if isinstance(args[1], Identifier):
-                # for-list with index
-                [identifier, index, lst] = args
+            # Could be for-list with index OR for-range with index
+            if isinstance(args[2], Token):
+                # for-list with index: [id, idx, IN_token, expr]
+                [identifier, index, token, lst] = args
                 return _ForClause(identifier, index, lst)
             else:
-                # for-range without index
+                # for-range with index: [id, idx, start, end]
+                [identifier, index, start, end] = args
+                return _ForRangeClause(identifier, start, end)
+        elif len(args) == 3:
+            # Could be for-list without index OR for-range without index
+            if isinstance(args[1], Token):
+                # for-list without index: [id, IN_token, expr]
+                [identifier, token, lst] = args
+                return _ForClause(identifier, None, lst)
+            else:
+                # for-range without index: [id, start, end]
                 [identifier, start, end] = args
                 return _ForRangeClause(identifier, start, end)
         else:
-            # for-list without index: [identifier, expression]
-            [identifier, lst] = args
-            return _ForClause(identifier, None, lst)
+            # Shouldn't happen, but fallback
+            raise ValueError(f"Unexpected for_clause args: {args}")
 
     def function_call(self, call):
         name, args = call
