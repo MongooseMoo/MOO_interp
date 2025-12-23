@@ -261,11 +261,22 @@ class _List(_Expression):
             return [Instruction(opcode=Opcode.OP_MAKE_EMPTY_LIST)]
         result = []
         for index, element in enumerate(self.value):
+            is_splice = isinstance(element, Splicer)
             result += element.to_bytecode(state, program)
             if index == 0:
-                result += [Instruction(opcode=Opcode.OP_MAKE_SINGLETON_LIST)]
+                if is_splice:
+                    # Splice: the list is already on stack, use as-is
+                    pass
+                else:
+                    # Regular element: wrap in singleton list
+                    result += [Instruction(opcode=Opcode.OP_MAKE_SINGLETON_LIST)]
             else:
-                result += [Instruction(opcode=Opcode.OP_LIST_ADD_TAIL)]
+                if is_splice:
+                    # Splice: extend with the list (concatenate)
+                    result += [Instruction(opcode=Opcode.OP_LIST_APPEND)]
+                else:
+                    # Regular element: append single item
+                    result += [Instruction(opcode=Opcode.OP_LIST_ADD_TAIL)]
         return result
 
     def to_moo(self) -> str:
