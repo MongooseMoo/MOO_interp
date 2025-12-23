@@ -702,29 +702,31 @@ class VM:
 
     @operator(Opcode.OP_IF)
     def exec_if(self, jump_to: int):
+        """Jump if condition is FALSE (skip then-block)."""
         condition = self.pop()
-        if (is_truthy(condition)):
+        if not is_truthy(condition):
             self.call_stack[-1].ip += jump_to
 
     @operator(Opcode.OP_EIF)
     def exec_eif(self, jump_to: int):
+        """Jump if condition is FALSE (skip elif-block)."""
         condition = self.pop()
-        if (is_truthy(condition)):
+        if not is_truthy(condition):
             self.call_stack[-1].ip += jump_to
 
     @operator(Opcode.OP_IF_QUES)  # ternary operator
     def exec_if_ques(self, jump_to: int):
+        """Ternary operator - jump if condition is FALSE."""
         condition = self.pop()
-        if (is_truthy(condition)):
+        if not is_truthy(condition):
             self.call_stack[-1].ip += jump_to
 
     @operator(Opcode.OP_WHILE)
     def exec_while(self, jump_to: int):
+        """While loop - jump past body if condition is FALSE."""
         condition = self.pop()
-        if (is_truthy(condition)):
+        if not is_truthy(condition):
             self.call_stack[-1].ip += jump_to
-        else:
-            self.call_stack[-1].ip -= 1
 
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:
