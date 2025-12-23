@@ -61,6 +61,8 @@ class Instruction:
     jump_target: Optional[int] = None
     handler_offset: Optional[int] = None  # For try/except: offset to handler
     error_codes: Optional[list] = None  # For try/except: list of error codes to catch
+    error_vars: Optional[list] = None  # For try/except: variable names to bind error to
+    scatter_pattern: Optional[list] = None  # For EOP_SCATTER: list of (var_name, is_rest) tuples
 
 @define
 class Program:
@@ -332,6 +334,19 @@ class VM:
                     frame.ip = handler_ip  # Set directly, step() returns without incrementing
                     # Pop this handler and any handlers above it
                     frame.exception_stack = frame.exception_stack[:i]
+                    # Bind error to variable if specified
+                    error_vars = handler.get('error_vars', [])
+                    if error_vars:
+                        # Use the first error var (for now, one clause = one var)
+                        error_var = error_vars[0] if error_vars else None
+                        if error_var:
+                            # Add variable to var_names if not present
+                            var_name = MOOString(error_var)
+                            if var_name not in frame.prog.var_names:
+                                frame.prog.var_names.append(var_name)
+                                frame.rt_env.append(None)
+                            var_index = frame.prog.var_names.index(var_name)
+                            frame.rt_env[var_index] = error_type
                     return True
         return False
 
@@ -1000,15 +1015,43 @@ class VM:
         return ~value
 
     @operator(Extended_Opcode.EOP_SCATTER)
-    def exec_scatter(self):
+    def exec_scatter(self, source_list: MOOList) -> MOOList:
         """Scatter assignment: {a, b, ?c, @rest} = list.
 
-        This is complex - needs instruction operand for scatter spec.
-        For now, raise NotImplementedError.
+        Reads scatter_pattern from instruction to determine variable assignments.
+        Pattern format: list of (var_name, is_rest) tuples
         """
-        # Scatter requires parsing the operand to understand the variable assignments
-        # This is a complex operation that requires more context
-        raise NotImplementedError("EOP_SCATTER not yet implemented")
+        frame = self.current_frame
+        instr = frame.current_instruction
+        pattern = instr.scatter_pattern
+
+        if pattern is None:
+            # Fallback: scatter to all var_names in order
+            pattern = [(str(name), False) for name in frame.prog.var_names]
+
+        list_items = list(source_list._list) if hasattr(source_list, '_list') else list(source_list)
+        list_idx = 0
+
+        for var_name, is_rest in pattern:
+            var_name_moo = MOOString(var_name)
+            if var_name_moo not in frame.prog.var_names:
+                frame.prog.var_names.append(var_name_moo)
+                frame.rt_env.append(None)
+            var_index = frame.prog.var_names.index(var_name_moo)
+
+            if is_rest:
+                # Rest parameter gets remaining elements as a list
+                frame.rt_env[var_index] = MOOList(*list_items[list_idx:])
+                list_idx = len(list_items)
+            else:
+                # Regular parameter gets single element
+                if list_idx < len(list_items):
+                    frame.rt_env[var_index] = list_items[list_idx]
+                    list_idx += 1
+                else:
+                    frame.rt_env[var_index] = None  # Not enough elements
+
+        return source_list
 
     @operator(Opcode.OP_INDEXSET)
     def exec_indexset(self, container: MOOAny, index: MOOAny, value: MOOAny) -> MOOAny:
@@ -1111,13 +1154,15 @@ class VM:
         """Start of try block - push exception handler onto stack."""
         frame = self.current_frame
         instr = frame.current_instruction
-        # Store handler info: (handler_ip, error_codes, try_start_ip)
+        # Store handler info: (handler_ip, error_codes, try_start_ip, error_vars)
         handler_ip = frame.ip + instr.handler_offset
         error_codes = instr.error_codes or ['ANY']
+        error_vars = instr.error_vars or []
         frame.exception_stack.append({
             'type': 'except',
             'handler_ip': handler_ip,
             'error_codes': error_codes,
+            'error_vars': error_vars,
             'try_start_ip': frame.ip
         })
 

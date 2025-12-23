@@ -132,22 +132,20 @@ def test_eop_complement():
         assert vm.stack[-1] == ~5
 
 
-@pytest.mark.skip(reason="EOP_SCATTER requires complex scatter pattern parsing")
 def test_eop_scatter_simple():
     """{a, b, c} = {1, 2, 3} assigns correctly."""
-    # Note: This is a more complex operation that would need additional
-    # context about how scatter assignment works in the VM.
-    # For now, test the basic mechanism.
     with create_vm() as vm:
         test_list = MOOList(1, 2, 3)
         # Set up variables to scatter into
         prog = Program(var_names=[MOOString("a"), MOOString("b"), MOOString("c")])
 
+        # Create scatter instruction with pattern
+        scatter_instr = Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_SCATTER.value)
+        scatter_instr.scatter_pattern = [("a", False), ("b", False), ("c", False)]
+
         vm.call_stack.append(StackFrame(0, prog, ip=0, stack=[
             Instruction(opcode=Opcode.OP_IMM, operand=test_list),
-            # EOP_SCATTER needs information about the scatter pattern
-            # This will need to be defined based on how the opcode is designed
-            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_SCATTER.value),
+            scatter_instr,
         ]))
 
         # Initialize runtime environment
@@ -162,7 +160,6 @@ def test_eop_scatter_simple():
         assert vm.call_stack[-1].rt_env[2] == 3
 
 
-@pytest.mark.skip(reason="EOP_SCATTER requires complex scatter pattern parsing")
 def test_eop_scatter_with_rest():
     """{a, @rest} = {1, 2, 3, 4} captures remainder."""
     with create_vm() as vm:
@@ -170,11 +167,13 @@ def test_eop_scatter_with_rest():
         # Set up variables: a and rest
         prog = Program(var_names=[MOOString("a"), MOOString("rest")])
 
+        # Create scatter instruction with rest pattern
+        scatter_instr = Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_SCATTER.value)
+        scatter_instr.scatter_pattern = [("a", False), ("rest", True)]  # True = is_rest
+
         vm.call_stack.append(StackFrame(0, prog, ip=0, stack=[
             Instruction(opcode=Opcode.OP_IMM, operand=test_list),
-            # EOP_SCATTER needs scatter pattern info
-            # This will need to be defined based on how the opcode is designed
-            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_SCATTER.value),
+            scatter_instr,
         ]))
 
         # Initialize runtime environment

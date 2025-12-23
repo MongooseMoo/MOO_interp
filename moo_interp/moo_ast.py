@@ -761,6 +761,8 @@ class _TryExceptStatement(_Statement):
         try_except_instr = Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_TRY_EXCEPT.value)
         try_except_instr.handler_offset = handler_offset
         try_except_instr.error_codes = [code for clause in self.except_clauses for code in clause.codes]
+        # Store error variable names for binding (one per clause, None if no binding)
+        try_except_instr.error_vars = [clause.var for clause in self.except_clauses]
         result.append(try_except_instr)
         result.extend(try_bc)
 

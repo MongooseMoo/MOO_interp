@@ -83,7 +83,6 @@ def test_try_except_any():
     assert vm.result == 42, "except (ANY) should catch all errors"
 
 
-@pytest.mark.skip(reason="Error variable binding not yet implemented")
 def test_try_except_with_error_binding():
     """except e (E_DIV) binds the error to variable e."""
     program = """
