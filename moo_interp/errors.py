@@ -19,3 +19,11 @@ class MOOError(Enum):
     E_FLOAT = 'E_FLOAT'
     E_FILE = 'E_FILE'
     E_EXEC = 'E_EXEC'
+
+
+class MOOException(Exception):
+    """Exception raised for MOO runtime errors that can be caught by try/except."""
+    def __init__(self, error_code: MOOError, message: str = ''):
+        self.error_code = error_code
+        self.message = message or error_code.value
+        super().__init__(self.message)

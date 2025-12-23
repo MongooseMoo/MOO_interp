@@ -197,8 +197,8 @@ REAL_WORLD_PATTERNS = [
     # Property chains
     ("return this.location.name;", "property chain"),
 
-    # Error handling pattern
-    ('return `this.prop ! E_PROPNF => ""`;', "catch property not found"),
+    # Error handling pattern (catch expression ends with ' not `)
+    ("return `this.prop ! E_PROPNF => \"\"';", "catch property not found"),
 
     # List operations
     ("return {@this.contents, object};", "splice in list"),

@@ -901,6 +901,61 @@ class VM:
             frame.ip = jump_ip
         return None
 
+    @operator(Extended_Opcode.EOP_LENGTH)
+    def exec_length(self, value: MOOAny) -> int:
+        """Return length of list or string."""
+        if isinstance(value, MOOList):
+            return len(value)
+        elif isinstance(value, (str, MOOString)):
+            return len(value)
+        else:
+            raise VMError(f"E_TYPE: length() requires list or string, got {type(value)}")
+
+    @operator(Extended_Opcode.EOP_FIRST)
+    def exec_first(self, lst: MOOList) -> MOOAny:
+        """Return first element of list."""
+        if not isinstance(lst, MOOList):
+            raise VMError(f"E_TYPE: first() requires list, got {type(lst)}")
+        if len(lst) == 0:
+            raise VMError("E_RANGE: first() on empty list")
+        return lst[1]  # MOO is 1-indexed
+
+    @operator(Extended_Opcode.EOP_LAST)
+    def exec_last(self, lst: MOOList) -> MOOAny:
+        """Return last element of list."""
+        if not isinstance(lst, MOOList):
+            raise VMError(f"E_TYPE: last() requires list, got {type(lst)}")
+        if len(lst) == 0:
+            raise VMError("E_RANGE: last() on empty list")
+        return lst[len(lst)]  # MOO is 1-indexed
+
+    @operator(Extended_Opcode.EOP_RANGESET)
+    def exec_rangeset(self, lst: MOOList, start: int, end: int, value: MOOList) -> MOOList:
+        """Replace elements in range [start..end] with value list."""
+        if not isinstance(lst, MOOList):
+            raise VMError(f"E_TYPE: rangeset requires list, got {type(lst)}")
+        # Convert to 0-indexed for internal list operations
+        result = MOOList(*lst._list[:start-1], *value._list, *lst._list[end:])
+        return result
+
+    @operator(Extended_Opcode.EOP_COMPLEMENT)
+    def exec_complement(self, value: int) -> int:
+        """Bitwise complement (~value)."""
+        if not isinstance(value, int):
+            raise VMError(f"E_TYPE: complement requires integer, got {type(value)}")
+        return ~value
+
+    @operator(Extended_Opcode.EOP_SCATTER)
+    def exec_scatter(self):
+        """Scatter assignment: {a, b, ?c, @rest} = list.
+
+        This is complex - needs instruction operand for scatter spec.
+        For now, raise NotImplementedError.
+        """
+        # Scatter requires parsing the operand to understand the variable assignments
+        # This is a complex operation that requires more context
+        raise NotImplementedError("EOP_SCATTER not yet implemented")
+
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:
         func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand

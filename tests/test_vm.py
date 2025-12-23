@@ -46,8 +46,9 @@ def test_vm_math_operations(values, opcode):
         # Prepare instructions
         instruction_list = []
         for value in values:
+            # Use OP_IMM for pushing immediate values (OP_PUSH is for variable names)
             instruction_list.append(Instruction(
-                opcode=Opcode.OP_PUSH, operand=value))
+                opcode=Opcode.OP_IMM, operand=value))
         if isinstance(opcode, Extended_Opcode):
             # For extended opcodes, use Opcode.OP_EXTENDED and opcode value as operand
 
