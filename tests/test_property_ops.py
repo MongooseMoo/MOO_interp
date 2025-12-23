@@ -3,8 +3,6 @@
 import pytest
 from moo_interp.list import MOOList
 
-# Skip all tests in this module - opcodes not yet implemented
-pytestmark = pytest.mark.skip(reason="OP_PUSH_GET_PROP, OP_INDEXSET, OP_G_* opcodes not yet implemented")
 from moo_interp.map import MOOMap
 from moo_interp.opcodes import Opcode
 from moo_interp.string import MOOString

@@ -120,7 +120,8 @@ def operator(opcode):
             # Check for stack underflow
             # Skip check for opcodes that get args from instruction operand, not stack
             operand_from_instruction = {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_PUT, Opcode.OP_POP,
-                                        Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES}
+                                        Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES,
+                                        Opcode.OP_G_PUSH, Opcode.OP_G_PUT, Opcode.OP_G_PUSH_CLEAR}
             if isinstance(opcode, Opcode) and opcode not in operand_from_instruction:
                 if len(self.stack) < num_args:
                     raise VMError(
@@ -955,6 +956,62 @@ class VM:
         # Scatter requires parsing the operand to understand the variable assignments
         # This is a complex operation that requires more context
         raise NotImplementedError("EOP_SCATTER not yet implemented")
+
+    @operator(Opcode.OP_INDEXSET)
+    def exec_indexset(self, container: MOOAny, index: MOOAny, value: MOOAny) -> MOOAny:
+        """Set container[index] = value. Works for lists and maps."""
+        if isinstance(container, MOOList):
+            # MOO lists are 1-indexed
+            container[index] = value
+        elif isinstance(container, MOOMap):
+            container[index] = value
+        elif isinstance(container, MOOString):
+            container[index] = value
+        else:
+            raise VMError(f"E_TYPE: indexset requires list, map, or string, got {type(container)}")
+        return value
+
+    @operator(Opcode.OP_G_PUSH)
+    def exec_g_push(self) -> MOOAny:
+        """Push global variable value onto stack."""
+        frame = self.current_frame
+        var_name = frame.stack[frame.ip].operand
+        var_index = frame.prog.var_names.index(var_name)
+        return frame.rt_env[var_index]
+
+    @operator(Opcode.OP_G_PUT)
+    def exec_g_put(self, value: MOOAny) -> MOOAny:
+        """Store value in global variable."""
+        frame = self.current_frame
+        var_name = frame.stack[frame.ip].operand
+        var_index = frame.prog.var_names.index(var_name)
+        frame.rt_env[var_index] = value
+        return value
+
+    @operator(Opcode.OP_G_PUSH_CLEAR)
+    def exec_g_push_clear(self) -> MOOAny:
+        """Push global variable value and clear the variable."""
+        frame = self.current_frame
+        var_name = frame.stack[frame.ip].operand
+        var_index = frame.prog.var_names.index(var_name)
+        value = frame.rt_env[var_index]
+        # Remove the variable
+        del frame.rt_env[var_index]
+        frame.prog.var_names.remove(var_name)
+        return value
+
+    @operator(Opcode.OP_PUSH_GET_PROP)
+    def exec_push_get_prop(self, obj_id: int, prop_name: MOOString) -> MOOAny:
+        """Get property value from object."""
+        obj = self.db.objects.get(obj_id)
+        if obj is None:
+            raise VMError(f"E_INVIND: Invalid object #{obj_id}")
+        # Search properties list for matching property name
+        prop_name_str = str(prop_name)
+        for prop in obj.properties:
+            if prop.propertyName == prop_name_str:
+                return prop.value
+        raise VMError(f"E_PROPNF: Property {prop_name} not found on #{obj_id}")
 
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:
