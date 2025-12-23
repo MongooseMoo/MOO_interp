@@ -486,6 +486,10 @@ class ContinueStatement(_Statement):
             return f"continue {self.id.to_moo()}"
         return "continue"
 
+    def to_bytecode(self, state: CompilerState, program: Program):
+        """Continue to next iteration of current loop."""
+        return [Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_CONTINUE)]
+
 
 @dataclass
 class BreakStatement(_Statement):
@@ -495,6 +499,10 @@ class BreakStatement(_Statement):
         if self.id is not None:
             return f"break {self.id.to_moo()}"
         return "break"
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        """Break out of current loop."""
+        return [Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_EXIT)]
 
 
 @dataclass

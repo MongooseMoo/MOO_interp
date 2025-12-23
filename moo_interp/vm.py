@@ -118,7 +118,10 @@ def operator(opcode):
         @wraps(func)
         def wrapper(self, *args):
             # Check for stack underflow
-            if isinstance(opcode, Opcode) and opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM}:
+            # Skip check for opcodes that get args from instruction operand, not stack
+            operand_from_instruction = {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_PUT, Opcode.OP_POP,
+                                        Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES}
+            if isinstance(opcode, Opcode) and opcode not in operand_from_instruction:
                 if len(self.stack) < num_args:
                     raise VMError(
                         f"Stack underflow in opcode {opcode} in function {func.__name__}")
@@ -836,6 +839,66 @@ class VM:
                 return None
             self.put(loop_var, base_collection[iter_state])
             frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
+        return None
+
+    def _find_loop_end_jump(self, frame):
+        """Find the backward JUMP that ends the current loop.
+
+        Returns the IP of the JUMP instruction, or None if not found.
+        Uses nesting depth to handle nested loops correctly.
+        """
+        search_ip = frame.ip + 1
+        nesting_depth = 1  # We're inside this loop
+
+        while search_ip < len(frame.stack):
+            search_instr = frame.stack[search_ip]
+
+            # Nested loop start increases depth
+            if search_instr.opcode == Opcode.OP_FOR_RANGE:
+                nesting_depth += 1
+            elif search_instr.opcode == Opcode.OP_EXTENDED:
+                if search_instr.operand in (Extended_Opcode.EOP_FOR_LIST_1, Extended_Opcode.EOP_FOR_LIST_2):
+                    nesting_depth += 1
+            elif search_instr.opcode == Opcode.OP_WHILE:
+                nesting_depth += 1
+
+            # Backward JUMP decreases depth
+            if search_instr.opcode == Opcode.OP_JUMP and isinstance(search_instr.operand, int) and search_instr.operand < 0:
+                nesting_depth -= 1
+                if nesting_depth == 0:
+                    return search_ip
+
+            search_ip += 1
+        return None
+
+    @operator(Extended_Opcode.EOP_CONTINUE)
+    def exec_continue(self):
+        """Continue to next iteration of loop.
+
+        Jump to the loop's ending JUMP instruction, which will then
+        jump back to the loop header for the next iteration check.
+        """
+        frame = self.current_frame
+        jump_ip = self._find_loop_end_jump(frame)
+        if jump_ip is not None:
+            # Set IP to one before the JUMP so step() increments to it
+            frame.ip = jump_ip - 1
+        return None
+
+    @operator(Extended_Opcode.EOP_EXIT)
+    def exec_exit(self):
+        """Break out of loop (exit loop).
+
+        Pop loop state and jump past the loop's ending JUMP.
+        """
+        frame = self.current_frame
+        jump_ip = self._find_loop_end_jump(frame)
+        if jump_ip is not None:
+            # Pop loop_stack for FOR loops
+            if frame.loop_stack:
+                frame.loop_stack.pop()
+            # Set IP to the JUMP; step() will increment past it
+            frame.ip = jump_ip
         return None
 
     @operator(Opcode.OP_BI_FUNC_CALL)
