@@ -10,6 +10,7 @@ from attr import define, field
 from lambdamoo_db.database import MooDatabase
 
 from .builtin_functions import BuiltinFunctions
+from .errors import ERROR_CODES
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
@@ -386,11 +387,18 @@ class VM:
         """
         frame = self.current_frame
         # get the index of the variable in the variable names list
-        var_index = frame.prog.var_names.index(var_name)
-        # push the value at the same index in the runtime environment
-        result = frame.rt_env[var_index]
-        logger.debug(f"Pushing {result} onto the stack from {var_name}")
-        return result
+        try:
+            var_index = frame.prog.var_names.index(var_name)
+            # push the value at the same index in the runtime environment
+            result = frame.rt_env[var_index]
+            logger.debug(f"Pushing {result} onto the stack from {var_name}")
+            return result
+        except ValueError:
+            # Variable not in frame - check if it's a built-in error code
+            var_str = str(var_name)
+            if var_str in ERROR_CODES:
+                return ERROR_CODES[var_str]
+            raise
 
     @operator(Opcode.OP_PUSH_CLEAR)
     def exec_push_clear(self, var_name: MOOString):
