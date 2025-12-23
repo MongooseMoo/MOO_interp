@@ -500,11 +500,30 @@ class VM:
 
     @operator(Opcode.OP_IN)
     def exec_in(self, rhs: MOOAny, lhs: Container) -> int:
-        # either 0 if not in the list or the index if it is
-        index = rhs.find(lhs)
-        if index == -1:
+        """Check if lhs is in rhs. Returns 1-based index or 0 if not found.
+
+        For `x in list`: lhs=x, rhs=list - returns 1-based index of x in list
+        For `x in string`: lhs=x, rhs=string - returns 1-based position
+        """
+        if isinstance(rhs, MOOList):
+            # For lists, return 1-based index or 0
+            try:
+                # MOOList stores items in _list
+                idx = rhs._list.index(lhs)
+                return idx + 1  # MOO uses 1-based indexing
+            except ValueError:
+                return 0
+        elif isinstance(rhs, MOOString):
+            # For strings, use find
+            index = str(rhs).find(str(lhs))
+            if index == -1:
+                return 0
+            return index + 1  # MOO uses 1-based indexing
+        else:
+            # Try generic 'in' operator
+            if lhs in rhs:
+                return 1  # Just return truthy value
             return 0
-        return index
 
     @operator(Opcode.OP_NE)
     def exec_ne(self, op1: MOOAny, op2: MOOAny) -> bool:
