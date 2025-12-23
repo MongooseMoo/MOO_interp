@@ -700,6 +700,7 @@ class VM:
         # Check if verb.code is already compiled bytecode (Instructions) or source strings
         # For tests: verb.code may be [Instruction, ...]
         # For real usage: verb.code is ["source line 1", "source line 2", ...]
+        compiled_frame = None
         if verb.code and isinstance(verb.code[0], Instruction):
             # Already compiled - use directly
             bytecode = verb.code
@@ -719,27 +720,51 @@ class VM:
 
         # Get current frame to copy context from
         caller_frame = self.current_frame if self.call_stack else None
+        player_id = caller_frame.player if caller_frame else 0
+        caller_id = caller_frame.this if caller_frame else 0
+
+        # Context variables that MOO verbs have access to
+        context_var_names = [
+            MOOString("player"), MOOString("this"), MOOString("caller"),
+            MOOString("verb"), MOOString("args"), MOOString("argstr"),
+            MOOString("dobj"), MOOString("dobjstr"), MOOString("iobj"),
+            MOOString("iobjstr"), MOOString("prepstr"),
+        ]
+
+        # Get the compiled verb's var_names, or empty if pre-compiled
+        verb_var_names = compiled_frame.prog.var_names if compiled_frame else []
+        verb_rt_env = compiled_frame.rt_env if compiled_frame else []
+
+        # Context variable values
+        argstr = " ".join(str(a) for a in args._list) if args._list else ""
+        context_rt_env = [
+            player_id,  # player
+            obj_id,     # this
+            caller_id,  # caller
+            MOOString(str(verb_name)),  # verb
+            args,       # args
+            MOOString(argstr),  # argstr
+            -1,         # dobj (default: nothing)
+            MOOString(""),  # dobjstr
+            -1,         # iobj (default: nothing)
+            MOOString(""),  # iobjstr
+            MOOString(""),  # prepstr
+        ]
 
         # Create new stack frame for the verb
         new_frame = StackFrame(
             func_id=verb.object,
-            prog=Program(var_names=[MOOString("args"), MOOString("this"), MOOString("caller"), MOOString("player")]),
+            prog=Program(var_names=context_var_names + verb_var_names),
             ip=0,
             stack=bytecode,
             this=obj_id,
-            player=caller_frame.player if caller_frame else 0,
+            player=player_id,
             verb=str(verb_name),
             verb_name=verb.name,
         )
 
-        # Set up runtime environment with special variables
-        # In MOO: args, this, caller, player are accessible as variables
-        new_frame.rt_env = [
-            args,  # args
-            obj_id,  # this
-            caller_frame.this if caller_frame else 0,  # caller
-            caller_frame.player if caller_frame else 0,  # player
-        ]
+        # Set up runtime environment - context vars first, then verb-local vars
+        new_frame.rt_env = context_rt_env + verb_rt_env
 
         # Push the new frame onto the call stack
         self.call_stack.append(new_frame)
