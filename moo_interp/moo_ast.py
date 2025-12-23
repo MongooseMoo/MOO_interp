@@ -595,9 +595,14 @@ class DollarProperty(_AstNode):
     name: StringLiteral
 
     def to_bytecode(self, state: CompilerState, program: Program):
-        # $prop means #0.prop
+        # $prop means #0.prop - push object #0 and property name as string
         result = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
-        result += self.name.to_bytecode(state, program)
+        # Get the property name as a string (works for both Identifier and StringLiteral)
+        if isinstance(self.name, Identifier):
+            prop_name = MOOString(self.name.value)
+        else:
+            prop_name = MOOString(str(self.name.value))
+        result += [Instruction(opcode=Opcode.OP_IMM, operand=prop_name)]
         result += [Instruction(opcode=Opcode.OP_GET_PROP)]
         return result
 
