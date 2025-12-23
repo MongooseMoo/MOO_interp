@@ -755,26 +755,28 @@ class ToAst(Transformer):
         return _Body(*block)
 
     def for_clause(self, args):
-        # for-list: [identifier, token, expression] or [identifier, index, token, expression]
-        # for-range: [identifier, token, start, end] or [identifier, index, token, start, end]
-        if len(args) == 5:
+        # for-list: [identifier, expression] or [identifier, index, expression]
+        # for-range: [identifier, start, end] or [identifier, index, start, end]
+        # Note: The "in" token is NOT passed through by Lark
+        if len(args) == 4:
             # for-range with index: for i, idx in [start..end]
-            [identifier, index, token, start, end] = args
+            [identifier, index, start, end] = args
             return _ForRangeClause(identifier, start, end)
-        elif len(args) == 4:
-            # Could be for-list with index OR for-range without index
-            # Check if second arg is Identifier (for-list) or token (for-range)
+        elif len(args) == 3:
+            # Could be for-list with index [id, idx, expr] OR for-range without index [id, start, end]
+            # For-range: args[1] and args[2] are both expressions (start, end)
+            # For-list with index: args[1] is Identifier, args[2] is expression
             if isinstance(args[1], Identifier):
                 # for-list with index
-                [identifier, index, token, lst] = args
+                [identifier, index, lst] = args
                 return _ForClause(identifier, index, lst)
             else:
                 # for-range without index
-                [identifier, token, start, end] = args
+                [identifier, start, end] = args
                 return _ForRangeClause(identifier, start, end)
         else:
-            # for-list without index
-            [identifier, token, lst] = args
+            # for-list without index: [identifier, expression]
+            [identifier, lst] = args
             return _ForClause(identifier, None, lst)
 
     def function_call(self, call):
