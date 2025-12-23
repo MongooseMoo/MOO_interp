@@ -9,7 +9,13 @@ class MOOList(MutableSequence):
     _list = field(factory=list)
 
     def __init__(self, *args):
-        self._list = list(args)
+        # Handle both MOOList([1,2,3]) and MOOList(1,2,3) patterns
+        if len(args) == 1 and isinstance(args[0], (list, MOOList)):
+            # Single list/MOOList argument - use its contents
+            self._list = list(args[0]._list if isinstance(args[0], MOOList) else args[0])
+        else:
+            # Multiple arguments - wrap in list
+            self._list = list(args)
 
     def __getitem__(self, index):
         return self._list[index - 1]
