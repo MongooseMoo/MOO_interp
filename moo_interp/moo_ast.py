@@ -453,6 +453,31 @@ class _ForClause(_AstNode):
 
 
 @dataclass
+class _ForRangeClause(_AstNode):
+    """For-range loop clause: for i in [start..end]"""
+    id: Identifier
+    start: _Expression
+    end: _Expression
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # Emit bytecode for start and end expressions
+        # Stack will have: [start, end]
+        start_bc = self.start.to_bytecode(state, program)
+        end_bc = self.end.to_bytecode(state, program)
+        result = start_bc + end_bc
+
+        # Emit OP_FOR_RANGE with loop variable name
+        var = MOOString(self.id.value)
+        instruction = Instruction(opcode=Opcode.OP_FOR_RANGE, operand=None)
+        instruction.loop_var = var
+        result += [instruction]
+        return result
+
+    def to_moo(self) -> str:
+        return f"for {self.id.to_moo()} in [{self.start.to_moo()}..{self.end.to_moo()}]"
+
+
+@dataclass
 class ContinueStatement(_Statement):
     id: Optional[Identifier] = None
 
@@ -474,7 +499,7 @@ class BreakStatement(_Statement):
 
 @dataclass
 class ForStatement(_Statement):
-    condition: _ForClause
+    condition: Union[_ForClause, _ForRangeClause]
     body: _Body
 
     def to_bytecode(self, state: CompilerState, program: Program):
@@ -730,10 +755,25 @@ class ToAst(Transformer):
         return _Body(*block)
 
     def for_clause(self, args):
-        if len(args) == 4:
-            [identifier, index, token, lst] = args
-            return _ForClause(identifier, index, lst)
+        # for-list: [identifier, token, expression] or [identifier, index, token, expression]
+        # for-range: [identifier, token, start, end] or [identifier, index, token, start, end]
+        if len(args) == 5:
+            # for-range with index: for i, idx in [start..end]
+            [identifier, index, token, start, end] = args
+            return _ForRangeClause(identifier, start, end)
+        elif len(args) == 4:
+            # Could be for-list with index OR for-range without index
+            # Check if second arg is Identifier (for-list) or token (for-range)
+            if isinstance(args[1], Identifier):
+                # for-list with index
+                [identifier, index, token, lst] = args
+                return _ForClause(identifier, index, lst)
+            else:
+                # for-range without index
+                [identifier, token, start, end] = args
+                return _ForRangeClause(identifier, start, end)
         else:
+            # for-list without index
             [identifier, token, lst] = args
             return _ForClause(identifier, None, lst)
 
