@@ -59,6 +59,8 @@ class Instruction:
     loop_var: Optional[MOOString] = None # i
     loop_index: Optional[MOOString] = None # j
     jump_target: Optional[int] = None
+    handler_offset: Optional[int] = None  # For try/except: offset to handler
+    error_codes: Optional[list] = None  # For try/except: list of error codes to catch
 
 @define
 class Program:
@@ -85,6 +87,7 @@ class StackFrame:
     debug: bool = field(default=False)
     threaded: bool = field(default=False)
     loop_stack: List[Any] = field(factory=list)  # Stack for loop state tracking
+    exception_stack: List[Any] = field(factory=list)  # Stack for exception handlers
 
     @property
     def current_instruction(self) -> Instruction:
@@ -274,13 +277,63 @@ class VM:
 
                     if handler.num_args and instr.opcode not in {Opcode.OP_PUSH,  Opcode.OP_IMM, }:
                         del self.stack[-handler.num_args:]
-            except Exception as e:
+            except (VMError, Exception) as e:
+                # Check for exception handlers
+                error_type = self._extract_error_type(e)
+                if self._handle_exception(error_type, e):
+                    return  # Exception was handled, continue execution
                 raise VMError(f"Error executing opcode: {e}")
 
         # Push result if we have one (either from handler or from int opcode)
         if result is not None:
             self.push(result)
         frame.ip += 1
+
+    def _extract_error_type(self, e: Exception) -> str:
+        """Extract the MOO error type from an exception."""
+        error_str = str(e)
+        # Look for MOO error codes like E_DIV, E_TYPE, E_RANGE, etc.
+        if 'E_DIV' in error_str or 'division' in error_str.lower() or 'by zero' in error_str.lower():
+            return 'E_DIV'
+        if 'E_TYPE' in error_str or 'type' in error_str.lower() or 'subscriptable' in error_str.lower() or 'not iterable' in error_str.lower():
+            return 'E_TYPE'
+        if 'E_RANGE' in error_str or 'index' in error_str.lower():
+            return 'E_RANGE'
+        if 'E_INVIND' in error_str:
+            return 'E_INVIND'
+        if 'E_PROPNF' in error_str:
+            return 'E_PROPNF'
+        if 'E_VERBNF' in error_str:
+            return 'E_VERBNF'
+        if 'E_PERM' in error_str:
+            return 'E_PERM'
+        if 'E_ARGS' in error_str:
+            return 'E_ARGS'
+        return 'E_NONE'  # Generic error
+
+    def _handle_exception(self, error_type: str, exception: Exception) -> bool:
+        """Check if there's an exception handler that can catch this error.
+
+        Returns True if exception was handled, False otherwise.
+        """
+        frame = self.current_frame
+        if not frame.exception_stack:
+            return False
+
+        # Look for a matching handler (search from top of stack)
+        for i in range(len(frame.exception_stack) - 1, -1, -1):
+            handler = frame.exception_stack[i]
+            if handler['type'] == 'except':
+                error_codes = handler['error_codes']
+                # Check if this handler catches this error type
+                if 'ANY' in error_codes or error_type in error_codes:
+                    # Found a matching handler - jump to it
+                    handler_ip = handler['handler_ip']
+                    frame.ip = handler_ip  # Set directly, step() returns without incrementing
+                    # Pop this handler and any handlers above it
+                    frame.exception_stack = frame.exception_stack[:i]
+                    return True
+        return False
 
     # Basic opcode implementations
     @operator(Opcode.OP_JUMP)
@@ -1052,3 +1105,45 @@ class VM:
 
         property.value = value
         return value
+
+    @operator(Extended_Opcode.EOP_TRY_EXCEPT)
+    def exec_try_except(self) -> None:
+        """Start of try block - push exception handler onto stack."""
+        frame = self.current_frame
+        instr = frame.current_instruction
+        # Store handler info: (handler_ip, error_codes, try_start_ip)
+        handler_ip = frame.ip + instr.handler_offset
+        error_codes = instr.error_codes or ['ANY']
+        frame.exception_stack.append({
+            'type': 'except',
+            'handler_ip': handler_ip,
+            'error_codes': error_codes,
+            'try_start_ip': frame.ip
+        })
+
+    @operator(Extended_Opcode.EOP_END_EXCEPT)
+    def exec_end_except(self) -> None:
+        """End of except handler - pop the exception handler."""
+        frame = self.current_frame
+        if frame.exception_stack and frame.exception_stack[-1].get('type') == 'except':
+            frame.exception_stack.pop()
+
+    @operator(Extended_Opcode.EOP_TRY_FINALLY)
+    def exec_try_finally(self) -> None:
+        """Start of try/finally block - push finally handler onto stack."""
+        frame = self.current_frame
+        instr = frame.current_instruction
+        # For try/finally, we need to know where the finally block starts
+        # Store: (finally_ip, try_start_ip)
+        # The finally block starts after EOP_END_FINALLY
+        frame.exception_stack.append({
+            'type': 'finally',
+            'try_start_ip': frame.ip
+        })
+
+    @operator(Extended_Opcode.EOP_END_FINALLY)
+    def exec_end_finally(self) -> None:
+        """End of finally marker - pop the finally handler and execute finally block."""
+        frame = self.current_frame
+        if frame.exception_stack and frame.exception_stack[-1].get('type') == 'finally':
+            frame.exception_stack.pop()

@@ -4,8 +4,7 @@ from moo_interp.moo_ast import parse, compile, run
 from moo_interp.errors import MOOError
 from moo_interp.vm import VMError
 
-# Skip all tests in this module - try/except AST transformation not yet implemented
-pytestmark = pytest.mark.skip(reason="try/except AST transformation not yet implemented")
+# Note: Requires exception handling opcodes in VM
 
 
 def test_try_except_catches_error():
@@ -84,6 +83,7 @@ def test_try_except_any():
     assert vm.result == 42, "except (ANY) should catch all errors"
 
 
+@pytest.mark.skip(reason="Error variable binding not yet implemented")
 def test_try_except_with_error_binding():
     """except e (E_DIV) binds the error to variable e."""
     program = """

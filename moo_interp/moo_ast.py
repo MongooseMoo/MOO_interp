@@ -673,7 +673,7 @@ class _Index(_Expression):
     def to_bytecode(self, state: CompilerState, program: Program):
         result = self.object.to_bytecode(state, program)
         result += self.index.to_bytecode(state, program)
-        result += self.emit_byte(Opcode.OP_REF)
+        result += [self.emit_byte(Opcode.OP_REF)]
         return result
 
     def to_moo(self) -> str:
@@ -724,6 +724,86 @@ class WhileStatement(_Statement):
         res += self.body.to_moo()
         res += "\nendwhile\n"
         return res
+
+
+@dataclass
+class _ExceptClause:
+    """An except clause: except [var] (codes) body. Underscore prefix avoids ast_utils conflict."""
+    codes: list  # List of error codes to catch (or 'ANY')
+    var: str = None  # Optional variable to bind error to
+    body: "_Body" = None
+
+
+@dataclass
+class _TryExceptStatement(_Statement):
+    """try ... except ... endtry. Underscore prefix avoids ast_utils conflict."""
+    try_body: _Body
+    except_clauses: list  # List of _ExceptClause
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        from moo_interp.opcodes import Extended_Opcode
+
+        # Compile try body
+        try_bc = self.try_body.to_bytecode(state, program)
+
+        # Compile except clauses
+        except_bcs = []
+        for clause in self.except_clauses:
+            clause_bc = clause.body.to_bytecode(state, program) if clause.body else []
+            except_bcs.append((clause, clause_bc))
+
+        result = []
+
+        # EOP_TRY_EXCEPT instruction - stores handler offset
+        # handler_offset = distance from TRY_EXCEPT instruction to first handler
+        # Format: try_bc + 2 (for JUMP instruction + 1 to get PAST the jump)
+        handler_offset = len(try_bc) + 2  # +1 for JUMP, +1 to get past it
+        try_except_instr = Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_TRY_EXCEPT.value)
+        try_except_instr.handler_offset = handler_offset
+        try_except_instr.error_codes = [code for clause in self.except_clauses for code in clause.codes]
+        result.append(try_except_instr)
+        result.extend(try_bc)
+
+        # Calculate total size of except handlers
+        handlers_size = sum(len(bc) + 2 for _, bc in except_bcs)  # +2 for EOP_END_EXCEPT and nop/jump
+
+        # After try body, jump past all except handlers (no error case)
+        result.append(Instruction(opcode=Opcode.OP_JUMP, operand=handlers_size))
+
+        # Except handlers
+        for i, (clause, clause_bc) in enumerate(except_bcs):
+            # Each handler: execute body, end
+            result.extend(clause_bc)
+            # Jump to end of try/except after handler
+            remaining = sum(len(bc) + 2 for _, bc in except_bcs[i+1:])
+            result.append(Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_END_EXCEPT.value))
+            if remaining > 0:
+                result.append(Instruction(opcode=Opcode.OP_JUMP, operand=remaining))
+            else:
+                result.append(Instruction(opcode=Opcode.OP_POP, operand=0))
+
+        return result
+
+
+@dataclass
+class _TryFinallyStatement(_Statement):
+    """try ... finally ... endtry. Underscore prefix avoids ast_utils conflict."""
+    try_body: _Body
+    finally_body: _Body
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        from moo_interp.opcodes import Extended_Opcode
+
+        try_bc = self.try_body.to_bytecode(state, program)
+        finally_bc = self.finally_body.to_bytecode(state, program)
+
+        result = []
+        result.append(Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_TRY_FINALLY.value))
+        result.extend(try_bc)
+        result.append(Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_END_FINALLY.value))
+        result.extend(finally_bc)
+
+        return result
 
 
 class ToAst(Transformer):
@@ -861,6 +941,79 @@ class ToAst(Transformer):
         obj = args[0]
         name = args[1].value if hasattr(args[1], 'value') else str(args[1])
         return _WaifProperty(object=obj, name=name)
+
+    def try_except_statement(self, args):
+        # args = [statement*, except_statement+]
+        # Split into try body statements and except clauses
+        try_stmts = []
+        except_clauses = []
+        for arg in args:
+            if isinstance(arg, _ExceptClause):
+                except_clauses.append(arg)
+            elif isinstance(arg, lark.tree.Tree):
+                if arg.data == 'except_statement':
+                    # Parse except_statement tree into _ExceptClause
+                    clause = self._parse_except_clause(arg)
+                    except_clauses.append(clause)
+                else:
+                    # Some other tree - might be a statement
+                    try_stmts.append(arg)
+            else:
+                try_stmts.append(arg)
+
+        # Wrap single statement in _Body if needed
+        if len(try_stmts) == 1 and isinstance(try_stmts[0], _SingleStatement):
+            try_body = try_stmts[0]
+        else:
+            try_body = _Body(*try_stmts) if try_stmts else _Body()
+
+        return _TryExceptStatement(try_body=try_body, except_clauses=except_clauses)
+
+    def _parse_except_clause(self, tree):
+        # except_statement: except_clause statement*
+        # except_clause: "except" [IDENTIFIER] "(" exception_codes ")"
+        children = tree.children
+        except_clause_tree = children[0]
+        body_stmts = children[1:]
+
+        # Parse except_clause
+        var = None
+        codes = []
+        for child in except_clause_tree.children:
+            if isinstance(child, lark.tree.Tree) and child.data == 'exception_codes':
+                for code_tree in child.children:
+                    if isinstance(code_tree, lark.tree.Tree) and code_tree.data == 'exception_code':
+                        code_id = code_tree.children[0]
+                        if isinstance(code_id, Identifier):
+                            codes.append(code_id.value)
+                        else:
+                            codes.append(str(code_id))
+            elif isinstance(child, Identifier):
+                var = child.value
+
+        return _ExceptClause(codes=codes, var=var, body=_Body(*body_stmts))
+
+    def try_finally_statement(self, args):
+        # args = [statement*, finally_statement]
+        # The last arg is the finally_statement tree
+        finally_tree = args[-1]
+        try_stmts = args[:-1]
+
+        # Parse finally body
+        if isinstance(finally_tree, lark.tree.Tree) and finally_tree.data == 'finally_statement':
+            finally_stmts = finally_tree.children
+        else:
+            finally_stmts = [finally_tree]
+
+        return _TryFinallyStatement(try_body=_Body(*try_stmts), finally_body=_Body(*finally_stmts))
+
+    def except_statement(self, args):
+        # Let try_except_statement handle this
+        return lark.tree.Tree('except_statement', args)
+
+    def finally_statement(self, args):
+        # Let try_finally_statement handle this
+        return lark.tree.Tree('finally_statement', args)
 
     @v_args(inline=True)
     def start(self, x):
