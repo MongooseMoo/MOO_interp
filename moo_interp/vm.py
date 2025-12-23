@@ -499,11 +499,14 @@ class VM:
         return op1 == op2
 
     @operator(Opcode.OP_IN)
-    def exec_in(self, rhs: MOOAny, lhs: Container) -> int:
+    def exec_in(self, lhs: MOOAny, rhs: Container) -> int:
         """Check if lhs is in rhs. Returns 1-based index or 0 if not found.
 
         For `x in list`: lhs=x, rhs=list - returns 1-based index of x in list
         For `x in string`: lhs=x, rhs=string - returns 1-based position
+
+        Stack order: push x, push container, OP_IN -> args=[x, container]
+        So first param is lhs (value), second is rhs (container).
         """
         if isinstance(rhs, MOOList):
             # For lists, return 1-based index or 0
