@@ -991,6 +991,9 @@ class ToAst(Transformer):
         body_stmts = []
         for stmt in body_stmts_raw:
             if isinstance(stmt, lark.tree.Tree):
+                # Skip empty statement trees
+                if not stmt.children:
+                    continue
                 # Transform the tree to get the AST node
                 transformed = transformer.transform(stmt)
                 body_stmts.append(transformed)
