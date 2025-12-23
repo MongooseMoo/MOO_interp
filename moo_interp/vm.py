@@ -689,8 +689,19 @@ class VM:
 
     @operator(Opcode.OP_DONE)
     def exec_done(self):
-        self.state = VMOutcome.OUTCOME_DONE
-        return 0
+        """Handle verb completion - return 0 to caller if in nested call."""
+        # Pop the current frame
+        self.call_stack.pop()
+
+        # If there are more frames, push 0 to the VM stack and continue
+        # If this was the last frame, mark as done
+        if self.call_stack:
+            self.push(0)
+            return None  # Continue execution in caller
+        else:
+            self.result = 0
+            self.state = VMOutcome.OUTCOME_DONE
+            return None
 
     # Verb Call Operations
 
