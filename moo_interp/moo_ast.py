@@ -133,7 +133,8 @@ class _Statement(_AstNode):
 
 
 @dataclass
-class SingleStatement(_AstNode):
+class _SingleStatement(_AstNode):
+    """Single statement ending with semicolon. Underscore prefix avoids ast_utils conflict."""
     statement: _Statement
 
     def to_bytecode(self, state: CompilerState, program: Program):
@@ -141,6 +142,17 @@ class SingleStatement(_AstNode):
 
     def to_moo(self) -> str:
         return self.statement.to_moo() + ";"
+
+
+@dataclass
+class _EmptyStatement(_Statement):
+    """Empty statement (just a semicolon)."""
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        return []  # No bytecode for empty statement
+
+    def to_moo(self) -> str:
+        return ";"
 
 
 @dataclass(init=False)
@@ -275,7 +287,8 @@ class Map(_Expression):
 
 
 @dataclass
-class UnaryExpression(_Expression):
+class _UnaryExpression(_Expression):
+    """Unary expression like -x, !x, ~x. Underscore prefix avoids ast_utils conflict."""
     operator: str
     operand: _Expression
 
@@ -505,6 +518,20 @@ class _Property(_Expression):
 
 
 @dataclass
+class _WaifProperty(_Expression):
+    """Waif property access: obj.:prop (ToastStunt extension). Underscore avoids ast_utils conflict."""
+    object: _Expression
+    name: str
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # TODO: Implement waif property bytecode when needed
+        raise NotImplementedError("Waif property bytecode not yet implemented")
+
+    def to_moo(self) -> str:
+        return f"{self.object.to_moo()}.:{self.name}"
+
+
+@dataclass
 class DollarProperty(_AstNode):
     name: StringLiteral
 
@@ -520,7 +547,8 @@ class DollarProperty(_AstNode):
 
 
 @dataclass
-class CallArguments(_AstNode):
+class _CallArgs(_AstNode):
+    """Internal class for call arguments - renamed to avoid ast_utils conflict with call_arguments rule."""
     arguments: Optional[List[_Expression]] = None
 
     def to_moo(self) -> str:
@@ -565,8 +593,30 @@ class _VerbCall(_Expression):
         return f"{self.object.to_moo()}:{self.name.to_moo()}({arguments})"
 
 
+class _FirstIndex(_Expression):
+    """Represents ^ (first element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # EXPR_FIRST - first element of the indexed object
+        return [Instruction(opcode=Opcode.OP_IMM, operand=1)]
+
+    def to_moo(self) -> str:
+        return "^"
+
+
+class _LastIndex(_Expression):
+    """Represents $ (last element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # This needs special handling - $ means length of the indexed object
+        # For now, return a placeholder
+        return [self.emit_extended_byte(Extended_Opcode.EOP_LENGTH)]
+
+    def to_moo(self) -> str:
+        return "$"
+
+
 @dataclass
-class Index(_Expression):
+class _Index(_Expression):
+    """Renamed to avoid ast_utils conflict with index rule."""
     object: _Expression
     index: _Expression
 
@@ -685,15 +735,57 @@ class ToAst(Transformer):
         name, args = call
         return _FunctionCall(name.value, args)
 
+    def call_arguments(self, args):
+        # Collect all arguments into a _List
+        return _List(list(args))
+
     def property(self, access):
         object, name = access
-        # the original /* Treat foo.bar like foo.("bar") for simplicity */ so we need to convert to string
-        name = StringLiteral(name.value)
+        # Handle both obj.prop (Identifier) and obj.(expr) (any expression)
+        if isinstance(name, Identifier):
+            # Treat foo.bar like foo.("bar") for simplicity
+            name = StringLiteral(name.value)
+        # else: name is already an expression from obj.(expr)
         return _Property(object, name)
 
     def verb_call(self, call):
         object, name, args = call
-        return _VerbCall(object, name, _List(args.children))
+        # args is now a _List from call_arguments transformer
+        if isinstance(args, _List):
+            return _VerbCall(object, name, args)
+        # Fallback for edge cases
+        return _VerbCall(object, name, _List(list(args) if args else []))
+
+    def index(self, args):
+        # args = [object, index_target]
+        obj = args[0]
+        idx = args[1]
+        return _Index(object=obj, index=idx)
+
+    def first_index(self, args):
+        return _FirstIndex()
+
+    def last_index(self, args):
+        return _LastIndex()
+
+    def unary_expression(self, args):
+        # args = [operator_token, operand]
+        op = str(args[0])
+        operand = args[1]
+        return _UnaryExpression(operator=op, operand=operand)
+
+    def single_statement(self, args):
+        # Empty statement (just ';') has no children
+        if not args:
+            return _EmptyStatement()
+        # Normal statement with content
+        return _SingleStatement(statement=args[0])
+
+    def waif_property(self, args):
+        # args = [object, name_identifier]
+        obj = args[0]
+        name = args[1].value if hasattr(args[1], 'value') else str(args[1])
+        return _WaifProperty(object=obj, name=name)
 
     @v_args(inline=True)
     def start(self, x):

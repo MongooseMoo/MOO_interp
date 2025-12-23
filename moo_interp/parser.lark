@@ -12,7 +12,7 @@ code:
 	| try_except_statement
 	| try_finally_statement
 
-single_statement: (return_statement | fork_statement | break_statement | continue_statement| expression ) _SEMI
+single_statement: (return_statement | fork_statement | break_statement | continue_statement | expression)? _SEMI
 
 ?condition: expression
 
@@ -62,7 +62,7 @@ list: "{" [expression ("," expression)*] "}"
 map_entry_expression: expression "->" expression
 
 unary_expression: UNARY_OP expression
-UNARY_OP: ("!" | "~" | "-")
+UNARY_OP: "!" | "~" | "-"
 binary_expression: expression BINARY_OP expression
 BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^." | IN | "==" | ">=" | "<=" | "!=" | "<" | ">" | "&&" | "||")
 
@@ -73,6 +73,7 @@ BINARY_OP: ("+" | "-" | "*" | "/" | "^" | "%" | ">>" | "<<" | "&." | "|." | "^."
           | index
           | range
           | property
+          | waif_property
           | verb_call
           | assign
           | unary_expression
@@ -93,11 +94,26 @@ catch: "`" expression "!" exception_codes ("=>" expression)? "'"
 
 splicer: "@" expression
 
-index: expression "[" ("^" | "$" | expression) "]"
+index: expression "[" index_target "]"
 
-range: expression "[" ("^" | expression) ".." ("$" | expression) "]"
+?index_target: CARET -> first_index
+             | DOLLAR -> last_index
+             | expression
+
+range: expression "[" range_start ".." range_end "]"
+
+?range_start: CARET -> first_index
+            | expression
+
+?range_end: DOLLAR -> last_index
+          | expression
+
+CARET: "^"
+DOLLAR.1: "$"  // Higher priority to avoid conflict with dollar_property
 
 property: expression "." (IDENTIFIER | "(" expression ")")
+
+waif_property: expression ".:" IDENTIFIER
 
 dollar_property: "$" IDENTIFIER
 
@@ -132,4 +148,8 @@ WS: /[ \t\n\r\f]+/
 
 %import common.ESCAPED_STRING
 %ignore WS
+
+// Comments - block /* */ and line //
+COMMENT: /\/\*[\s\S]*?\*\// | /\/\/[^\n]*/
+%ignore COMMENT
 
