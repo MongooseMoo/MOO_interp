@@ -355,7 +355,11 @@ class _Assign(_Statement):
             state.add_var(self.target.value)
             return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value))]
         elif isinstance(self.target, _Property):
-            return value_bc + self.target.object.to_bytecode(state, program) + self.target.name.to_bytecode(state, program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
+            # OP_PUT_PROP expects stack: [obj, propname, value] with value on top
+            # C code: rhs = POP(); propname = POP(); obj = POP();
+            obj_bc = self.target.object.to_bytecode(state, program)
+            name_bc = self.target.name.to_bytecode(state, program)
+            return obj_bc + name_bc + value_bc + [Instruction(opcode=Opcode.OP_PUT_PROP)]
         elif isinstance(self.target, _Index):
             # Indexed assignment: obj[index] = value
             # Stack: push obj, push index, push value, then INDEXSET
