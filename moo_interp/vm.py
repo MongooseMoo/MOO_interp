@@ -728,6 +728,114 @@ class VM:
         if not is_truthy(condition):
             self.call_stack[-1].ip += jump_to
 
+    def _skip_to_end_of_for_loop(self, frame):
+        """Skip past the loop body to the instruction after OP_JUMP.
+
+        For nested loops, we need to find the JUMP that matches THIS loop,
+        not an inner loop's JUMP. We do this by counting nesting depth.
+        """
+        search_ip = frame.ip + 1
+        nesting_depth = 1  # We're inside this loop, looking for its end
+
+        while search_ip < len(frame.stack):
+            search_instr = frame.stack[search_ip]
+
+            # Check for nested loop start (increases depth)
+            if search_instr.opcode == Opcode.OP_FOR_RANGE:
+                nesting_depth += 1
+            elif search_instr.opcode == Opcode.OP_EXTENDED:
+                # EOP_FOR_LIST_1 and EOP_FOR_LIST_2 are nested loops too
+                if search_instr.operand in (Extended_Opcode.EOP_FOR_LIST_1, Extended_Opcode.EOP_FOR_LIST_2):
+                    nesting_depth += 1
+
+            # Check for loop end (decreases depth)
+            if search_instr.opcode == Opcode.OP_JUMP and isinstance(search_instr.operand, int) and search_instr.operand < 0:
+                nesting_depth -= 1
+                if nesting_depth == 0:
+                    # Found our loop's JUMP
+                    frame.ip = search_ip  # Will be incremented by step() to skip past JUMP
+                    return
+
+            search_ip += 1
+
+    @operator(Opcode.OP_FOR_RANGE)
+    def exec_for_range(self):
+        """For-range loop: for i in [start..end]
+        Loop state stored on frame.loop_stack as: ('range', ip, current, end)
+        """
+        frame = self.current_frame
+        instr = frame.current_instruction
+        loop_var = instr.loop_var
+
+        # Check if we have existing loop state for this IP
+        is_first_entry = True
+        loop_index = None
+        for i, entry in enumerate(frame.loop_stack):
+            if len(entry) >= 2 and entry[0] == 'range' and entry[1] == frame.ip:
+                is_first_entry = False
+                loop_index = i
+                break
+
+        if is_first_entry:
+            to = self.pop()
+            from_val = self.pop()
+            if not isinstance(to, int) or not isinstance(from_val, int):
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            if from_val > to:
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            self.put(loop_var, from_val)
+            frame.loop_stack.append(('range', frame.ip, from_val + 1, to))
+        else:
+            _, _, current, to = frame.loop_stack[loop_index]
+            if current > to:
+                frame.loop_stack.pop(loop_index)
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            self.put(loop_var, current)
+            frame.loop_stack[loop_index] = ('range', frame.ip, current + 1, to)
+        return None
+
+    @operator(Extended_Opcode.EOP_FOR_LIST_1)
+    def exec_for_list_1(self):
+        """For-list loop: for x in (list)
+        Loop state stored on frame.loop_stack as: ('list', ip, collection, iter_state)
+        """
+        frame = self.current_frame
+        instr = frame.current_instruction
+        loop_var = instr.loop_var
+
+        # Check if we have existing loop state for this IP
+        is_first_entry = True
+        loop_index = None
+        for i, entry in enumerate(frame.loop_stack):
+            if len(entry) >= 2 and entry[0] == 'list' and entry[1] == frame.ip:
+                is_first_entry = False
+                loop_index = i
+                break
+
+        if is_first_entry:
+            base_collection = self.pop()
+            if not isinstance(base_collection, MOOList):
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            if len(base_collection) == 0:
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            # MOO lists are 1-indexed, iter_state is next index to use
+            self.put(loop_var, base_collection[1])
+            frame.loop_stack.append(('list', frame.ip, base_collection, 2))
+        else:
+            _, _, base_collection, iter_state = frame.loop_stack[loop_index]
+            if iter_state > len(base_collection):
+                frame.loop_stack.pop(loop_index)
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            self.put(loop_var, base_collection[iter_state])
+            frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
+        return None
+
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:
         func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
