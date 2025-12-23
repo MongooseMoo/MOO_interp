@@ -20,6 +20,10 @@ this_module = sys.modules[__name__]
 @dataclass
 class CompilerState:
     last_label = 0
+    bi_funcs = None  # Optional BuiltinFunctions instance for compilation
+
+    def __init__(self, bi_funcs=None):
+        self.bi_funcs = bi_funcs
 
     def next_label(self):
         self.last_label += 1
@@ -492,7 +496,9 @@ class _FunctionCall(_Expression):
 
     def to_bytecode(self, state: CompilerState, program: Program):
         result = self.arguments.to_bytecode(state, program)
-        builtin_id = BuiltinFunctions().get_id_by_name(self.name)
+        # Use the bi_funcs from state if available, otherwise create a new instance
+        bi_funcs = state.bi_funcs if state.bi_funcs else BuiltinFunctions()
+        builtin_id = bi_funcs.get_id_by_name(self.name)
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
                                operand=builtin_id)]
         return result
@@ -750,6 +756,10 @@ class ToAst(Transformer):
 
     def verb_call(self, call):
         object, name, args = call
+        # Handle both obj:verb (Identifier) and obj:(expr) (any expression)
+        if isinstance(name, Identifier):
+            # Treat this:helper like this:("helper") for correct bytecode
+            name = StringLiteral(name.value)
         # args is now a _List from call_arguments transformer
         if isinstance(args, _List):
             return _VerbCall(object, name, args)
@@ -809,13 +819,22 @@ def parse(text):
 #
 
 
-def compile(tree):
+def compile(tree, bi_funcs=None):
+    """Compile MOO code to bytecode.
+
+    Args:
+        tree: AST tree, string, or list of strings to compile
+        bi_funcs: Optional BuiltinFunctions instance to use for builtin lookups
+
+    Returns:
+        StackFrame ready for execution
+    """
     if isinstance(tree, list):
         tree = parse("".join(tree))
     elif isinstance(tree, str):
         tree = parse(tree)
     bc = []
-    state = CompilerState()
+    state = CompilerState(bi_funcs=bi_funcs)
     for node in tree.children:
         bc += node.to_bytecode(state, None)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]

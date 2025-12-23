@@ -1,5 +1,10 @@
 import base64
-import crypt
+try:
+    import crypt
+    HAS_CRYPT = True
+except ImportError:
+    # crypt is not available on Windows
+    HAS_CRYPT = False
 from functools import reduce
 import hashlib
 import hmac
@@ -65,6 +70,29 @@ class BuiltinFunctions:
         self.id_to_function[function_id] = fn
         self.function_to_id[fn] = function_id
         return fn
+
+
+    def register(self, name: str, func):
+        """Register an external function with a custom name.
+        
+        Args:
+            name: The name to register the function under
+            func: A callable that will be registered as a builtin
+        """
+        if self.current_id > 255:
+            raise Exception("Cannot register more than 256 functions.")
+        
+        # Create a wrapper to ensure the function has the right __name__
+        def wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+        wrapper.__name__ = name
+        
+        function_id = self.current_id
+        self.current_id += 1
+        self.functions[name] = wrapper
+        self.id_to_function[function_id] = wrapper
+        self.function_to_id[wrapper] = function_id
+        return wrapper
 
     # Dictionary-like methods
 
@@ -936,6 +964,8 @@ class BuiltinFunctions:
 
     def salt(self, method: MOOString = "SHA512", prefix: MOOString = "") -> MOOString:
         """
+        if not HAS_CRYPT:
+            raise MOOError("E_PERM", "crypt module not available on this platform")
         Generate a salt for use with crypt().
         Methods: DES, MD5, SHA256, SHA512, BLOWFISH
         """
@@ -952,6 +982,8 @@ class BuiltinFunctions:
 
     def crypt(self, password: MOOString, salt: MOOString = None) -> MOOString:
         """
+        if not HAS_CRYPT:
+            raise MOOError("E_PERM", "crypt module not available on this platform")
         Hash a password using Unix crypt.
         If salt is not provided, generates a SHA512 salt.
         """

@@ -228,9 +228,16 @@ class VM:
         frame = self.current_frame
 
         if frame.ip >= len(frame.stack):
-            self.result = self.call_stack[-1].stack[-1]
-            self.state = VMOutcome.OUTCOME_DONE
-            return
+            # Frame has no more instructions - pop it and finish or continue
+            self.call_stack.pop()
+            if self.call_stack:
+                # There are more frames - continue execution
+                return
+            else:
+                # This was the last frame - get result from VM stack if available
+                self.result = self.stack[-1] if self.stack else 0
+                self.state = VMOutcome.OUTCOME_DONE
+                return
         result = None
         instr = frame.current_instruction
         handler = self.opcode_handlers.get(instr.opcode)
@@ -264,12 +271,11 @@ class VM:
                         del self.stack[-handler.num_args:]
             except Exception as e:
                 raise VMError(f"Error executing opcode: {e}")
-            if result is not None:
-                self.push(result)
+
+        # Push result if we have one (either from handler or from int opcode)
+        if result is not None:
+            self.push(result)
         frame.ip += 1
-        # pop the stack frame if we've reached the end of the stack
-        if frame.ip >= len(frame.stack):
-            self.call_stack.pop()
 
     # Basic opcode implementations
     @operator(Opcode.OP_JUMP)
@@ -543,20 +549,154 @@ class VM:
 
     @operator(Opcode.OP_RETURN)
     def exec_return(self, value: MOOAny) -> MOOAny:
-        self.result = value
-        self.state = VMOutcome.OUTCOME_DONE
-        return value
+        # Pop the current frame
+        self.call_stack.pop()
+
+        # If there are more frames, push return value to the VM stack and continue
+        # If this was the last frame, set result and mark as done
+        if self.call_stack:
+            # Return to caller - push return value onto VM stack for caller to use
+            self.push(value)
+            return None  # Don't push again
+        else:
+            # This was the top-level frame - we're done
+            self.result = value
+            self.state = VMOutcome.OUTCOME_DONE
+            return None  # Don't push since we're done
 
     @operator(Opcode.OP_RETURN0)
     def exec_return0(self) -> int:
-        self.result = 0
-        self.state = VMOutcome.OUTCOME_DONE
-        return 0
+        # Pop the current frame
+        self.call_stack.pop()
+
+        # If there are more frames, push 0 to the VM stack and continue
+        # If this was the last frame, set result and mark as done
+        if self.call_stack:
+            self.push(0)
+            return None
+        else:
+            self.result = 0
+            self.state = VMOutcome.OUTCOME_DONE
+            return None
 
     @operator(Opcode.OP_DONE)
     def exec_done(self):
         self.state = VMOutcome.OUTCOME_DONE
         return 0
+
+    # Verb Call Operations
+
+    @operator(Opcode.OP_CALL_VERB)
+    def exec_call_verb(self, obj_id: int, verb_name: MOOString, args: MOOList):
+        """Call a verb on an object
+
+        Stack layout (bottom to top, popped in reverse):
+        - obj_id: object ID to call verb on (popped last)
+        - verb_name: name of verb to call (popped second)
+        - args: MOOList of arguments to pass to verb (popped first)
+        """
+        if not self.db:
+            raise VMError("No database available for verb calls")
+
+        # Validate types
+        if not isinstance(args, MOOList):
+            raise VMError(f"OP_CALL_VERB: args must be MOOList, got {type(args)}")
+        if not isinstance(verb_name, MOOString):
+            raise VMError(f"OP_CALL_VERB: verb_name must be MOOString, got {type(verb_name)}")
+        if not isinstance(obj_id, int):
+            raise VMError(f"OP_CALL_VERB: obj_id must be int, got {type(obj_id)}")
+
+        # Find the object
+        if obj_id not in self.db.objects:
+            raise VMError(f"OP_CALL_VERB: object #{obj_id} not found")
+
+        # Find verb on object or its parents (inheritance chain)
+        verb = self._find_verb(obj_id, str(verb_name))
+        if not verb:
+            raise VMError(f"OP_CALL_VERB: verb '{verb_name}' not found on object #{obj_id}")
+
+        # Check if verb.code is already compiled bytecode (Instructions) or source strings
+        # For tests: verb.code may be [Instruction, ...]
+        # For real usage: verb.code is ["source line 1", "source line 2", ...]
+        if verb.code and isinstance(verb.code[0], Instruction):
+            # Already compiled - use directly
+            bytecode = verb.code
+        else:
+            # Source code - compile it
+            # Import here to avoid circular dependency
+            from .moo_ast import parse, compile as compile_moo
+
+            try:
+                code_str = "\n".join(verb.code)
+                ast = parse(code_str)
+                # Use the VM's bi_funcs instance for consistent builtin IDs
+                compiled_frame = compile_moo(ast, bi_funcs=self.bi_funcs)
+                bytecode = compiled_frame.stack
+            except Exception as e:
+                raise VMError(f"OP_CALL_VERB: failed to compile verb '{verb_name}': {e}")
+
+        # Get current frame to copy context from
+        caller_frame = self.current_frame if self.call_stack else None
+
+        # Create new stack frame for the verb
+        new_frame = StackFrame(
+            func_id=verb.object,
+            prog=Program(var_names=[MOOString("args"), MOOString("this"), MOOString("caller"), MOOString("player")]),
+            ip=0,
+            stack=bytecode,
+            this=obj_id,
+            player=caller_frame.player if caller_frame else 0,
+            verb=str(verb_name),
+            verb_name=verb.name,
+        )
+
+        # Set up runtime environment with special variables
+        # In MOO: args, this, caller, player are accessible as variables
+        new_frame.rt_env = [
+            args,  # args
+            obj_id,  # this
+            caller_frame.this if caller_frame else 0,  # caller
+            caller_frame.player if caller_frame else 0,  # player
+        ]
+
+        # Push the new frame onto the call stack
+        self.call_stack.append(new_frame)
+
+        # Don't return a value - the verb will execute and eventually OP_RETURN
+        return None
+
+    def _find_verb(self, obj_id: int, verb_name: str):
+        """Find a verb on an object or its parents (inheritance)
+
+        Args:
+            obj_id: Object to search
+            verb_name: Name of verb to find
+
+        Returns:
+            Verb object if found, None otherwise
+        """
+        visited = set()  # Prevent infinite loops in inheritance
+        to_check = [obj_id]
+
+        while to_check:
+            current_id = to_check.pop(0)
+
+            if current_id in visited or current_id not in self.db.objects:
+                continue
+            visited.add(current_id)
+
+            obj = self.db.objects[current_id]
+
+            # Check verbs on this object
+            for verb in obj.verbs:
+                if verb.name == verb_name:
+                    return verb
+
+            # Add parents to check list
+            if hasattr(obj, 'parents') and obj.parents:
+                to_check.extend(obj.parents)
+
+        return None
 
     # Control Flow Operations
 
