@@ -21,13 +21,26 @@ this_module = sys.modules[__name__]
 class CompilerState:
     last_label = 0
     bi_funcs = None  # Optional BuiltinFunctions instance for compilation
+    var_names: List[MOOString] = None  # Track local variable names
 
     def __init__(self, bi_funcs=None):
         self.bi_funcs = bi_funcs
+        self.last_label = 0
+        self.var_names = []
 
     def next_label(self):
         self.last_label += 1
         return self.last_label
+
+    def add_var(self, name: str) -> int:
+        """Register a variable and return its index.
+
+        If variable already exists, returns existing index.
+        """
+        var_name = MOOString(name)
+        if var_name not in self.var_names:
+            self.var_names.append(var_name)
+        return self.var_names.index(var_name)
 
 
 # operator to opcode mapping
@@ -338,6 +351,8 @@ class _Assign(_Statement):
     def to_bytecode(self, state: CompilerState, program: Program):
         value_bc = self.value.to_bytecode(state, program)
         if isinstance(self.target, Identifier):
+            # Register variable with compiler state
+            state.add_var(self.target.value)
             return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value))]
         elif isinstance(self.target, _Property):
             return value_bc + self.target.object.to_bytecode(state, program) + self.target.name.to_bytecode(state, program) + [Instruction(opcode=Opcode.OP_PUT_PROP)]
@@ -347,6 +362,22 @@ class _Assign(_Statement):
             obj_bc = self.target.object.to_bytecode(state, program)
             index_bc = self.target.index.to_bytecode(state, program)
             return obj_bc + index_bc + value_bc + [Instruction(opcode=Opcode.OP_INDEXSET)]
+        elif isinstance(self.target, _List):
+            # Destructuring assignment: {a, b, c} = list
+            # Register all variables in the list
+            result = value_bc
+            for i, item in enumerate(self.target.value):
+                if isinstance(item, Identifier):
+                    state.add_var(item.value)
+                    # For each element: duplicate list, get index, store to var
+                    # We need OP_SCATTER for proper MOO-style destructuring
+                    # For now, simple approach: assume list matches
+                    result += [
+                        Instruction(opcode=Opcode.OP_IMM, operand=i + 1),  # 1-based index
+                        Instruction(opcode=Opcode.OP_REF),  # Get list[i]
+                        Instruction(opcode=Opcode.OP_PUT, operand=MOOString(item.value)),
+                    ]
+            return result
         else:
             # Unknown target type - return empty (will cause error)
             return []
@@ -450,6 +481,11 @@ class _ForClause(_AstNode):
     iterable: _Expression
 
     def to_bytecode(self, state: CompilerState, program: Program):
+        # Register loop variable(s) with compiler state
+        state.add_var(self.id.value)
+        if self.index is not None:
+            state.add_var(self.index.value)
+
         iterable_bc = self.iterable.to_bytecode(state, program)
         result = iterable_bc + \
             [Instruction(opcode=Opcode.OP_IMM, operand=None)]
@@ -480,6 +516,9 @@ class _ForRangeClause(_AstNode):
     end: _Expression
 
     def to_bytecode(self, state: CompilerState, program: Program):
+        # Register loop variable with compiler state
+        state.add_var(self.id.value)
+
         # Emit bytecode for start and end expressions
         # Stack will have: [start, end]
         start_bc = self.start.to_bytecode(state, program)
@@ -1085,8 +1124,14 @@ def compile(tree, bi_funcs=None):
     for node in tree.children:
         bc += node.to_bytecode(state, None)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
-    prog = Program()
+
+    # Create program with tracked variable names
+    prog = Program(var_names=list(state.var_names))
+
+    # Create frame with rt_env initialized for all tracked variables
     frame = StackFrame(func_id=0, prog=prog, ip=0, stack=bc)
+    # Initialize rt_env with None/0 for each tracked variable
+    frame.rt_env = [0] * len(state.var_names)
     return frame
 
 
