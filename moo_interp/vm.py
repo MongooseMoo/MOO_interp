@@ -1192,3 +1192,132 @@ class VM:
         frame = self.current_frame
         if frame.exception_stack and frame.exception_stack[-1].get('type') == 'finally':
             frame.exception_stack.pop()
+
+    @operator(Extended_Opcode.EOP_PUSH_LABEL)
+    def exec_push_label(self) -> int:
+        """Push a label (integer) onto the stack for loop targeting."""
+        frame = self.current_frame
+        instr = frame.current_instruction
+        # The label is in the operand
+        return instr.operand if instr.operand is not None else 0
+
+    @operator(Extended_Opcode.EOP_CATCH)
+    def exec_catch(self) -> None:
+        """Push a catch marker for inline error catching (`expr ! codes').
+
+        In MOO, this is for expressions like: `foo() ! E_PROPNF => default_value'
+        Pushes a TYPE_CATCH marker with 1 handler.
+        """
+        frame = self.current_frame
+        instr = frame.current_instruction
+        # Push catch marker info onto exception stack
+        handler_ip = frame.ip + instr.handler_offset if instr.handler_offset else frame.ip + 1
+        error_codes = instr.error_codes or ['ANY']
+        frame.exception_stack.append({
+            'type': 'catch',
+            'handler_ip': handler_ip,
+            'error_codes': error_codes,
+            'catch_start_ip': frame.ip
+        })
+
+    @operator(Extended_Opcode.EOP_END_CATCH)
+    def exec_end_catch(self) -> MOOAny:
+        """End of inline catch expression.
+
+        Pops the result value, pops the catch marker, then pushes the value back.
+        Also jumps to skip the default value expression.
+        """
+        frame = self.current_frame
+        instr = frame.current_instruction
+
+        # Pop the expression result (if any)
+        result = self.pop() if self.stack else 0
+
+        # Pop catch marker from exception stack
+        if frame.exception_stack and frame.exception_stack[-1].get('type') == 'catch':
+            frame.exception_stack.pop()
+
+        # Jump past the default expression
+        if instr.operand is not None and isinstance(instr.operand, int):
+            frame.ip += instr.operand
+
+        return result
+
+    @operator(Extended_Opcode.EOP_WHILE_ID)
+    def exec_while_id(self) -> None:
+        """While loop with loop ID stored in a variable.
+
+        Stores the loop ID in a variable before the while condition check.
+        Used for named loops like: while foo (condition)
+        """
+        frame = self.current_frame
+        instr = frame.current_instruction
+
+        # Store the loop counter/id in the loop variable
+        if instr.loop_var:
+            # The top of stack has the current iteration value
+            if self.stack:
+                self.put(instr.loop_var, self.peek())
+
+        # Then fall through to condition check (like OP_WHILE)
+        # The actual condition jump is handled by the next instruction
+
+    @operator(Extended_Opcode.EOP_EXIT_ID)
+    def exec_exit_id(self) -> None:
+        """Exit from a named loop.
+
+        Like EOP_EXIT but ignores the loop ID operand.
+        """
+        frame = self.current_frame
+        # Find and exit the current loop
+        jump_ip = self._find_loop_end_jump(frame)
+        if jump_ip is not None:
+            # Pop loop_stack for FOR loops
+            if frame.loop_stack:
+                frame.loop_stack.pop()
+            # Set IP to the JUMP; step() will increment past it
+            frame.ip = jump_ip
+
+    @operator(Extended_Opcode.EOP_FOR_LIST_2)
+    def exec_for_list_2(self):
+        """For-list loop with index: for i, x in (list)
+
+        Like EOP_FOR_LIST_1 but also stores the iteration index in a variable.
+        Loop state stored on frame.loop_stack as: ('list2', ip, collection, iter_state)
+        """
+        frame = self.current_frame
+        instr = frame.current_instruction
+        loop_var = instr.loop_var  # The value variable
+        loop_index = instr.loop_index  # The index variable
+
+        # Check if we have existing loop state for this IP
+        is_first_entry = True
+        loop_stack_index = None
+        for i, entry in enumerate(frame.loop_stack):
+            if len(entry) >= 2 and entry[0] == 'list2' and entry[1] == frame.ip:
+                is_first_entry = False
+                loop_stack_index = i
+                break
+
+        if is_first_entry:
+            base_collection = self.pop()
+            if not isinstance(base_collection, MOOList):
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            if len(base_collection) == 0:
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            # MOO lists are 1-indexed, iter_state is next index to use
+            self.put(loop_var, base_collection[1])
+            self.put(loop_index, 1)  # Index is 1-based
+            frame.loop_stack.append(('list2', frame.ip, base_collection, 2))
+        else:
+            _, _, base_collection, iter_state = frame.loop_stack[loop_stack_index]
+            if iter_state > len(base_collection):
+                frame.loop_stack.pop(loop_stack_index)
+                self._skip_to_end_of_for_loop(frame)
+                return None
+            self.put(loop_var, base_collection[iter_state])
+            self.put(loop_index, iter_state)  # Index is 1-based
+            frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
+        return None
