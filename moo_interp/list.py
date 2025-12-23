@@ -43,3 +43,8 @@ class MOOList(MutableSequence):
 
     def __add__(self, other):
         return MOOList(*self._list, *other._list)
+
+    def __iter__(self):
+        # Override default MutableSequence iteration which uses 0-based __getitem__
+        # MOOList uses 1-based indexing internally, so iterate over _list directly
+        return iter(self._list)

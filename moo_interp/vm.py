@@ -611,7 +611,11 @@ class VM:
 
     @operator(Opcode.OP_MAKE_SINGLETON_LIST)
     def exec_make_singleton_list(self, value: MOOAny) -> MOOList:
-        return MOOList(value)
+        # Create a list containing just this one value
+        # Use internal _list directly to avoid constructor unwrapping MOOLists
+        result = MOOList()
+        result._list = [value]
+        return result
 
     @operator(Opcode.OP_CHECK_LIST_FOR_SPLICE)
     def exec_check_list_for_splice(self):
