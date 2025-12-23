@@ -1138,24 +1138,27 @@ class VM:
 
         object = self.db.objects.get(obj)
         if object is None:
-            raise VMError("Object not found")
-        property = object.get_prop(prop)
-        if property is None:
-            raise VMError("Property not found")
-        return property.value
+            raise VMError(f"E_INVIND: Object #{obj} not found")
+        # Search for property by name
+        prop_name = str(prop)
+        for p in getattr(object, 'properties', []):
+            if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                return p.value
+        raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
 
     @operator(Opcode.OP_PUT_PROP)
     def exec_put_prop(self, obj: MOOAny, prop: MOOString, value: MOOAny):
         """Set the value of a property on an object"""
         object = self.db.objects.get(obj)
         if object is None:
-            raise VMError("Object not found")
-        property = object.get_prop(prop)
-        if property is None:
-            raise VMError("Property not found")
-
-        property.value = value
-        return value
+            raise VMError(f"E_INVIND: Object #{obj} not found")
+        # Search for property by name
+        prop_name = str(prop)
+        for p in getattr(object, 'properties', []):
+            if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                p.value = value
+                return value
+        raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
 
     @operator(Extended_Opcode.EOP_TRY_EXCEPT)
     def exec_try_except(self) -> None:
