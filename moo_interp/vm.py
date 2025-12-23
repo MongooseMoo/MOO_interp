@@ -257,7 +257,7 @@ class VM:
         if result is None:
             logger.debug(f"Executing {instr.opcode} {instr.operand}")
             args = []
-            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP}:
+            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP, Opcode.OP_JUMP}:
                 args = [instr.operand]
             elif handler is not None and handler.num_args:
                 args = self.stack[-handler.num_args:]
@@ -286,7 +286,8 @@ class VM:
         Args:
             offset (int): The label or offset to jump to.
         """
-        self.current_frame.ip += offset  # adjust instruction pointer by offset
+        # -1 to account for step()'s automatic ip += 1 at end
+        self.current_frame.ip += offset - 1
 
     def read_bytes(self, num_bytes: int) -> int:
         """Reads the given number of bytes from the bytecode.
