@@ -527,30 +527,76 @@ class BuiltinFunctions:
     def chr(self, x):
         return self._chr(x)
 
-    def index(self, str1: MOOString, str2: MOOString, case_matters: int = 0):
+    def index(self, str1: MOOString, str2: MOOString, case_matters: int = 0, offset: int = 0):
         """Return 1-based index of str2 in str1, or 0 if not found.
 
-        MOO index() returns 0 for not found, and 1-based positions.
+        Args:
+            str1: String to search in
+            str2: Substring to find
+            case_matters: 1 for case-sensitive, 0 for case-insensitive
+            offset: 0-based offset to start search from (must be >= 0)
+
+        Returns:
+            1-based index of first occurrence, or 0 if not found
+
+        Raises:
+            MOOException: E_INVARG if offset is negative
         """
+        # Validate offset
+        if offset < 0:
+            raise MOOException(MOOError.E_INVARG, "index() offset must be >= 0")
+
         s1 = str(str1)
         s2 = str(str2)
-        if not case_matters:
-            s1 = s1.lower()
-            s2 = s2.lower()
-        pos = s1.find(s2)
-        return pos + 1 if pos >= 0 else 0
 
-    def rindex(self, str1: MOOString, str2: MOOString, case_matters: int = 0):
+        # Apply offset - search only from offset onwards
+        search_str = s1[offset:]
+
+        if not case_matters:
+            search_str = search_str.lower()
+            s2 = s2.lower()
+
+        pos = search_str.find(s2)
+        if pos >= 0:
+            # Convert back to 1-based index in original string
+            return offset + pos + 1
+        return 0
+
+    def rindex(self, str1: MOOString, str2: MOOString, case_matters: int = 0, offset: int = 0):
         """Return 1-based index of last occurrence of str2 in str1, or 0 if not found.
 
-        MOO rindex() returns 0 for not found, and 1-based positions.
+        Args:
+            str1: String to search in
+            str2: Substring to find
+            case_matters: 1 for case-sensitive, 0 for case-insensitive
+            offset: Offset from end to limit search (must be <= 0, negative values count from end)
+
+        Returns:
+            1-based index of last occurrence, or 0 if not found
+
+        Raises:
+            MOOException: E_INVARG if offset is positive
         """
+        # Validate offset - rindex requires offset <= 0
+        if offset > 0:
+            raise MOOException(MOOError.E_INVARG, "rindex() offset must be <= 0")
+
         s1 = str(str1)
         s2 = str(str2)
+
+        # For rindex, offset is subtracted from the string length
+        # offset=0 means search entire string
+        # offset=-3 means search up to 3 characters before the end
+        if offset < 0:
+            search_str = s1[:len(s1) + offset]  # offset is negative, so this truncates from end
+        else:
+            search_str = s1
+
         if not case_matters:
-            s1 = s1.lower()
+            search_str = search_str.lower()
             s2 = s2.lower()
-        pos = s1.rfind(s2)
+
+        pos = search_str.rfind(s2)
         return pos + 1 if pos >= 0 else 0
 
     def strsub(self, str1: MOOString, str2: MOOString, str3: MOOString):
@@ -705,8 +751,15 @@ class BuiltinFunctions:
         else:
             mode_str = str(mode)
 
+        import sys
+        print(f"DEBUG generate_json x={x!r}, type={type(x)}, mode_str={mode_str!r}", file=sys.stderr)
         native = self._moo_to_python(x, mode_str)
-        return MOOString(json.dumps(native))
+        print(f"DEBUG native={native!r}, type={type(native)}", file=sys.stderr)
+        result_json = json.dumps(native)
+        print(f"DEBUG json.dumps result={result_json!r}", file=sys.stderr)
+        result = MOOString(result_json)
+        print(f"DEBUG final MOOString={result!r}", file=sys.stderr)
+        return result
 
     def _python_to_moo(self, value, mode="common-subset"):
         """Convert Python value from JSON to MOO types.
