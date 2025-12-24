@@ -345,3 +345,111 @@ class MooDebugger:
         print("Breakpoints:")
         for bp_type, value in sorted(self.breakpoints):
             print(f"  {bp_type}: {value}")
+
+    def run_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute VM in oneshot mode with query parameters.
+
+        Args:
+            query: Query configuration dict with keys:
+                - breakpoints: List of (type, value) tuples for breakpoints
+                - max_steps: Maximum steps to execute (default: 10000)
+                - capture_calls: Whether to log verb calls/returns (default: False)
+                - stop_on_error: Whether to stop on VM errors (default: True)
+
+        Returns:
+            Result dict with keys:
+                - stopped_reason: 'breakpoint' | 'complete' | 'error' | 'max_steps'
+                - steps_executed: Number of steps run
+                - final_state: Final state snapshot dict
+                - call_trace: List of call/return events (if capture_calls=True)
+                - error: Error message or None
+        """
+        # Extract query parameters
+        breakpoints = query.get('breakpoints', [])
+        max_steps = query.get('max_steps', 10000)
+        capture_calls = query.get('capture_calls', False)
+        stop_on_error = query.get('stop_on_error', True)
+
+        # Set up breakpoints
+        self.clear_breakpoints()
+        for bp_type, value in breakpoints:
+            self.set_breakpoint(bp_type, value)
+
+        # Initialize tracking
+        call_trace = [] if capture_calls else None
+        steps_executed = 0
+        stopped_reason = None
+        error_msg = None
+
+        # Run until a stop condition
+        while steps_executed < max_steps:
+            # Check if execution is complete
+            if not self.vm.call_stack or self.vm.state is not None:
+                stopped_reason = 'complete'
+                break
+
+            # Check if there's a VM error
+            if stop_on_error and self.vm.state == VMOutcome.ERROR:
+                stopped_reason = 'error'
+                error_msg = str(self.vm.result) if self.vm.result else "VM error"
+                break
+
+            # Check for breakpoints before stepping
+            if self._check_breakpoint():
+                stopped_reason = 'breakpoint'
+                break
+
+            # Capture call/return events if requested
+            if capture_calls and self.vm.call_stack:
+                frame = self.vm.current_frame
+                if frame.ip < len(frame.stack):
+                    instr = frame.current_instruction
+
+                    # Detect verb calls
+                    if instr.opcode == Opcode.OP_CALL_VERB:
+                        # Get verb name from stack if possible
+                        verb_name = None
+                        if len(self.vm.stack) >= 1:
+                            # The verb name should be on the stack
+                            verb_val = self.vm.stack[-1]
+                            if isinstance(verb_val, (str, MOOString)):
+                                verb_name = str(verb_val)
+
+                        call_trace.append({
+                            'type': 'call',
+                            'step': steps_executed,
+                            'verb': verb_name or frame.verb_name,
+                            'this': frame.this,
+                        })
+
+            # Step
+            prev_call_depth = len(self.vm.call_stack) if self.vm.call_stack else 0
+            self.vm.step()
+            steps_executed += 1
+            curr_call_depth = len(self.vm.call_stack) if self.vm.call_stack else 0
+
+            # Detect returns (call depth decreased)
+            if capture_calls and curr_call_depth < prev_call_depth:
+                # A return happened
+                result_val = self.vm.result if self.vm.result is not None else (self.vm.stack[-1] if self.vm.stack else None)
+                call_trace.append({
+                    'type': 'return',
+                    'step': steps_executed,
+                    'verb': None,  # We don't track which verb returned
+                    'value': result_val,
+                })
+
+        # Check if we hit max_steps
+        if stopped_reason is None and steps_executed >= max_steps:
+            stopped_reason = 'max_steps'
+
+        # Capture final state
+        final_state = self._capture_state()
+
+        return {
+            'stopped_reason': stopped_reason,
+            'steps_executed': steps_executed,
+            'final_state': final_state,
+            'call_trace': call_trace,
+            'error': error_msg,
+        }
