@@ -265,7 +265,8 @@ class ObjnumLiteral(_Literal, _Expression):
     value: int
 
     def to_bytecode(self, state: CompilerState, program: Program):
-        return [self.emit_byte(Opcode.OP_IMM, self.value)]
+        from lambdamoo_db.database import ObjNum
+        return [self.emit_byte(Opcode.OP_IMM, ObjNum(self.value))]
 
     def to_moo(self) -> str:
         return "#" + str(self.value)
