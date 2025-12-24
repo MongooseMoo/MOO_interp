@@ -311,10 +311,9 @@ class Map(_Expression):
         result = [Instruction(opcode=Opcode.OP_MAP_CREATE)]
         for child in self.value:
             key, value = child.children
-            result += key.to_bytecode(state, program)
             result += value.to_bytecode(state, program)
+            result += key.to_bytecode(state, program)
             result += [Instruction(opcode=Opcode.OP_MAP_INSERT)]
-            result += [Instruction(opcode=Opcode.OP_POP, operand=2)]
         return result
 
     def to_moo(self) -> str:
