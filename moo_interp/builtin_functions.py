@@ -409,9 +409,19 @@ class BuiltinFunctions:
     def tan(self, x):
         return math.tan(self.tofloat(x))
 
-    def listappend(self, list: MOOList, value):
-        """Append value to list."""
-        list.append(value)
+    def listappend(self, list: MOOList, value, position: int = None) -> MOOList:
+        """Append value to list, optionally after a specific position.
+
+        listappend(list, value [, position])
+        - If position is not provided, append at end
+        - If position is provided, insert AFTER that position (1-based)
+        """
+        if position is None:
+            list.append(value)
+        else:
+            # Insert after the given position (MOO is 1-based)
+            # position=1 means insert after index 0, so at index 1
+            list._list.insert(position, value)
         return list
 
     def listdelete(self, list: MOOList, index: int) -> MOOList:
@@ -419,13 +429,28 @@ class BuiltinFunctions:
         del list[index]
         return list
 
-    def listinsert(self, list: MOOList, index: int, value) -> MOOList:
-        """Insert value into list at index."""
-        list.insert(index, value)
+    def listinsert(self, list: MOOList, value, position: int = None) -> MOOList:
+        """Insert value into list before a specific position.
+
+        listinsert(list, value [, position])
+        - VALUE comes before POSITION in MOO
+        - If position is not provided, insert at beginning (position 1)
+        - If position is provided, insert BEFORE that position (1-based)
+        """
+        if position is None:
+            position = 1
+        # Insert before the given position (MOO is 1-based)
+        # position=1 means insert at index 0
+        list._list.insert(position - 1, value)
         return list
 
-    def listset(self, list: MOOList, index: int, value) -> MOOList:
-        """Set value at index in list."""
+    def listset(self, list: MOOList, value, index: int) -> MOOList:
+        """Set value at index in list.
+
+        listset(list, value, index)
+        - VALUE comes before INDEX in MOO
+        - Index is 1-based
+        """
         list[index] = value
         return list
 
