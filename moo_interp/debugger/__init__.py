@@ -1,31 +1,67 @@
-"""MOO VM Debugger
+"""MOO VM Debugger with plugin architecture.
 
-Provides step-by-step execution control and state inspection for the MOO VM.
+Provides step-by-step execution control and state inspection for the MOO VM
+with a modular plugin system for extensibility.
 """
 
 from typing import Any, Dict, List, Optional, Set, Tuple
-from .vm import VM, StackFrame, VMOutcome
-from .opcodes import Opcode, Extended_Opcode
-from .string import MOOString
+from ..vm import VM, StackFrame, VMOutcome
+from ..opcodes import Opcode, Extended_Opcode
+from ..string import MOOString
+from ..list import MOOList
+
+from .base import DebugPlugin
+from .breakpoints import BreakpointPlugin
+from .call_trace import CallTracePlugin
 
 
 class MooDebugger:
-    """Interactive debugger for MOO VM execution.
+    """Interactive debugger for MOO VM execution with plugin support.
 
     Provides stepping, breakpoints, and state inspection capabilities.
+    Can be extended with plugins for tracing, profiling, etc.
     """
 
-    def __init__(self, vm: VM):
+    def __init__(self, vm: VM, plugins: Optional[List[DebugPlugin]] = None):
         """Initialize the debugger.
 
         Args:
             vm: The VM instance to debug
+            plugins: Optional list of plugins to use (defaults to breakpoints only)
         """
         self.vm = vm
-        self.breakpoints: Set[Tuple[str, Any]] = set()
         self.history: List[Dict[str, Any]] = []
         self.paused = False
         self.step_count = 0
+
+        # Initialize plugins
+        if plugins is None:
+            # Default: just breakpoints
+            self.plugins = [BreakpointPlugin()]
+        else:
+            # Always include BreakpointPlugin if not already in list
+            has_breakpoints = any(isinstance(p, BreakpointPlugin) for p in plugins)
+            if has_breakpoints:
+                self.plugins = plugins
+            else:
+                self.plugins = [BreakpointPlugin()] + plugins
+
+        # Keep reference to breakpoint plugin for convenience
+        self.breakpoint_plugin = None
+        for plugin in self.plugins:
+            if isinstance(plugin, BreakpointPlugin):
+                self.breakpoint_plugin = plugin
+                break
+
+    def add_plugin(self, plugin: DebugPlugin):
+        """Add a plugin to the debugger.
+
+        Args:
+            plugin: Plugin to add
+        """
+        self.plugins.append(plugin)
+        if isinstance(plugin, BreakpointPlugin) and self.breakpoint_plugin is None:
+            self.breakpoint_plugin = plugin
 
     def step(self) -> Optional[Dict[str, Any]]:
         """Execute one instruction and return state snapshot.
@@ -38,6 +74,38 @@ class MooDebugger:
 
         # Capture state before execution
         snapshot_before = self._capture_state()
+        frame_before = self.vm.current_frame if self.vm.call_stack else None
+        depth_before = len(self.vm.call_stack)
+
+        # Call plugin hooks before step
+        for plugin in self.plugins:
+            if plugin.enabled:
+                plugin.on_step_before(frame_before, snapshot_before)
+
+        # Check if this is a verb call or builtin call
+        if frame_before and frame_before.ip < len(frame_before.stack):
+            instr = frame_before.current_instruction
+
+            # Detect verb calls
+            if instr.opcode == Opcode.OP_CALL_VERB:
+                # Get verb info from stack (they're about to be popped by exec_call_verb)
+                if len(self.vm.stack) >= 3:
+                    args = self.vm.stack[-1] if isinstance(self.vm.stack[-1], MOOList) else MOOList([])
+                    verb_name = str(self.vm.stack[-2]) if len(self.vm.stack) >= 2 else "unknown"
+                    this = self.vm.stack[-3] if len(self.vm.stack) >= 3 else -1
+
+                    for plugin in self.plugins:
+                        if plugin.enabled:
+                            plugin.on_verb_call(verb_name, this, list(args._list), depth_before, self.step_count)
+
+            # Detect builtin calls
+            elif instr.opcode == Opcode.OP_BI_FUNC_CALL:
+                func_id = instr.operand
+                func_name = self.vm.bi_funcs.get_function_name_by_id(func_id) if self.vm.bi_funcs else f"builtin_{func_id}"
+
+                for plugin in self.plugins:
+                    if plugin.enabled:
+                        plugin.on_builtin_call(func_name, func_id, depth_before, self.step_count)
 
         # Execute one step
         self.vm.step()
@@ -46,6 +114,23 @@ class MooDebugger:
         # Capture state after execution
         snapshot_after = self._capture_state()
         snapshot_after['step_count'] = self.step_count
+        frame_after = self.vm.current_frame if self.vm.call_stack else None
+        depth_after = len(self.vm.call_stack)
+
+        # Detect returns (call depth decreased)
+        if depth_after < depth_before:
+            # A return happened
+            return_value = self.vm.result if self.vm.result is not None else (self.vm.stack[-1] if self.vm.stack else None)
+
+            for plugin in self.plugins:
+                if plugin.enabled:
+                    # We don't have verb_name from the returned frame, so pass None
+                    plugin.on_verb_return(None, return_value, depth_after, self.step_count)
+
+        # Call plugin hooks after step
+        for plugin in self.plugins:
+            if plugin.enabled:
+                plugin.on_step_after(frame_after, snapshot_after)
 
         # Add to history
         self.history.append(snapshot_after)
@@ -73,26 +158,29 @@ class MooDebugger:
                 return None
 
     def set_breakpoint(self, bp_type: str, value: Any):
-        """Set a breakpoint.
+        """Set a breakpoint (convenience method).
 
         Args:
             bp_type: Type of breakpoint ('ip', 'opcode', 'verb', 'builtin')
             value: Value to break on (depends on bp_type)
         """
-        self.breakpoints.add((bp_type, value))
+        if self.breakpoint_plugin:
+            self.breakpoint_plugin.set_breakpoint(bp_type, value)
 
     def remove_breakpoint(self, bp_type: str, value: Any):
-        """Remove a breakpoint.
+        """Remove a breakpoint (convenience method).
 
         Args:
             bp_type: Type of breakpoint
             value: Value that was being watched
         """
-        self.breakpoints.discard((bp_type, value))
+        if self.breakpoint_plugin:
+            self.breakpoint_plugin.remove_breakpoint(bp_type, value)
 
     def clear_breakpoints(self):
-        """Clear all breakpoints."""
-        self.breakpoints.clear()
+        """Clear all breakpoints (convenience method)."""
+        if self.breakpoint_plugin:
+            self.breakpoint_plugin.clear_breakpoints()
 
     def _check_breakpoint(self) -> bool:
         """Check if any breakpoint condition is met.
@@ -104,31 +192,28 @@ class MooDebugger:
             return False
 
         frame = self.vm.current_frame
+        state = self._capture_state()
 
-        # Can't check breakpoints if past end of instructions
-        if frame.ip >= len(frame.stack):
-            return False
-
-        instr = frame.current_instruction
-
-        for bp_type, value in self.breakpoints:
-            if bp_type == 'ip':
-                if frame.ip == value:
-                    return True
-            elif bp_type == 'opcode':
-                if instr.opcode == value:
-                    return True
-            elif bp_type == 'verb':
-                if frame.verb_name == value or frame.verb == value:
-                    return True
-            elif bp_type == 'builtin':
-                if instr.opcode == Opcode.OP_BI_FUNC_CALL:
-                    func_id = instr.operand
-                    func_name = self.vm.bi_funcs.get_function_name_by_id(func_id)
-                    if func_name == value or func_id == value:
-                        return True
+        # Check all plugins for should_break
+        for plugin in self.plugins:
+            if plugin.enabled and plugin.should_break(frame, state):
+                return True
 
         return False
+
+    def get_plugin_data(self, plugin_type: type) -> Any:
+        """Get data from a specific plugin type.
+
+        Args:
+            plugin_type: Type of plugin to get data from
+
+        Returns:
+            Plugin data, or None if plugin not found
+        """
+        for plugin in self.plugins:
+            if isinstance(plugin, plugin_type):
+                return plugin.get_data()
+        return None
 
     def inspect_stack(self) -> List[Any]:
         """Return current operand stack contents.
@@ -338,13 +423,17 @@ class MooDebugger:
 
     def print_breakpoints(self):
         """Print all active breakpoints."""
-        if not self.breakpoints:
-            print("No breakpoints set")
-            return
+        if self.breakpoint_plugin:
+            bps = self.breakpoint_plugin.get_data()
+            if not bps:
+                print("No breakpoints set")
+                return
 
-        print("Breakpoints:")
-        for bp_type, value in sorted(self.breakpoints):
-            print(f"  {bp_type}: {value}")
+            print("Breakpoints:")
+            for bp_type, value in bps:
+                print(f"  {bp_type}: {value}")
+        else:
+            print("No breakpoint plugin available")
 
     def run_query(self, query: Dict[str, Any]) -> Dict[str, Any]:
         """Execute VM in oneshot mode with query parameters.
@@ -371,12 +460,18 @@ class MooDebugger:
         stop_on_error = query.get('stop_on_error', True)
 
         # Set up breakpoints
-        self.clear_breakpoints()
-        for bp_type, value in breakpoints:
-            self.set_breakpoint(bp_type, value)
+        if self.breakpoint_plugin:
+            self.breakpoint_plugin.clear_breakpoints()
+            for bp_type, value in breakpoints:
+                self.breakpoint_plugin.set_breakpoint(bp_type, value)
+
+        # Add call trace plugin if requested
+        call_trace_plugin = None
+        if capture_calls:
+            call_trace_plugin = CallTracePlugin()
+            self.add_plugin(call_trace_plugin)
 
         # Initialize tracking
-        call_trace = [] if capture_calls else None
         steps_executed = 0
         stopped_reason = None
         error_msg = None
@@ -397,45 +492,9 @@ class MooDebugger:
                 stopped_reason = 'breakpoint'
                 break
 
-            # Capture call/return events if requested
-            if capture_calls and self.vm.call_stack:
-                frame = self.vm.current_frame
-                if frame.ip < len(frame.stack):
-                    instr = frame.current_instruction
-
-                    # Detect verb calls
-                    if instr.opcode == Opcode.OP_CALL_VERB:
-                        # Get verb name from stack if possible
-                        verb_name = None
-                        if len(self.vm.stack) >= 1:
-                            # The verb name should be on the stack
-                            verb_val = self.vm.stack[-1]
-                            if isinstance(verb_val, (str, MOOString)):
-                                verb_name = str(verb_val)
-
-                        call_trace.append({
-                            'type': 'call',
-                            'step': steps_executed,
-                            'verb': verb_name or frame.verb_name,
-                            'this': frame.this,
-                        })
-
-            # Step
-            prev_call_depth = len(self.vm.call_stack) if self.vm.call_stack else 0
-            self.vm.step()
+            # Step (this will trigger plugin hooks)
+            self.step()
             steps_executed += 1
-            curr_call_depth = len(self.vm.call_stack) if self.vm.call_stack else 0
-
-            # Detect returns (call depth decreased)
-            if capture_calls and curr_call_depth < prev_call_depth:
-                # A return happened
-                result_val = self.vm.result if self.vm.result is not None else (self.vm.stack[-1] if self.vm.stack else None)
-                call_trace.append({
-                    'type': 'return',
-                    'step': steps_executed,
-                    'verb': None,  # We don't track which verb returned
-                    'value': result_val,
-                })
 
         # Check if we hit max_steps
         if stopped_reason is None and steps_executed >= max_steps:
@@ -444,6 +503,11 @@ class MooDebugger:
         # Capture final state
         final_state = self._capture_state()
 
+        # Get call trace if it was captured
+        call_trace = None
+        if call_trace_plugin:
+            call_trace = call_trace_plugin.get_data()
+
         return {
             'stopped_reason': stopped_reason,
             'steps_executed': steps_executed,
@@ -451,3 +515,7 @@ class MooDebugger:
             'call_trace': call_trace,
             'error': error_msg,
         }
+
+
+# Re-export for backwards compatibility
+__all__ = ['MooDebugger', 'DebugPlugin', 'BreakpointPlugin', 'CallTracePlugin']
