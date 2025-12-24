@@ -28,6 +28,39 @@ from .moo_types import MOOAny, MOONumber, to_moo
 logger = getLogger(__name__)
 
 
+def _verb_name_matches(search_name: str, verb_pattern: str) -> bool:
+    """Check if search_name matches a MOO verb pattern.
+
+    MOO verb patterns use * for minimum abbreviation:
+    - "co*nnect" matches "co", "con", "conn", "conne", "connec", "connect"
+    - "@co*nnect" is an alias (ignore @ prefix)
+    - Space-separated patterns are alternatives
+
+    Returns True if search_name matches any alias in verb_pattern.
+    """
+    search = search_name.lower()
+    for alias in verb_pattern.split():
+        # Strip @ prefix (alias marker)
+        if alias.startswith('@'):
+            alias = alias[1:]
+        alias_lower = alias.lower()
+
+        if '*' in alias_lower:
+            # Has abbreviation marker
+            star_pos = alias_lower.index('*')
+            prefix = alias_lower[:star_pos]  # Required minimum
+            full = alias_lower.replace('*', '')  # Full name without *
+
+            # Match if search starts with prefix and is a prefix of full
+            if search.startswith(prefix) and full.startswith(search):
+                return True
+        else:
+            # Exact match required
+            if search == alias_lower:
+                return True
+    return False
+
+
 class BuiltinFunctions:
 
     ANSI_TAGS = {
@@ -875,7 +908,7 @@ class BuiltinFunctions:
         else:
             verb_name = str(verb_desc)
             for v in verbs:
-                if verb_name in getattr(v, 'name', '').split():
+                if _verb_name_matches(verb_name, getattr(v, 'name', '')):
                     verb = v
                     break
 
@@ -918,25 +951,39 @@ class BuiltinFunctions:
         else:
             verb_name = str(verb_desc)
             for v in verbs:
-                if verb_name in getattr(v, 'name', '').split():
+                if _verb_name_matches(verb_name, getattr(v, 'name', '')):
                     verb = v
                     break
 
         if verb is None:
             raise MOOException(MOOError.E_VERBNF, f"Verb not found")
 
-        # Map arg spec values to strings
-        dobj_map = {0: 'none', 1: 'any', 2: 'this'}
-        prep_map = {0: 'none', 1: 'any', -1: 'none'}  # Simplified
-        iobj_map = {0: 'none', 1: 'any', 2: 'this'}
+        # Extract arg specs from packed perms field
+        # Encoding: bits 0-3 = permissions, bits 4-5 = dobj, bits 6-7 = iobj
+        DOBJSHIFT = 4
+        IOBJSHIFT = 6
+        OBJMASK = 0x3
 
-        dobj = dobj_map.get(getattr(verb, 'dobj', 0), 'none')
-        prep = getattr(verb, 'prep', 'none')
-        if isinstance(prep, int):
-            prep = prep_map.get(prep, 'none')
-        iobj = iobj_map.get(getattr(verb, 'iobj', 0), 'none')
+        perms = getattr(verb, 'perms', 0)
+        dobj_spec = (perms >> DOBJSHIFT) & OBJMASK
+        iobj_spec = (perms >> IOBJSHIFT) & OBJMASK
 
-        return MOOList([MOOString(dobj), MOOString(str(prep)), MOOString(iobj)])
+        # Map arg spec values to strings (0=none, 1=any, 2=this)
+        arg_spec_map = {0: 'none', 1: 'any', 2: 'this'}
+        dobj = arg_spec_map.get(dobj_spec, 'none')
+        iobj = arg_spec_map.get(iobj_spec, 'none')
+
+        # prep is in the separate preps field: -2=any, -1=none, 0+=index
+        prep_value = getattr(verb, 'preps', -1)
+        if prep_value == -2:
+            prep = 'any'
+        elif prep_value == -1:
+            prep = 'none'
+        else:
+            # TODO: Look up prep string from index
+            prep = 'none'
+
+        return MOOList([MOOString(dobj), MOOString(prep), MOOString(iobj)])
 
     def toobj(self, x):
         """Convert a value to an object reference."""
