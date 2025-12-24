@@ -13,6 +13,8 @@ from ..list import MOOList
 from .base import DebugPlugin
 from .breakpoints import BreakpointPlugin
 from .call_trace import CallTracePlugin
+from .builtin_trace import BuiltinTracePlugin
+from .variable_watch import VariableWatchPlugin
 
 
 class MooDebugger:
@@ -518,4 +520,16 @@ class MooDebugger:
 
 
 # Re-export for backwards compatibility
-__all__ = ['MooDebugger', 'DebugPlugin', 'BreakpointPlugin', 'CallTracePlugin']
+__all__ = ['MooDebugger', 'DebugPlugin', 'BreakpointPlugin', 'CallTracePlugin', 'BuiltinTracePlugin', 'VariableWatchPlugin']
+
+    def get_matched_condition(self) -> Optional[Dict[str, Any]]:
+        """Get information about the last matched conditional breakpoint.
+
+        Returns:
+            Dict with 'expression' and 'matched' keys, or None if no conditional breakpoint matched
+        """
+        if self.breakpoint_plugin and hasattr(self.breakpoint_plugin, 'last_matched_condition'):
+            return self.breakpoint_plugin.last_matched_condition
+        return None
+
+
