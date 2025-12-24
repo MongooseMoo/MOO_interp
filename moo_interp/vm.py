@@ -282,10 +282,12 @@ class VM:
             logger.debug(f"Args: {args}")
 
             try:
-                if instr.opcode != Opcode.OP_POP and handler is not None:
+                if handler is not None:
                     result = handler(*args)
 
-                    if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE}:
+                    # Don't auto-pop args for opcodes that get args from operand (not stack)
+                    # or for OP_POP which handles its own popping
+                    if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE, Opcode.OP_POP}:
                         del self.stack[-handler.num_args:]
             except (VMError, Exception) as e:
                 # Check for exception handlers
