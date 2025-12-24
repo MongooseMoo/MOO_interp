@@ -91,6 +91,7 @@ class StackFrame:
     threaded: bool = field(default=False)
     loop_stack: List[Any] = field(factory=list)  # Stack for loop state tracking
     exception_stack: List[Any] = field(factory=list)  # Stack for exception handlers
+    stack_base: int = field(default=0)  # VM stack position when frame started
 
     @property
     def current_instruction(self) -> Instruction:
@@ -694,8 +695,18 @@ class VM:
 
     @operator(Opcode.OP_RETURN)
     def exec_return(self, value: MOOAny) -> MOOAny:
+        # Get stack_base before popping frame
+        frame = self.current_frame
+        stack_base = frame.stack_base
+
         # Pop the current frame
         self.call_stack.pop()
+
+        # Clean up this frame's stack segment (everything above stack_base)
+        # The 'value' arg was already read from stack, will be deleted by step()
+        # We clean up any other values this frame pushed
+        if len(self.stack) > stack_base + 1:  # +1 for the return value we read
+            del self.stack[stack_base:-1]  # Keep only the return value at top
 
         # If there are more frames, push return value to the VM stack and continue
         # If this was the last frame, set result and mark as done
@@ -711,8 +722,16 @@ class VM:
 
     @operator(Opcode.OP_RETURN0)
     def exec_return0(self) -> int:
+        # Get stack_base before popping frame
+        frame = self.current_frame
+        stack_base = frame.stack_base
+
         # Pop the current frame
         self.call_stack.pop()
+
+        # Clean up this frame's stack segment (everything above stack_base)
+        if len(self.stack) > stack_base:
+            del self.stack[stack_base:]
 
         # If there are more frames, push 0 to the VM stack and continue
         # If this was the last frame, set result and mark as done
@@ -826,6 +845,8 @@ class VM:
         ]
 
         # Create new stack frame for the verb
+        # stack_base: VM stack position after CALL_VERB args are popped
+        # The 3 args (obj_id, verb_name, args) will be deleted after this handler returns
         new_frame = StackFrame(
             func_id=verb.object,
             prog=Program(var_names=context_var_names + verb_var_names),
@@ -835,6 +856,7 @@ class VM:
             player=player_id,
             verb=str(verb_name),
             verb_name=verb.name,
+            stack_base=len(self.stack) - 3,  # Position after args removed
         )
 
         # Set up runtime environment - context vars first, then verb-local vars
@@ -1273,7 +1295,8 @@ class VM:
             tb = traceback.format_exc()
             raise VMError(
                 f"Error calling built-in function {func_name}: {e} {tb}")
-        return result
+        # MOO builtins always return a value; None becomes 0
+        return result if result is not None else 0
 
     @operator(Opcode.OP_GET_PROP)
     def exec_get_prop(self, obj: MOOAny, prop: MOOString) -> MOOAny:
