@@ -709,7 +709,8 @@ class BuiltinFunctions:
             return MOOString("{" + ", ".join([str(self.toliteral(y)) for y in x]) + "}")
         elif isinstance(x, MOOMap):
             # Convert each key-value pair to strings before joining
-            items = [str(self.toliteral(k)) + ": " + str(self.toliteral(v)) for k, v in x.items()]
+            # MOO uses -> as the separator for map literals
+            items = [str(self.toliteral(k)) + " -> " + str(self.toliteral(v)) for k, v in x.items()]
             return MOOString("[" + ", ".join(items) + "]")
         else:
             raise (TypeError, "Unknown type: " + str(type(x)))
