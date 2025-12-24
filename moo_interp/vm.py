@@ -1202,7 +1202,8 @@ class VM:
         func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
         func = self.bi_funcs.get_function_by_id(func_id)
         if func is None:
-            raise VMError("Unknown built-in function")
+            func_name = self.bi_funcs.get_function_name_by_id(func_id) if self.bi_funcs else None
+            raise VMError(f"Unknown built-in function id={func_id} name={func_name}")
         try:
             result = func(*args._list)
         except Exception as e:

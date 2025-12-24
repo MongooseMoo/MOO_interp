@@ -144,6 +144,10 @@ class BuiltinFunctions:
     def get_function_by_id(self, id):
         return self.id_to_function.get(id)
 
+    def get_function_name_by_id(self, id):
+        func = self.id_to_function.get(id)
+        return func.__name__ if func else f"<unknown_id_{id}>"
+
     def get_id_by_function(self, fn):
         return self.function_to_id.get(fn)
 
