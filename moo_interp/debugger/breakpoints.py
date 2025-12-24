@@ -15,6 +15,8 @@ class BreakpointPlugin(DebugPlugin):
         self.breakpoints: Set[Tuple[str, Any]] = set()
         self.conditional_breakpoints: List[Tuple[str, ConditionNode]] = []
         self.last_matched_condition: Optional[Dict[str, Any]] = None
+        self._verb_call_match = False
+        self._verb_return_match = False
 
     def set_breakpoint(self, bp_type: str, value: Any) -> None:
         """Set a breakpoint.
@@ -62,6 +64,13 @@ class BreakpointPlugin(DebugPlugin):
         Returns:
             True if a breakpoint was hit
         """
+
+        # Check if we matched on verb call/return hook
+        if self._verb_call_match or self._verb_return_match:
+            self._verb_call_match = False
+            self._verb_return_match = False
+            return True
+
         if frame is None or not self.enabled:
             return False
 
@@ -166,7 +175,54 @@ class BreakpointPlugin(DebugPlugin):
             'last_matched': self.last_matched_condition
         }
 
+
+    def on_verb_call(self, verb_name: str, this, args: list, call_depth: int, step_count: int):
+        """Hook called before a verb is executed."""
+        if not self.enabled:
+            return
+        for expression, condition in self.conditional_breakpoints:
+            context = {
+                'verb': verb_name,
+                'this': int(str(this).lstrip('#')) if hasattr(this, '__str__') else this,
+                'args': args,
+                'call_depth': call_depth,
+                'stack_depth': call_depth,
+            }
+            try:
+                if condition.evaluate(context):
+                    self.last_matched_condition = {
+                        'expression': expression,
+                        'matched': {k: v for k, v in context.items() if v is not None}
+                    }
+                    self._verb_call_match = True
+            except Exception:
+                pass
+
+    def on_verb_return(self, verb_name: Optional[str], return_value, call_depth: int, step_count: int):
+        """Hook called after a verb returns."""
+        if not self.enabled:
+            return
+        for expression, condition in self.conditional_breakpoints:
+            context = {
+                'verb': verb_name if verb_name else 'unknown',
+                'return_value': return_value,
+                'call_depth': call_depth,
+                'stack_depth': call_depth,
+            }
+            try:
+                if condition.evaluate(context):
+                    self.last_matched_condition = {
+                        'expression': expression,
+                        'matched': {k: v for k, v in context.items() if v is not None}
+                    }
+                    self._verb_return_match = True
+            except Exception:
+                pass
+
     def reset(self) -> None:
+        self.last_matched_condition = None
+        self._verb_call_match = False
+        self._verb_return_match = False
         """Reset breakpoints."""
         self.breakpoints.clear()
         self.conditional_breakpoints.clear()
