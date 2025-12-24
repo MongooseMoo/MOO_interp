@@ -1540,8 +1540,9 @@ class BuiltinFunctions:
 
         # Determine owner (default to parent's owner or #2)
         if owner is None:
-            parent_obj = self.db.objects[parent_id]
-            owner_id = getattr(parent_obj, 'owner', 2)
+            # Get parent object (None if parent is NOTHING)
+            parent_obj = None if parent_id == -1 else self.db.objects.get(parent_id)
+            owner_id = getattr(parent_obj, 'owner', 2) if parent_obj else 2
         elif isinstance(owner, ObjNum):
             owner_id = int(str(owner).lstrip('#'))
         elif isinstance(owner, int):
