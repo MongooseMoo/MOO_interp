@@ -1045,6 +1045,175 @@ class BuiltinFunctions:
                 f"Property {prop_name} does not exist on object {obj.id}")
         return MOOList([prop.owner, prop.perms])
 
+    def add_property(self, obj: MooObject, prop_name: MOOString, value: MOOAny, info: MOOList):
+        """Add a property to an object.
+
+        Args:
+            obj: The object to add property to
+            prop_name: Name of the property
+            value: Initial value
+            info: [owner, perms] - owner is objnum, perms is string
+        """
+        from lambdamoo_db.database import Property
+
+        if not self.db:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        obj_id = obj.id
+        prop_name_str = str(prop_name)
+
+        # Check if property already exists on THIS object (not inherited)
+        if hasattr(obj, 'properties') and prop_name_str in obj.properties:
+            raise MOOException(MOOError.E_INVARG, f"Property {prop_name_str} already exists on #{obj_id}")
+
+        # Parse info [owner, perms]
+        if not isinstance(info, MOOList) or len(info.data) != 2:
+            raise MOOException(MOOError.E_INVARG, "info must be [owner, perms]")
+
+        owner = info.data[0]
+        perms = info.data[1]
+
+        # Convert owner to int
+        if isinstance(owner, ObjNum):
+            owner_id = owner.id
+        else:
+            owner_id = int(owner)
+
+        # Convert perms to string
+        if isinstance(perms, MOOString):
+            perms_str = str(perms)
+        else:
+            perms_str = str(perms)
+
+        # Create property
+        prop = Property(
+            propertyName=prop_name_str,
+            value=value,
+            owner=owner_id,
+            perms=perms_str
+        )
+
+        # Add to object
+        if not hasattr(obj, 'properties'):
+            obj.properties = {}
+        obj.properties[prop_name_str] = prop
+
+        return 0
+
+    def delete_property(self, obj: MooObject, prop_name: MOOString):
+        """Delete a property from an object.
+
+        Args:
+            obj: The object to delete property from
+            prop_name: Name of the property to delete
+        """
+        if not self.db:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        obj_id = obj.id
+        prop_name_str = str(prop_name)
+
+        # Check if property exists on THIS object (not inherited)
+        if not hasattr(obj, 'properties') or prop_name_str not in obj.properties:
+            raise MOOException(MOOError.E_PROPNF, f"Property {prop_name_str} not found on #{obj_id}")
+
+        # Delete property
+        del obj.properties[prop_name_str]
+
+        return 0
+
+    def set_property_info(self, obj: MooObject, prop_name: MOOString, info: MOOList):
+        """Set property info (owner and perms).
+
+        Args:
+            obj: The object
+            prop_name: Name of the property
+            info: [owner, perms] - owner is objnum, perms is string
+        """
+        if not self.db:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        obj_id = obj.id
+        prop_name_str = str(prop_name)
+
+        # Check if property exists on THIS object (not inherited)
+        if not hasattr(obj, 'properties') or prop_name_str not in obj.properties:
+            raise MOOException(MOOError.E_PROPNF, f"Property {prop_name_str} not found on #{obj_id}")
+
+        # Parse info [owner, perms]
+        if not isinstance(info, MOOList) or len(info.data) != 2:
+            raise MOOException(MOOError.E_INVARG, "info must be [owner, perms]")
+
+        owner = info.data[0]
+        perms = info.data[1]
+
+        # Convert owner to int
+        if isinstance(owner, ObjNum):
+            owner_id = owner.id
+        else:
+            owner_id = int(owner)
+
+        # Convert perms to string
+        if isinstance(perms, MOOString):
+            perms_str = str(perms)
+        else:
+            perms_str = str(perms)
+
+        # Update property info
+        prop = obj.properties[prop_name_str]
+        prop.owner = owner_id
+        prop.perms = perms_str
+
+        return 0
+
+    def is_clear_property(self, obj: MooObject, prop_name: MOOString):
+        """Check if a property is clear (not set on this object, inherited from parent).
+
+        Args:
+            obj: The object
+            prop_name: Name of the property
+
+        Returns:
+            1 if property is clear (inherited), 0 if set on this object
+        """
+        prop_name_str = str(prop_name)
+
+        # Check if property exists on THIS object (not inherited)
+        if hasattr(obj, 'properties') and prop_name_str in obj.properties:
+            return 0  # Not clear - defined on this object
+
+        # Check if it exists in inheritance chain
+        prop = self._get_prop_with_inheritance(obj, prop_name_str)
+        if prop is None:
+            raise MOOException(MOOError.E_PROPNF, f"Property {prop_name_str} not found")
+
+        return 1  # Clear - inherited from parent
+
+    def clear_property(self, obj: MooObject, prop_name: MOOString):
+        """Clear a property (remove it from this object, fall back to inherited value).
+
+        Args:
+            obj: The object
+            prop_name: Name of the property to clear
+        """
+        if not self.db:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        obj_id = obj.id
+        prop_name_str = str(prop_name)
+
+        # Check if property exists in inheritance chain
+        prop = self._get_prop_with_inheritance(obj, prop_name_str)
+        if prop is None:
+            raise MOOException(MOOError.E_PROPNF, f"Property {prop_name_str} not found")
+
+        # Check if property is on THIS object
+        if hasattr(obj, 'properties') and prop_name_str in obj.properties:
+            # Delete from this object - will fall back to inherited
+            del obj.properties[prop_name_str]
+
+        return 0
+
     # Miscellaneous functions
 
     def random(self, x: int):
