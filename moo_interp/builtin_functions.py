@@ -589,10 +589,12 @@ class BuiltinFunctions:
         # For rindex, offset is subtracted from the string length
         # offset=0 means search entire string
         # offset=-3 means search up to 3 characters before the end
-        if offset < 0:
-            search_str = s1[:len(s1) + offset]  # offset is negative, so this truncates from end
-        else:
-            search_str = s1
+        search_len = len(s1) + offset  # offset is <= 0
+        if search_len <= 0:
+            # If offset makes search length non-positive, no search possible
+            return 0
+
+        search_str = s1[:search_len]
 
         if not case_matters:
             search_str = search_str.lower()
