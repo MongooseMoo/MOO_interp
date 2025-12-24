@@ -275,6 +275,27 @@ class BuiltinFunctions:
         # TODO: Track actual caller permissions through the call stack
         return 0  # #0 is typically wizard
 
+    def task_perms(self):
+        """Return the object whose permissions are in effect for the current task.
+
+        This is the programmer identity for permission checks.
+        Returns:
+            Object ID of the current task's programmer
+        """
+        # TODO: Track actual task permissions through the VM
+        return 0  # #0 is typically wizard
+
+    def set_task_perms(self, who: int) -> None:
+        """Set the programmer identity for the current task.
+
+        This changes whose permissions are used for subsequent operations.
+        Args:
+            who: Object ID to set as the task's programmer
+        """
+        # TODO: Actually modify the VM's current frame programmer
+        # For now, just accept and ignore (allows code to proceed)
+        pass
+
     def sin(self, value):
         return math.sin(self.tofloat(value))
 
