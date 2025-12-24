@@ -1362,12 +1362,13 @@ class BuiltinFunctions:
     # =========================================================================
 
     def salt(self, method: MOOString = "SHA512", prefix: MOOString = "") -> MOOString:
-        """
-        if not HAS_CRYPT:
-            raise MOOError("E_PERM", "crypt module not available on this platform")
-        Generate a salt for use with crypt().
+        """Generate a salt for use with crypt().
+        
+        Raises E_PERM on Windows where crypt is not available.
         Methods: DES, MD5, SHA256, SHA512, BLOWFISH
         """
+        if not HAS_CRYPT:
+            raise MOOException(MOOError.E_PERM, "crypt module not available on this platform")
         method = str(method).upper()
         methods = {
             'DES': crypt.METHOD_CRYPT if hasattr(crypt, 'METHOD_CRYPT') else None,
@@ -1380,12 +1381,13 @@ class BuiltinFunctions:
         return MOOString(crypt.mksalt(m))
 
     def crypt(self, password: MOOString, salt: MOOString = None) -> MOOString:
-        """
-        if not HAS_CRYPT:
-            raise MOOError("E_PERM", "crypt module not available on this platform")
-        Hash a password using Unix crypt.
+        """Hash a password using Unix crypt.
+        
+        Raises E_PERM on Windows where crypt is not available.
         If salt is not provided, generates a SHA512 salt.
         """
+        if not HAS_CRYPT:
+            raise MOOException(MOOError.E_PERM, "crypt module not available on this platform")
         if salt is None:
             salt = self.salt()
         return MOOString(crypt.crypt(str(password), str(salt)))
