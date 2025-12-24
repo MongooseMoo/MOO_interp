@@ -426,11 +426,31 @@ class BuiltinFunctions:
     def chr(self, x):
         return self._chr(x)
 
-    def index(self, str1: MOOString, str2: MOOString):
-        return str1.find(str2)
+    def index(self, str1: MOOString, str2: MOOString, case_matters: int = 0):
+        """Return 1-based index of str2 in str1, or 0 if not found.
 
-    def rindex(self, str1: MOOString, str2: MOOString):
-        return str1.rfind(str2)
+        MOO index() returns 0 for not found, and 1-based positions.
+        """
+        s1 = str(str1)
+        s2 = str(str2)
+        if not case_matters:
+            s1 = s1.lower()
+            s2 = s2.lower()
+        pos = s1.find(s2)
+        return pos + 1 if pos >= 0 else 0
+
+    def rindex(self, str1: MOOString, str2: MOOString, case_matters: int = 0):
+        """Return 1-based index of last occurrence of str2 in str1, or 0 if not found.
+
+        MOO rindex() returns 0 for not found, and 1-based positions.
+        """
+        s1 = str(str1)
+        s2 = str(str2)
+        if not case_matters:
+            s1 = s1.lower()
+            s2 = s2.lower()
+        pos = s1.rfind(s2)
+        return pos + 1 if pos >= 0 else 0
 
     def strsub(self, str1: MOOString, str2: MOOString, str3: MOOString):
         return str1.replace(str2, str3)
