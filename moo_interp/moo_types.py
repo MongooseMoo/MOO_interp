@@ -35,9 +35,18 @@ def to_moo(py_obj: Union[str, int, float, bool, list, dict]) -> MOOAny:
 def is_truthy(value: MOOAny) -> bool:
     if isinstance(value, MOOString):
         return bool(value)
+    elif isinstance(value, str):
+        # Handle plain Python strings (should be MOOString but handle anyway)
+        return bool(value)
     elif isinstance(value, MOOList):
         return bool(value)
+    elif isinstance(value, list):
+        # Handle plain Python lists
+        return bool(value)
     elif isinstance(value, MOOMap):
+        return bool(value)
+    elif isinstance(value, dict):
+        # Handle plain Python dicts
         return bool(value)
     elif isinstance(value, bool):
         return value
