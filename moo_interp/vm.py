@@ -1199,11 +1199,15 @@ class VM:
 
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:
-        func_id = self.call_stack[-1].stack[self.call_stack[-1].ip].operand
+        frame = self.call_stack[-1]
+        instr = frame.stack[frame.ip]
+        func_id = instr.operand
         func = self.bi_funcs.get_function_by_id(func_id)
         if func is None:
             func_name = self.bi_funcs.get_function_name_by_id(func_id) if self.bi_funcs else None
-            raise VMError(f"Unknown built-in function id={func_id} name={func_name}")
+            # Debug info
+            verb_name = frame.verb_name if hasattr(frame, 'verb_name') else '<unknown>'
+            raise VMError(f"Unknown built-in function id={func_id} name={func_name} in verb={verb_name} ip={frame.ip} instr={instr}")
         try:
             result = func(*args._list)
         except Exception as e:
