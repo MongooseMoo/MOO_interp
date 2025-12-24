@@ -196,7 +196,9 @@ class BuiltinFunctions:
         return self.get_id_by_function(fn) if fn else None
 
     def to_string(self, value):
-        if isinstance(value, int):
+        if isinstance(value, ObjNum):
+            return "#" + str(value)
+        elif isinstance(value, int):
             return str(value)
         elif isinstance(value, MOOList):
             return "{list}"
@@ -206,8 +208,6 @@ class BuiltinFunctions:
             return str(value)
         elif isinstance(value, float):
             return str(value)
-        # elif isinstance(value, MOOObj):
-            # return "#" + str(value)
         elif isinstance(value, MOOError):
             return self.unparse_error(value)
         elif isinstance(value, bool):
@@ -702,6 +702,8 @@ class BuiltinFunctions:
             return MOOString("{" + ", ".join([str(self.toliteral(y)) for y in x]) + "}")
         elif isinstance(x, MOOMap):
             return MOOString("[" + ", ".join([self.toliteral(y) + ": " + self.toliteral(z) for y, z in x.items()]) + "]")
+        elif isinstance(x, ObjNum):
+            return MOOString("#" + str(x))
         elif isinstance(x, MooObject):
             return MOOString("#" + str(x))
         elif isinstance(x, bool):
