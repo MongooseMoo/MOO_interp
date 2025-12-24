@@ -1534,59 +1534,90 @@ class BuiltinFunctions:
             
         return 0
 
-    def create(self, parent, owner=None):
-        """Create a new object with the given parent.
+    def create(self, parent_or_parents, *args):
+        """Create a new object with the given parent(s).
 
-        create(parent [, owner]) => new object number
+        create(parent [, owner] [, anonymous] [, args]) => new object number
+        create([parents] [, owner] [, anonymous] [, args]) => new object number
 
-        Note: This is a simplified implementation that creates the object
-        but doesn't persist it. For testing purposes only.
+        Args:
+            parent_or_parents: OBJ or LIST of parent objects
+            owner (optional): OBJ - owner of new object (defaults to caller)
+            anonymous (optional): INT - 1 for anonymous object (not persisted)
+            args (optional): LIST - initialization arguments (not implemented yet)
         """
         if self.db is None:
             raise MOOException(MOOError.E_INVARG, "No database available")
 
-        # Get parent ID
-        if isinstance(parent, ObjNum):
-            parent_id = int(str(parent).lstrip('#'))
-        elif isinstance(parent, int):
-            parent_id = parent
+        # Parse parent(s) - first arg is always parent or list of parents
+        if isinstance(parent_or_parents, list):
+            # Multiple parents
+            parents = []
+            for p in parent_or_parents:
+                if isinstance(p, ObjNum):
+                    parents.append(int(str(p).lstrip('#')))
+                elif isinstance(p, int):
+                    parents.append(p)
+                else:
+                    raise MOOException(MOOError.E_TYPE, "create() requires object(s) as parent(s)")
+        elif isinstance(parent_or_parents, ObjNum):
+            parents = [int(str(parent_or_parents).lstrip('#'))]
+        elif isinstance(parent_or_parents, int):
+            parents = [parent_or_parents]
         else:
-            raise MOOException(MOOError.E_TYPE, "create() requires an object as parent")
+            raise MOOException(MOOError.E_TYPE, "create() requires object(s) as parent(s)")
 
-        # Validate parent exists - NOTHING (#-1) is always valid as a parent
-        if parent_id != -1 and parent_id not in self.db.objects:
-            raise MOOException(MOOError.E_INVARG, f"Invalid parent object: #{parent_id}")
+        # Parse optional arguments
+        owner = None
+        anonymous = False
+        init_args = None
 
-        # Determine owner (default to parent's owner or #2)
+        for arg in args:
+            if isinstance(arg, (ObjNum, int)) and owner is None:
+                # First OBJ after parents is owner
+                owner = int(str(arg).lstrip('#')) if isinstance(arg, ObjNum) else arg
+            elif isinstance(arg, int) and owner is not None and init_args is None:
+                # INT after owner is anonymous flag
+                anonymous = bool(arg)
+            elif isinstance(arg, int) and owner is None and init_args is None:
+                # INT as second arg (no owner specified) is anonymous flag
+                anonymous = bool(arg)
+            elif isinstance(arg, list):
+                # LIST is initialization arguments
+                init_args = arg
+            else:
+                raise MOOException(MOOError.E_TYPE, f"Invalid argument type in create(): {type(arg)}")
+
+        # Validate all parents exist (-1/NOTHING is always valid)
+        for parent_id in parents:
+            if parent_id != -1 and parent_id not in self.db.objects:
+                raise MOOException(MOOError.E_INVARG, f"Invalid parent object: #{parent_id}")
+
+        # Determine owner (default to first parent's owner or #2)
         if owner is None:
-            # Get parent object (None if parent is NOTHING)
+            parent_id = parents[0] if parents else -1
             parent_obj = None if parent_id == -1 else self.db.objects.get(parent_id)
-            owner_id = getattr(parent_obj, 'owner', 2) if parent_obj else 2
-        elif isinstance(owner, ObjNum):
-            owner_id = int(str(owner).lstrip('#'))
-        elif isinstance(owner, int):
-            owner_id = owner
-        else:
-            raise MOOException(MOOError.E_TYPE, "create() owner must be an object")
+            owner = getattr(parent_obj, 'owner', 2) if parent_obj else 2
 
         # Create new object - find next available ID
         new_id = max(self.db.objects.keys()) + 1 if self.db.objects else 0
 
         # Create minimal object using MooObject constructor
-        # Note: MooObject uses 'parents' (list) not 'parent' (single)
         new_obj = MooObject(
             id=new_id,
             name=MOOString(""),
             flags=0,
-            owner=owner_id,
+            owner=owner,
             location=-1,
-            parents=[parent_id],
+            parents=parents,
         )
 
-        # Add to database
-        self.db.objects[new_id] = new_obj
+        # Add to database (unless anonymous)
+        if not anonymous:
+            self.db.objects[new_id] = new_obj
 
         return ObjNum(new_id)
+
 
     def is_player(self, obj):
         """Check if an object is a player (has player flag set).
@@ -1611,6 +1642,40 @@ class BuiltinFunctions:
         # Check for player flag (bit 3 = 0x08 in flags field)
         flags = getattr(db_obj, 'flags', 0)
         return 1 if (flags & 0x08) else 0
+
+    def set_fertile_flag(self, obj, value):
+        """Set the fertile flag on an object.
+        
+        set_fertile_flag(obj, value) => 0
+        
+        The fertile flag determines if non-wizards can create children of this object.
+        """
+        if self.db is None:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+            
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "set_fertile_flag() requires an object")
+            
+        # Validate object exists
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+            
+        # Get object and update flags
+        moo_obj = self.db.objects[obj_id]
+        from lambdamoo_db.enums import ObjectFlags
+        
+        if value:
+            moo_obj.flags = ObjectFlags(moo_obj.flags) | ObjectFlags.FERTILE
+        else:
+            moo_obj.flags = ObjectFlags(moo_obj.flags) & ~ObjectFlags.FERTILE
+            
+        return 0
+
 
     def maphaskey(self, m: MOOMap, key, case_matters: int = 1) -> int:
         """Check if a map contains a key. Returns 1 if found, 0 otherwise."""
