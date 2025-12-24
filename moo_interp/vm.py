@@ -10,7 +10,7 @@ from attr import define, field
 from lambdamoo_db.database import MooDatabase
 
 from .builtin_functions import BuiltinFunctions
-from .errors import ERROR_CODES
+from .errors import ERROR_CODES, MOOException
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
@@ -285,7 +285,7 @@ class VM:
                 if instr.opcode != Opcode.OP_POP and handler is not None:
                     result = handler(*args)
 
-                    if handler.num_args and instr.opcode not in {Opcode.OP_PUSH,  Opcode.OP_IMM, }:
+                    if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE}:
                         del self.stack[-handler.num_args:]
             except (VMError, Exception) as e:
                 # Check for exception handlers
@@ -301,6 +301,18 @@ class VM:
 
     def _extract_error_type(self, e: Exception) -> str:
         """Extract the MOO error type from an exception."""
+        # Handle MOOException directly
+        if isinstance(e, MOOException):
+            error_code = e.error_code
+            if hasattr(error_code, 'name'):
+                return error_code.name
+            # Map error code numbers to names
+            error_names = {0: 'E_NONE', 1: 'E_TYPE', 2: 'E_DIV', 3: 'E_PERM',
+                           4: 'E_PROPNF', 5: 'E_VERBNF', 6: 'E_VARNF', 7: 'E_INVIND',
+                           8: 'E_RECMOVE', 9: 'E_MAXREC', 10: 'E_RANGE', 11: 'E_ARGS',
+                           12: 'E_NACC', 13: 'E_INVARG', 14: 'E_QUOTA', 15: 'E_FLOAT'}
+            return error_names.get(int(error_code), 'E_NONE')
+
         error_str = str(e)
         # Look for MOO error codes like E_DIV, E_TYPE, E_RANGE, etc.
         if 'E_DIV' in error_str or 'division' in error_str.lower() or 'by zero' in error_str.lower():
@@ -1251,6 +1263,9 @@ class VM:
             raise VMError(f"Unknown built-in function id={func_id} name={func_name} in verb={verb_name} ip={frame.ip} instr={instr}")
         try:
             result = func(*args._list)
+        except MOOException:
+            # Let MOOException propagate to be caught by MOO try/except handlers
+            raise
         except Exception as e:
             func_name = func.__name__
             tb = traceback.format_exc()
