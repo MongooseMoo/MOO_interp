@@ -1534,8 +1534,8 @@ class BuiltinFunctions:
         else:
             raise MOOException(MOOError.E_TYPE, "create() requires an object as parent")
 
-        # Validate parent exists
-        if parent_id not in self.db.objects:
+        # Validate parent exists - NOTHING (#-1) is always valid as a parent
+        if parent_id != -1 and parent_id not in self.db.objects:
             raise MOOException(MOOError.E_INVARG, f"Invalid parent object: #{parent_id}")
 
         # Determine owner (default to parent's owner or #2)
