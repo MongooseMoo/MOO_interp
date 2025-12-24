@@ -636,8 +636,8 @@ class VM:
 
     @operator(Opcode.OP_REF)
     def exec_ref(self, lst: Container, index: int) -> MOOAny:
-        # MOO uses 1-based indexing, Python uses 0-based
-        return lst[index - 1]
+        # MOOString and MOOList already handle 1-based indexing in __getitem__
+        return lst[index]
 
     @operator(Opcode.OP_PUSH_REF)
     def exec_push_ref(self, lst: Container, index: int) -> MOOAny:
