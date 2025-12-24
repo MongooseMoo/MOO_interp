@@ -690,7 +690,7 @@ class BuiltinFunctions:
         """Parse JSON string into MOO value.
 
         Args:
-            x: JSON string to parse
+            x: JSON string to parse (MOOString or str)
             mode: Optional mode - "common-subset" (default) or "embedded-types"
 
         Returns:
@@ -699,6 +699,11 @@ class BuiltinFunctions:
         # For now, both modes behave the same - just parse JSON
         # In full implementation, "embedded-types" would recognize type annotations
         # like {"_type": "OBJ", "value": 123} and convert to ObjNum(123)
+
+        # Convert MOOString to Python string if needed
+        if isinstance(x, MOOString):
+            x = x.data
+
         return to_moo(json.loads(x))
 
     def remove_ansi(self, input_string):
