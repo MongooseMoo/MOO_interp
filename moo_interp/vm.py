@@ -1338,15 +1338,40 @@ class VM:
 
     @operator(Opcode.OP_PUSH_GET_PROP)
     def exec_push_get_prop(self, obj_id: int, prop_name: MOOString) -> MOOAny:
-        """Get property value from object."""
+        """Get property value from object with inheritance."""
         obj = self.db.objects.get(obj_id)
         if obj is None:
             raise VMError(f"E_INVIND: Invalid object #{obj_id}")
-        # Search properties list for matching property name
+        
+        # Search properties list for matching property name (with inheritance)
         prop_name_str = str(prop_name)
-        for prop in obj.properties:
-            if prop.propertyName == prop_name_str:
-                return prop.value
+        current_obj = obj
+        visited = set()
+        
+        while current_obj is not None:
+            current_obj_id = getattr(current_obj, 'id', None)
+            if current_obj_id in visited:
+                break  # Prevent infinite loops
+            visited.add(current_obj_id)
+            
+            for prop in getattr(current_obj, 'properties', []):
+                if getattr(prop, 'propertyName', getattr(prop, 'name', '')) == prop_name_str:
+                    # Convert raw Python types to MOO types
+                    value = prop.value
+                    if isinstance(value, str) and not isinstance(value, MOOString):
+                        value = MOOString(value)
+                    elif isinstance(value, list) and not isinstance(value, MOOList):
+                        value = MOOList(value)
+                    elif isinstance(value, dict) and not isinstance(value, MOOMap):
+                        value = MOOMap(value)
+                    return value
+            
+            # Move to parent
+            parent_id = getattr(current_obj, 'parent', -1)
+            if parent_id < 0:
+                break
+            current_obj = self.db.objects.get(parent_id)
+        
         raise VMError(f"E_PROPNF: Property {prop_name} not found on #{obj_id}")
 
     @operator(Opcode.OP_BI_FUNC_CALL)

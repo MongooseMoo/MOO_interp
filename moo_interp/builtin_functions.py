@@ -1011,11 +1011,33 @@ class BuiltinFunctions:
 
     # property functions
 
+    def _get_prop_with_inheritance(self, obj: MooObject, prop_name: str):
+        """Helper to get property with inheritance."""
+        current_obj = obj
+        visited = set()
+        
+        while current_obj is not None:
+            obj_id = getattr(current_obj, 'id', None)
+            if obj_id in visited:
+                break  # Prevent infinite loops
+            visited.add(obj_id)
+            
+            for prop in getattr(current_obj, 'properties', []):
+                if getattr(prop, 'propertyName', getattr(prop, 'name', '')) == prop_name:
+                    return prop
+            
+            # Move to parent
+            parent_id = getattr(current_obj, 'parent', -1)
+            if parent_id < 0:
+                break
+            current_obj = self.db.objects.get(parent_id) if self.db else None
+        
+        return None
+
     def property_info(self, obj: MooObject, prop_name: MOOString):
-        prop = obj.get_prop(prop_name)
+        prop = self._get_prop_with_inheritance(obj, str(prop_name))
         if prop is None:
-            # need to raise E_PROPNF
-            raise RuntimeError(
+            raise MOOException(MOOError.E_PROPNF,
                 f"Property {prop_name} does not exist on object {obj.id}")
         return MOOList([prop.owner, prop.perms])
 
