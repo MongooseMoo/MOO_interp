@@ -18,7 +18,7 @@ import urllib.parse
 from logging import getLogger
 from typing import Union
 
-from lambdamoo_db.database import MooDatabase, MooObject
+from lambdamoo_db.database import MooDatabase, MooObject, ObjNum
 from .errors import MOOError
 from .list import MOOList
 from .map import MOOMap
@@ -703,6 +703,9 @@ class BuiltinFunctions:
         """Return the MOO type code for a value."""
         if isinstance(x, bool):
             return self.TYPE_BOOL
+        elif isinstance(x, ObjNum):
+            # ObjNum must be checked before int since it inherits from int
+            return self.TYPE_OBJ
         elif isinstance(x, int):
             return self.TYPE_INT
         elif isinstance(x, float):
