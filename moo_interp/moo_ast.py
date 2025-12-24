@@ -433,19 +433,31 @@ class _Assign(_Statement):
         if isinstance(self.target, Identifier):
             # Register variable with compiler state
             state.add_var(self.target.value)
-            return value_bc + [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value))]
+            # OP_PUT peeks (doesn't pop), so we need OP_POP after to clean up stack
+            return value_bc + [
+                Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value)),
+                Instruction(opcode=Opcode.OP_POP, operand=1)
+            ]
         elif isinstance(self.target, _Property):
             # OP_PUT_PROP expects stack: [obj, propname, value] with value on top
             # C code: rhs = POP(); propname = POP(); obj = POP();
             obj_bc = self.target.object.to_bytecode(state, program)
             name_bc = self.target.name.to_bytecode(state, program)
-            return obj_bc + name_bc + value_bc + [Instruction(opcode=Opcode.OP_PUT_PROP)]
+            # OP_PUT_PROP pops all 3 and pushes result, so we need OP_POP after
+            return obj_bc + name_bc + value_bc + [
+                Instruction(opcode=Opcode.OP_PUT_PROP),
+                Instruction(opcode=Opcode.OP_POP, operand=1)
+            ]
         elif isinstance(self.target, _Index):
             # Indexed assignment: obj[index] = value
             # Stack: push obj, push index, push value, then INDEXSET
             obj_bc = self.target.object.to_bytecode(state, program)
             index_bc = self.target.index.to_bytecode(state, program)
-            return obj_bc + index_bc + value_bc + [Instruction(opcode=Opcode.OP_INDEXSET)]
+            # INDEXSET pops 3, pushes result, so we need OP_POP after
+            return obj_bc + index_bc + value_bc + [
+                Instruction(opcode=Opcode.OP_INDEXSET),
+                Instruction(opcode=Opcode.OP_POP, operand=1)
+            ]
         elif isinstance(self.target, _List):
             # Destructuring assignment: {a, b, c} = list
             # Build scatter pattern from list items
