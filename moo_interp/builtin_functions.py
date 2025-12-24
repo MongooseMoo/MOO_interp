@@ -645,6 +645,31 @@ class BuiltinFunctions:
         else:
             return base64.b64decode(x)
 
+    def _moo_to_python(self, value):
+        """Convert MOO types to native Python for JSON serialization."""
+        # Handle MOOString - has .value attribute
+        if isinstance(value, MOOString):
+            return value.value
+
+        # Handle MOOList - iterate and convert elements
+        elif isinstance(value, MOOList):
+            return [self._moo_to_python(v) for v in value]
+
+        # Handle MOOMap - convert keys and values
+        elif isinstance(value, MOOMap):
+            return {self._moo_to_python(k): self._moo_to_python(v) for k, v in value.items()}
+
+        # Handle ObjNum - convert to integer
+        elif isinstance(value, ObjNum):
+            return int(value)
+
+        # Handle MOOError/MOOException - convert to string
+        elif isinstance(value, (MOOError, MOOException)):
+            return str(value)
+
+        # Pass through native Python types (int, float, str, bool, None)
+        return value
+
     def generate_json(self, x, mode: MOOString = None):
         """Generate JSON from a MOO value.
 
@@ -658,7 +683,8 @@ class BuiltinFunctions:
         # For now, both modes behave the same - just convert to JSON
         # In full implementation, "embedded-types" would include type annotations
         # like {"_type": "OBJ", "value": 123}
-        return MOOString(json.dumps(x))
+        native = self._moo_to_python(x)
+        return MOOString(json.dumps(native))
 
     def parse_json(self, x, mode: MOOString = None):
         """Parse JSON string into MOO value.
