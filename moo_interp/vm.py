@@ -1259,17 +1259,28 @@ class VM:
 
     @operator(Opcode.OP_INDEXSET)
     def exec_indexset(self, container: MOOAny, index: MOOAny, value: MOOAny) -> MOOAny:
-        """Set container[index] = value. Works for lists and maps."""
+        """Set container[index] = value. Works for lists and maps.
+
+        Returns the modified container (which may be a shallow copy if refcount > 1).
+        """
         if isinstance(container, MOOList):
+            # Copy-on-write: if refcount > 1, make shallow copy before modifying
+            if container.refcount() > 1:
+                container = container.shallow_copy()
             # MOO lists are 1-indexed
             container[index] = value
+            return container
         elif isinstance(container, MOOMap):
+            # Copy-on-write: if refcount > 1, make shallow copy before modifying
+            if container.refcount() > 1:
+                container = container.shallow_copy()
             container[index] = value
+            return container
         elif isinstance(container, MOOString):
             container[index] = value
+            return container
         else:
             raise VMError(f"E_TYPE: indexset requires list, map, or string, got {type(container)}")
-        return value
 
     @operator(Opcode.OP_G_PUSH)
     def exec_g_push(self) -> MOOAny:

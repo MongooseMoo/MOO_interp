@@ -1,5 +1,6 @@
 from collections.abc import MutableSequence
 from typing import Iterable
+import sys
 
 from attr import define, field
 
@@ -7,6 +8,7 @@ from attr import define, field
 @define(repr=False)
 class MOOList(MutableSequence):
     _list = field(factory=list)
+    _refcount = field(default=1, init=False)
 
     def __init__(self, *args):
         # Handle both MOOList([1,2,3]) and MOOList(1,2,3) patterns
@@ -16,6 +18,8 @@ class MOOList(MutableSequence):
         else:
             # Multiple arguments - wrap in list
             self._list = list(args)
+        # Initialize refcount (attrs won't set it automatically due to init=False)
+        self._refcount = 1
 
     def __getitem__(self, index):
         return self._list[index - 1]
@@ -48,3 +52,18 @@ class MOOList(MutableSequence):
         # Override default MutableSequence iteration which uses 0-based __getitem__
         # MOOList uses 1-based indexing internally, so iterate over _list directly
         return iter(self._list)
+
+    def refcount(self):
+        """Return the reference count of this MOOList."""
+        return sys.getrefcount(self) - 1  # -1 to account for the call itself
+
+    def shallow_copy(self):
+        """Create a shallow copy for copy-on-write.
+
+        Creates a new MOOList with a new _list container, but elements
+        are not recursively copied (they remain as references).
+        """
+        new_list = MOOList.__new__(MOOList)
+        new_list._list = self._list.copy()  # Shallow copy of the list
+        new_list._refcount = 1
+        return new_list
