@@ -22,11 +22,13 @@ class CompilerState:
     last_label = 0
     bi_funcs = None  # Optional BuiltinFunctions instance for compilation
     var_names: List[MOOString] = None  # Track local variable names
+    indexed_object = None  # Track the object being indexed for $ references
 
     def __init__(self, bi_funcs=None):
         self.bi_funcs = bi_funcs
         self.last_label = 0
         self.var_names = []
+        self.indexed_object = None
 
     def next_label(self):
         self.last_label += 1
@@ -713,9 +715,15 @@ class _FirstIndex(_Expression):
 class _LastIndex(_Expression):
     """Represents $ (last element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
     def to_bytecode(self, state: CompilerState, program: Program):
-        # This needs special handling - $ means length of the indexed object
-        # For now, return a placeholder
-        return [self.emit_extended_byte(Extended_Opcode.EOP_LENGTH)]
+        # $ means length of the currently indexed object
+        if state.indexed_object is not None:
+            # Emit bytecode to push the indexed object and get its length
+            result = state.indexed_object.to_bytecode(state, program)
+            result += [self.emit_extended_byte(Extended_Opcode.EOP_LENGTH)]
+            return result
+        else:
+            # Fallback - get length of top of stack (legacy behavior)
+            return [self.emit_extended_byte(Extended_Opcode.EOP_LENGTH)]
 
     def to_moo(self) -> str:
         return "$"
@@ -729,7 +737,11 @@ class _Index(_Expression):
 
     def to_bytecode(self, state: CompilerState, program: Program):
         result = self.object.to_bytecode(state, program)
+        # Set indexed_object context so $ knows which object to reference
+        old_indexed = state.indexed_object
+        state.indexed_object = self.object
         result += self.index.to_bytecode(state, program)
+        state.indexed_object = old_indexed
         result += [self.emit_byte(Opcode.OP_REF)]
         return result
 
@@ -746,8 +758,12 @@ class _Range(_Expression):
 
     def to_bytecode(self, state: CompilerState, program: Program):
         result = self.object.to_bytecode(state, program)
+        # Set indexed_object context so $ knows which object to reference
+        old_indexed = state.indexed_object
+        state.indexed_object = self.object
         result += self.start.to_bytecode(state, program)
         result += self.end.to_bytecode(state, program)
+        state.indexed_object = old_indexed
         result += [self.emit_byte(Opcode.OP_RANGE_REF)]
         return result
 
@@ -1060,6 +1076,10 @@ class ToAst(Transformer):
         return _FirstIndex()
 
     def last_index(self, args):
+        return _LastIndex()
+
+    def dollar(self, args):
+        """Handle $ in expression context (e.g., inside function calls like min($, 3))."""
         return _LastIndex()
 
     def unary_expression(self, args):
