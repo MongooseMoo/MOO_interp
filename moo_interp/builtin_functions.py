@@ -499,10 +499,10 @@ class BuiltinFunctions:
             raise (TypeError, "Unknown type: " + str(type(x)))
 
     def mapkeys(self, x):
-        return MOOList(x.keys())
+        return MOOList(list(x.keys()))
 
     def mapvalues(self, x):
-        return MOOList(x.values())
+        return MOOList(list(x.values()))
 
     def mapdelete(self, x, y):
         """Delete key y from map x."""
