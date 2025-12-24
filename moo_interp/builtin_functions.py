@@ -95,13 +95,11 @@ class BuiltinFunctions:
                 self(attr)
 
         # Register aliases (raise is a Python keyword, so we use raise_error internally)
+        # The alias 'raise' should map to the same function object and ID as 'raise_error'
         if 'raise_error' in self.functions:
             func = self.functions['raise_error']
-            func_id = self.function_to_id.get(func)
             self.functions['raise'] = func
-            if func_id is not None:
-                # Point 'raise' to the same ID
-                pass  # ID lookup uses get_id_by_name which checks self.functions
+            # Both names now point to the same function, so get_id_by_name will return the same ID
 
     def __call__(self, fn):
         if self.current_id > 255:
@@ -1028,6 +1026,165 @@ class BuiltinFunctions:
             return int(x)
         else:
             return -1
+
+    # =========================================================================
+    # Object manipulation builtins
+    # =========================================================================
+
+    def parent(self, obj):
+        """Return the parent of an object.
+
+        parent(obj) => objnum or E_INVARG
+        """
+        if self.db is None:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "parent() requires an object")
+
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        db_obj = self.db.objects[obj_id]
+        parent_id = getattr(db_obj, 'parent', -1)
+        if parent_id is None:
+            parent_id = -1
+        return ObjNum(parent_id)
+
+    def children(self, obj):
+        """Return the list of children of an object.
+
+        children(obj) => list of objnums
+        """
+        if self.db is None:
+            return MOOList([])
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "children() requires an object")
+
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        # Find all objects that have this object as parent
+        children = []
+        for oid, obj in self.db.objects.items():
+            parent_id = getattr(obj, 'parent', -1)
+            if parent_id == obj_id:
+                children.append(ObjNum(oid))
+
+        return MOOList(children)
+
+    def valid(self, obj):
+        """Check if an object exists in the database.
+
+        valid(obj) => 1 if valid, 0 otherwise
+        """
+        if self.db is None:
+            return 0
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            return 0  # Non-object types are not valid objects
+
+        return 1 if obj_id in self.db.objects else 0
+
+    def create(self, parent, owner=None):
+        """Create a new object with the given parent.
+
+        create(parent [, owner]) => new object number
+
+        Note: This is a simplified implementation that creates the object
+        but doesn't persist it. For testing purposes only.
+        """
+        if self.db is None:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        # Get parent ID
+        if isinstance(parent, ObjNum):
+            parent_id = int(str(parent).lstrip('#'))
+        elif isinstance(parent, int):
+            parent_id = parent
+        else:
+            raise MOOException(MOOError.E_TYPE, "create() requires an object as parent")
+
+        # Validate parent exists
+        if parent_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid parent object: #{parent_id}")
+
+        # Determine owner (default to parent's owner or #2)
+        if owner is None:
+            parent_obj = self.db.objects[parent_id]
+            owner_id = getattr(parent_obj, 'owner', 2)
+        elif isinstance(owner, ObjNum):
+            owner_id = int(str(owner).lstrip('#'))
+        elif isinstance(owner, int):
+            owner_id = owner
+        else:
+            raise MOOException(MOOError.E_TYPE, "create() owner must be an object")
+
+        # Create new object - find next available ID
+        new_id = max(self.db.objects.keys()) + 1 if self.db.objects else 0
+
+        # Create minimal object
+        new_obj = MooObject(
+            id=new_id,
+            owner=owner_id,
+            parent=parent_id,
+            name=MOOString(""),
+            location=-1,
+            contents=[],
+            programmer=0,
+            wizard=0,
+            r=0,
+            w=0,
+            f=0,
+            flags=0,
+            verbs=[],
+            propvals={},
+        )
+
+        # Add to database
+        self.db.objects[new_id] = new_obj
+
+        return ObjNum(new_id)
+
+    def is_player(self, obj):
+        """Check if an object is a player (has player flag set).
+
+        is_player(obj) => 1 if player, 0 otherwise
+        """
+        if self.db is None:
+            return 0
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            return 0
+
+        if obj_id not in self.db.objects:
+            return 0
+
+        db_obj = self.db.objects[obj_id]
+        # Check for player flag (bit 3 = 0x08 in flags field)
+        flags = getattr(db_obj, 'flags', 0)
+        return 1 if (flags & 0x08) else 0
 
     def maphaskey(self, m: MOOMap, key, case_matters: int = 1) -> int:
         """Check if a map contains a key. Returns 1 if found, 0 otherwise."""
