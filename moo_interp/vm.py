@@ -802,11 +802,18 @@ class VM:
             # Import here to avoid circular dependency
             from .moo_ast import parse, compile as compile_moo
 
+            # MOO context variable names - pre-register at indices 0-10
+            context_vars = [
+                "player", "this", "caller", "verb", "args", "argstr",
+                "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
+            ]
+
             try:
                 code_str = "\n".join(verb.code)
                 ast = parse(code_str)
                 # Use the VM's bi_funcs instance for consistent builtin IDs
-                compiled_frame = compile_moo(ast, bi_funcs=self.bi_funcs)
+                # Pass context_vars so they get pre-registered with stable indices
+                compiled_frame = compile_moo(ast, bi_funcs=self.bi_funcs, context_vars=context_vars)
                 bytecode = compiled_frame.stack
             except Exception as e:
                 raise VMError(f"OP_CALL_VERB: failed to compile verb '{verb_name}': {e}")
@@ -816,40 +823,16 @@ class VM:
         player_id = caller_frame.player if caller_frame else 0
         caller_id = caller_frame.this if caller_frame else 0
 
-        # Context variables that MOO verbs have access to
-        context_var_names = [
-            MOOString("player"), MOOString("this"), MOOString("caller"),
-            MOOString("verb"), MOOString("args"), MOOString("argstr"),
-            MOOString("dobj"), MOOString("dobjstr"), MOOString("iobj"),
-            MOOString("iobjstr"), MOOString("prepstr"),
-        ]
-
-        # Get the compiled verb's var_names, or empty if pre-compiled
+        # Get the compiled verb's var_names and rt_env (context vars already at 0-10)
         verb_var_names = compiled_frame.prog.var_names if compiled_frame else []
-        verb_rt_env = compiled_frame.rt_env if compiled_frame else []
-
-        # Context variable values
-        argstr = " ".join(str(a) for a in args._list) if args._list else ""
-        context_rt_env = [
-            player_id,  # player
-            obj_id,     # this
-            caller_id,  # caller
-            MOOString(str(verb_name)),  # verb
-            args,       # args
-            MOOString(argstr),  # argstr
-            -1,         # dobj (default: nothing)
-            MOOString(""),  # dobjstr
-            -1,         # iobj (default: nothing)
-            MOOString(""),  # iobjstr
-            MOOString(""),  # prepstr
-        ]
+        verb_rt_env = compiled_frame.rt_env if compiled_frame else [0] * 11  # Space for context
 
         # Create new stack frame for the verb
         # stack_base: VM stack position after CALL_VERB args are popped
         # The 3 args (obj_id, verb_name, args) will be deleted after this handler returns
         new_frame = StackFrame(
             func_id=verb.object,
-            prog=Program(var_names=context_var_names + verb_var_names),
+            prog=Program(var_names=verb_var_names),  # Already has context vars at 0-10
             ip=0,
             stack=bytecode,
             this=obj_id,
@@ -859,8 +842,20 @@ class VM:
             stack_base=len(self.stack) - 3,  # Position after args removed
         )
 
-        # Set up runtime environment - context vars first, then verb-local vars
-        new_frame.rt_env = context_rt_env + verb_rt_env
+        # Set up runtime environment - context vars at indices 0-10
+        new_frame.rt_env = list(verb_rt_env)  # Copy to avoid mutation
+        argstr = " ".join(str(a) for a in args._list) if args._list else ""
+        new_frame.rt_env[0] = player_id              # player
+        new_frame.rt_env[1] = obj_id                 # this
+        new_frame.rt_env[2] = caller_id              # caller
+        new_frame.rt_env[3] = MOOString(str(verb_name))  # verb
+        new_frame.rt_env[4] = args                   # args
+        new_frame.rt_env[5] = MOOString(argstr)      # argstr
+        new_frame.rt_env[6] = -1                     # dobj
+        new_frame.rt_env[7] = MOOString("")          # dobjstr
+        new_frame.rt_env[8] = -1                     # iobj
+        new_frame.rt_env[9] = MOOString("")          # iobjstr
+        new_frame.rt_env[10] = MOOString("")         # prepstr
 
         # Push the new frame onto the call stack
         self.call_stack.append(new_frame)
