@@ -511,7 +511,11 @@ class VM:
     @operator(Opcode.OP_DIV)
     def exec_divide(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
         try:
-            return op1 / op2
+            # MOO semantics: integer / integer = integer (truncate toward zero)
+            if isinstance(op1, int) and isinstance(op2, int):
+                return op1 // op2  # Integer division
+            else:
+                return op1 / op2  # Float division
         except ZeroDivisionError:
             raise VMError("Division by zero")
 
