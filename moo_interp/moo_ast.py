@@ -370,19 +370,24 @@ class _Assign(_Statement):
             return obj_bc + index_bc + value_bc + [Instruction(opcode=Opcode.OP_INDEXSET)]
         elif isinstance(self.target, _List):
             # Destructuring assignment: {a, b, c} = list
-            # Register all variables in the list
-            result = value_bc
-            for i, item in enumerate(self.target.value):
+            # Build scatter pattern from list items
+            scatter_pattern = []
+            for item in self.target.value:
                 if isinstance(item, Identifier):
                     state.add_var(item.value)
-                    # For each element: duplicate list, get index, store to var
-                    # We need OP_SCATTER for proper MOO-style destructuring
-                    # For now, simple approach: assume list matches
-                    result += [
-                        Instruction(opcode=Opcode.OP_IMM, operand=i + 1),  # 1-based index
-                        Instruction(opcode=Opcode.OP_REF),  # Get list[i]
-                        Instruction(opcode=Opcode.OP_PUT, operand=MOOString(item.value)),
-                    ]
+                    scatter_pattern.append((item.value, False, False, None))
+                elif isinstance(item, Splicer) and isinstance(item.expression, Identifier):
+                    # @rest - rest variable
+                    state.add_var(item.expression.value)
+                    scatter_pattern.append((item.expression.value, False, True, None))
+                # TODO: Handle optional with defaults (?var = default)
+
+            result = value_bc
+            result.append(Instruction(
+                opcode=Opcode.OP_EXTENDED,
+                operand=Extended_Opcode.EOP_SCATTER.value,
+                scatter_pattern=scatter_pattern
+            ))
             return result
         else:
             # Unknown target type - return empty (will cause error)
@@ -585,6 +590,71 @@ class ForStatement(_Statement):
 
     def to_moo(self) -> str:
         return f"{self.condition.to_moo()}\n{self.body.to_moo()}\nendfor\n"
+
+
+@dataclass
+class _ScatterItem(_AstNode):
+    """Single item in a scatter pattern.
+
+    Types:
+    - required: var_name, is_optional=False, is_rest=False, default=None
+    - optional: var_name, is_optional=True, is_rest=False, default=expression
+    - rest: var_name, is_optional=False, is_rest=True, default=None
+    """
+    var_name: str
+    is_optional: bool = False
+    is_rest: bool = False
+    default: Optional[_Expression] = None
+
+    def to_moo(self) -> str:
+        if self.is_rest:
+            return f"@{self.var_name}"
+        elif self.is_optional:
+            if self.default:
+                return f"?{self.var_name} = {self.default.to_moo()}"
+            return f"?{self.var_name}"
+        return self.var_name
+
+
+@dataclass
+class _ScatterTarget(_AstNode):
+    """List of items to scatter into: {a, ?b, @rest}."""
+    items: List[_ScatterItem]
+
+    def to_moo(self) -> str:
+        return "{" + ", ".join(item.to_moo() for item in self.items) + "}"
+
+
+@dataclass
+class _ScatterAssignment(_Statement):
+    """Scatter assignment: {a, ?b, @rest} = expr."""
+    target: _ScatterTarget
+    value: _Expression
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # Register all variables first
+        for item in self.target.items:
+            state.add_var(item.var_name)
+
+        # Build scatter pattern: [(var_name, is_optional, is_rest, default_bc)]
+        scatter_pattern = []
+        for item in self.target.items:
+            default_bc = item.default.to_bytecode(state, program) if item.default else None
+            scatter_pattern.append((item.var_name, item.is_optional, item.is_rest, default_bc))
+
+        # Compile value expression
+        result = self.value.to_bytecode(state, program)
+
+        # Emit scatter instruction with pattern
+        result.append(Instruction(
+            opcode=Opcode.OP_EXTENDED,
+            operand=Extended_Opcode.EOP_SCATTER.value,
+            scatter_pattern=scatter_pattern
+        ))
+        return result
+
+    def to_moo(self) -> str:
+        return f"{self.target.to_moo()} = {self.value.to_moo()}"
 
 
 @dataclass
@@ -1128,6 +1198,72 @@ class ToAst(Transformer):
         default = args[2] if len(args) > 2 else None
 
         return _Catch(expr=expr, codes=codes, default=default)
+
+    def scatter(self, args):
+        """scatter: "{" scattering_target "}" "=" expression."""
+        # args = [scattering_target_tree, expression]
+        target_tree = args[0]
+        value_expr = args[1]
+
+        # Parse target_tree into _ScatterTarget
+        if isinstance(target_tree, _ScatterTarget):
+            target = target_tree
+        else:
+            # Should be a Tree - transform its items
+            items = []
+            for item in target_tree.children:
+                items.append(self.scattering_target_item([item] if not hasattr(item, 'children') else item.children))
+            target = _ScatterTarget(items=items)
+
+        return _ScatterAssignment(target=target, value=value_expr)
+
+    def scattering_target(self, args):
+        """scattering_target: scattering_target_item ("," scattering_target_item)*."""
+        items = []
+        for arg in args:
+            if isinstance(arg, _ScatterItem):
+                items.append(arg)
+            elif hasattr(arg, 'children'):
+                # Tree node - transform it
+                items.append(self.scattering_target_item(arg.children))
+            else:
+                # Token - it's an identifier
+                items.append(_ScatterItem(var_name=str(arg), is_optional=False, is_rest=False))
+        return _ScatterTarget(items=items)
+
+    def scattering_target_item(self, args):
+        """scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDENTIFIER."""
+        if not args:
+            return _ScatterItem(var_name="", is_optional=False, is_rest=False)
+
+        def get_var_name(arg):
+            """Extract variable name from Token or Identifier."""
+            if isinstance(arg, Identifier):
+                return arg.value
+            elif hasattr(arg, 'value'):
+                return str(arg.value)
+            else:
+                return str(arg)
+
+        first = args[0]
+        # Get string representation for type check
+        first_str = str(first.type) if hasattr(first, 'type') else get_var_name(first)
+
+        if first_str == "QMARK" or (hasattr(first, '__str__') and str(first) == "?"):
+            # Optional: QMARK IDENTIFIER [EQUALS expression]
+            # args[0] = QMARK, args[1] = IDENTIFIER, args[2] = EQUALS (if present), args[3] = expression (if present)
+            var_name = get_var_name(args[1]) if len(args) > 1 else ""
+            # Skip EQUALS token (args[2]) and get the default expression (args[3])
+            default = args[3] if len(args) > 3 else None
+            return _ScatterItem(var_name=var_name, is_optional=True, is_rest=False, default=default)
+        elif first_str == "AT" or (hasattr(first, '__str__') and str(first) == "@"):
+            # Rest: @IDENTIFIER
+            var_name = get_var_name(args[1]) if len(args) > 1 else ""
+            return _ScatterItem(var_name=var_name, is_optional=False, is_rest=True)
+        else:
+            # Required: IDENTIFIER
+            var_name = get_var_name(first)
+            return _ScatterItem(var_name=var_name, is_optional=False, is_rest=False)
 
     def try_except_statement(self, args):
         # args = [statement*, except_statement+]

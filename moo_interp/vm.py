@@ -1104,10 +1104,11 @@ class VM:
 
     @operator(Extended_Opcode.EOP_SCATTER)
     def exec_scatter(self, source_list: MOOList) -> MOOList:
-        """Scatter assignment: {a, b, ?c, @rest} = list.
+        """Scatter assignment: {a, b, ?c = default, @rest} = list.
 
         Reads scatter_pattern from instruction to determine variable assignments.
-        Pattern format: list of (var_name, is_rest) tuples
+        Pattern format: list of (var_name, is_optional, is_rest, default_bc) tuples
+        Legacy format: list of (var_name, is_rest) tuples - for backwards compat
         """
         frame = self.current_frame
         instr = frame.current_instruction
@@ -1115,29 +1116,58 @@ class VM:
 
         if pattern is None:
             # Fallback: scatter to all var_names in order
-            pattern = [(str(name), False) for name in frame.prog.var_names]
+            pattern = [(str(name), False, False, None) for name in frame.prog.var_names]
 
         list_items = list(source_list._list) if hasattr(source_list, '_list') else list(source_list)
         list_idx = 0
 
-        for var_name, is_rest in pattern:
+        for item in pattern:
+            # Support both formats
+            if len(item) == 2:
+                # Legacy: (var_name, is_rest)
+                var_name, is_rest = item
+                is_optional = False
+                default_bc = None
+            else:
+                # New: (var_name, is_optional, is_rest, default_bc)
+                var_name, is_optional, is_rest, default_bc = item
+
             var_name_moo = MOOString(var_name)
             if var_name_moo not in frame.prog.var_names:
                 frame.prog.var_names.append(var_name_moo)
-                frame.rt_env.append(None)
+                frame.rt_env.append(0)  # Default to 0 for new vars
             var_index = frame.prog.var_names.index(var_name_moo)
 
             if is_rest:
                 # Rest parameter gets remaining elements as a list
                 frame.rt_env[var_index] = MOOList(*list_items[list_idx:])
                 list_idx = len(list_items)
-            else:
-                # Regular parameter gets single element
-                if list_idx < len(list_items):
-                    frame.rt_env[var_index] = list_items[list_idx]
-                    list_idx += 1
+            elif list_idx < len(list_items):
+                # Have a value - use it
+                frame.rt_env[var_index] = list_items[list_idx]
+                list_idx += 1
+            elif is_optional:
+                # No value but optional - use default
+                if default_bc:
+                    # Execute default bytecode to get value
+                    # For simplicity, we'll evaluate constants directly
+                    # Default is typically a simple literal
+                    if default_bc and len(default_bc) == 1:
+                        default_instr = default_bc[0]
+                        # Handle short integer format: opcode 113+n means push n
+                        if isinstance(default_instr.opcode, int) and 113 <= default_instr.opcode < 369:
+                            frame.rt_env[var_index] = default_instr.opcode - 113
+                        elif default_instr.opcode == Opcode.OP_IMM and default_instr.operand is not None:
+                            frame.rt_env[var_index] = default_instr.operand
+                        else:
+                            frame.rt_env[var_index] = 0
+                    else:
+                        frame.rt_env[var_index] = 0
                 else:
-                    frame.rt_env[var_index] = None  # Not enough elements
+                    frame.rt_env[var_index] = 0  # MOO default for optional
+            else:
+                # Required but not enough elements - error
+                raise VMError(f"E_ARGS: Not enough elements in list for scatter")
 
         return source_list
 

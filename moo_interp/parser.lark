@@ -192,7 +192,10 @@ call_arguments: (expression ("," expression)*)?
 
 scattering_target: scattering_target_item ("," scattering_target_item)*
 
-scattering_target_item: IDENTIFIER | "?" IDENTIFIER ("=" expression)? | "@" IDENTIFIER
+scattering_target_item: IDENTIFIER | QMARK IDENTIFIER (EQUALS expression)? | AT IDENTIFIER
+QMARK: "?"
+AT: "@"
+EQUALS: "="
 
 _SEMI: ";"
 IDENTIFIER: (("_"|LETTER) ("_"|LETTER|DIGIT)*)
