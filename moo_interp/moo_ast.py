@@ -1486,12 +1486,16 @@ def parse(text):
 #
 
 
-def compile(tree, bi_funcs=None):
+def compile(tree, bi_funcs=None, context_vars=None):
     """Compile MOO code to bytecode.
 
     Args:
         tree: AST tree, string, or list of strings to compile
         bi_funcs: Optional BuiltinFunctions instance to use for builtin lookups
+        context_vars: Optional list of context variable names to pre-register.
+                     These are registered FIRST so they get stable indices.
+                     MOO context vars: player, this, caller, verb, args, argstr,
+                                      dobj, dobjstr, prepstr, iobj, iobjstr
 
     Returns:
         StackFrame ready for execution
@@ -1502,6 +1506,13 @@ def compile(tree, bi_funcs=None):
         tree = parse(tree)
     bc = []
     state = CompilerState(bi_funcs=bi_funcs)
+
+    # Pre-register context variables BEFORE compiling code
+    # This ensures they get stable indices (0-10 for standard MOO context)
+    if context_vars:
+        for var_name in context_vars:
+            state.add_var(var_name)
+
     for node in tree.children:
         bc += node.to_bytecode(state, None)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
