@@ -1019,3 +1019,39 @@ class BuiltinFunctions:
         if salt is None:
             salt = self.salt()
         return MOOString(crypt.crypt(str(password), str(salt)))
+
+    # =========================================================================
+    # ToastStunt networking builtins
+    # =========================================================================
+
+    def connection_name_lookup(self, connection: int, do_lookup: int = 0) -> MOOString:
+        """Perform DNS lookup on connection.
+
+        ToastStunt builtin that initiates or returns DNS lookup for a connection.
+        In our stub implementation, we return the connection's hostname directly.
+        """
+        # Stub - in real server this would do async DNS lookup
+        # For now just return a placeholder
+        return MOOString(f"connection_{connection}")
+
+    def connection_name(self, connection: int, name_lookup: int = 0) -> MOOString:
+        """Get the hostname of a connection.
+
+        ToastStunt builtin that returns hostname for connection.
+        """
+        return MOOString(f"connection_{connection}")
+
+    def buffered_output_length(self, connection: int = None) -> int:
+        """Return the amount of output currently buffered for a connection.
+
+        If connection is not provided, returns total for all connections.
+        """
+        return 0  # Stub
+
+    def connection_option(self, connection: int, option: MOOString) -> int:
+        """Get connection option value."""
+        return 0  # Stub
+
+    def set_connection_option(self, connection: int, option: MOOString, value) -> int:
+        """Set connection option value."""
+        return 0  # Stub
