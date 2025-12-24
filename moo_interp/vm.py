@@ -295,6 +295,10 @@ class VM:
                 error_type = self._extract_error_type(e)
                 if self._handle_exception(error_type, e):
                     return  # Exception was handled, continue execution
+                # If it's a MOOException and not handled, re-raise it directly
+                # so the error code is preserved
+                if isinstance(e, MOOException):
+                    raise
                 raise VMError(f"Error executing opcode: {e}")
 
         # Push result if we have one (either from handler or from int opcode)
