@@ -518,10 +518,6 @@ class MooDebugger:
             'error': error_msg,
         }
 
-
-# Re-export for backwards compatibility
-__all__ = ['MooDebugger', 'DebugPlugin', 'BreakpointPlugin', 'CallTracePlugin', 'BuiltinTracePlugin', 'VariableWatchPlugin']
-
     def get_matched_condition(self) -> Optional[Dict[str, Any]]:
         """Get information about the last matched conditional breakpoint.
 
@@ -533,3 +529,5 @@ __all__ = ['MooDebugger', 'DebugPlugin', 'BreakpointPlugin', 'CallTracePlugin', 
         return None
 
 
+# Re-export for backwards compatibility
+__all__ = ['MooDebugger', 'DebugPlugin', 'BreakpointPlugin', 'CallTracePlugin']
