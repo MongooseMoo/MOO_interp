@@ -672,12 +672,16 @@ class VM:
 
         This is used for nested assignments like x[1][1] = value.
         Stack before: [..., container, index]
-        Stack after: [..., container_copy, element]
+        Stack after: [..., container_copy, index, element]
+
+        The net effect is +1 items on stack (pop 2, push 3).
+        This keeps the container and index on stack for the chain of OP_INDEXSET
+        that will work back through the nested assignment.
 
         If container has refcount > 1, it's copied before indexing.
         """
         # The operator decorator has already popped lst and index from stack
-        # We need to check if lst should be copied, then push lst back and the result
+        # We need to check if lst should be copied, then push lst, index, and result
 
         # Copy-on-write: if container has multiple references, copy it
         if isinstance(lst, (MOOList, MOOMap)):
@@ -687,8 +691,9 @@ class VM:
         # Now get the indexed element
         element = self.exec_ref(lst, index)
 
-        # Push the (possibly copied) container back, then the element
+        # Push the (possibly copied) container, the index, then the element
         self.push(lst)
+        self.push(index)
         return element
 
     @operator(Opcode.OP_RANGE_REF)
@@ -1337,33 +1342,46 @@ class VM:
         return value
 
     @operator(Opcode.OP_PUSH_GET_PROP)
-    def exec_push_get_prop(self, obj_id: int, prop_name: MOOString) -> MOOAny:
-        """Get property value from object with inheritance."""
+    def exec_push_get_prop(self) -> MOOAny:
+        """Get property value from object, keeping obj and propname on stack.
+
+        C semantics: READS (doesn't pop) obj and propname from stack, then
+        pushes property value. Stack goes from [obj, propname] to [obj, propname, propvalue].
+
+        This is used for nested indexed assignment like: obj.prop[1] = value
+        where we need to keep obj and propname on stack for the final OP_PUT_PROP.
+        """
         from lambdamoo_db.database import Clear
-        
+
+        # Peek at stack without popping (C uses TOP_RT_VALUE and NEXT_TOP_RT_VALUE)
+        if len(self.stack) < 2:
+            raise VMError("OP_PUSH_GET_PROP: stack underflow, need obj and propname")
+        prop_name = self.stack[-1]  # TOP - property name
+        obj_id = self.stack[-2]     # NEXT_TOP - object id
+
         obj = self.db.objects.get(obj_id)
         if obj is None:
             raise VMError(f"E_INVIND: Invalid object #{obj_id}")
-        
+
         # Search properties list for matching property name (with inheritance)
         prop_name_str = str(prop_name)
         current_obj = obj
         visited = set()
-        
+
         while current_obj is not None:
             current_obj_id = getattr(current_obj, 'id', None)
             if current_obj_id in visited:
                 break  # Prevent infinite loops
             visited.add(current_obj_id)
-            
+
             for prop in getattr(current_obj, 'properties', []):
                 if getattr(prop, 'propertyName', getattr(prop, 'name', '')) == prop_name_str:
                     value = prop.value
-                    
+
                     # Skip Clear values - they mean "inherited, check parent"
                     if isinstance(value, Clear):
                         break  # Break inner loop to move to parent
-                    
+
                     # Convert raw Python types to MOO types
                     if isinstance(value, str) and not isinstance(value, MOOString):
                         value = MOOString(value)
@@ -1371,14 +1389,14 @@ class VM:
                         value = MOOList(value)
                     elif isinstance(value, dict) and not isinstance(value, MOOMap):
                         value = MOOMap(value)
-                    return value
-            
+                    return value  # This gets pushed, leaving obj and propname below
+
             # Move to parent
             parent_id = getattr(current_obj, 'parent', -1)
             if parent_id < 0:
                 break
             current_obj = self.db.objects.get(parent_id)
-        
+
         raise VMError(f"E_PROPNF: Property {prop_name} not found on #{obj_id}")
 
     @operator(Opcode.OP_BI_FUNC_CALL)

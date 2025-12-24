@@ -449,13 +449,74 @@ class _Assign(_Expression):
             ]
         elif isinstance(self.target, _Index):
             # Indexed assignment: obj[index] = value
-            # Stack: push obj, push index, push value, then INDEXSET
-            obj_bc = self.target.object.to_bytecode(state, program)
-            index_bc = self.target.index.to_bytecode(state, program)
-            # INDEXSET pops 3, pushes result (value assigned)
-            return obj_bc + index_bc + value_bc + [
-                Instruction(opcode=Opcode.OP_INDEXSET)
-            ]
+            #
+            # C compiler pattern for x[i1][i2]...[iN] = value:
+            # 1. push_lvalue: push base, for each index push index then PUSH_REF (except last)
+            # 2. generate_expr: push value
+            # 3. PUT_TEMP: save value to temp
+            # 4. For each index level: INDEXSET
+            # 5. Store to base: PUT var or PUT_PROP
+            # 6. POP: remove modified container
+            # 7. PUSH_TEMP: push saved value (expression result)
+
+            # Flatten the _Index chain to get base object and list of indices
+            indices = []
+            current = self.target
+            while isinstance(current, _Index):
+                indices.append(current.index)
+                current = current.object
+            indices.reverse()  # Now indices[0] is outermost, indices[-1] is innermost
+            base = current  # The base object (Identifier, _Property, etc.)
+
+            result = []
+
+            # Step 1: Generate lvalue (push_lvalue equivalent)
+            if isinstance(base, Identifier):
+                # Push the variable value
+                result += [Instruction(opcode=Opcode.OP_PUSH, operand=MOOString(base.value))]
+            elif isinstance(base, _Property):
+                # For property base like obj.prop[i] = v:
+                # Push obj, push propname, then PUSH_GET_PROP (keeps obj/propname on stack)
+                result += base.object.to_bytecode(state, program)
+                result += base.name.to_bytecode(state, program)
+                result += [Instruction(opcode=Opcode.OP_PUSH_GET_PROP)]
+            else:
+                # Other base types - just evaluate normally
+                result += base.to_bytecode(state, program)
+
+            # For each index except the last, push index and PUSH_REF
+            for idx in indices[:-1]:
+                result += idx.to_bytecode(state, program)
+                result += [Instruction(opcode=Opcode.OP_PUSH_REF)]
+
+            # Push final index (no PUSH_REF for the last one)
+            result += indices[-1].to_bytecode(state, program)
+
+            # Step 2: Push value
+            result += value_bc
+
+            # Step 3: Save value to temp
+            result += [Instruction(opcode=Opcode.OP_PUT_TEMP)]
+
+            # Step 4: Chain INDEXSET for each index level
+            for _ in indices:
+                result += [Instruction(opcode=Opcode.OP_INDEXSET)]
+
+            # Step 5: Store modified container back to base
+            if isinstance(base, Identifier):
+                state.add_var(base.value)
+                result += [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(base.value))]
+            elif isinstance(base, _Property):
+                # For property: stack has [obj, propname, modified_propvalue]
+                # PUT_PROP expects [obj, propname, value] and stores obj.propname = value
+                result += [Instruction(opcode=Opcode.OP_PUT_PROP)]
+            # else: other base types - no store needed (result is on stack)
+
+            # Step 6 & 7: Pop result, push original value for expression result
+            result += [Instruction(opcode=Opcode.OP_POP, operand=1)]
+            result += [Instruction(opcode=Opcode.OP_PUSH_TEMP)]
+
+            return result
         elif isinstance(self.target, _List):
             # Destructuring assignment: {a, b, c} = list
             # Build scatter pattern from list items

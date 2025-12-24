@@ -11,7 +11,11 @@ from lambdamoo_db.database import MooDatabase, MooObject, Property, ObjectFlags,
 
 
 def test_push_get_prop():
-    """OP_PUSH_GET_PROP gets property value and pushes object and property name."""
+    """OP_PUSH_GET_PROP gets property value, keeping obj and propname on stack.
+
+    This is used for nested indexed assignment like: obj.prop[i] = value
+    The obj and propname are kept on stack for the final OP_PUT_PROP.
+    """
     # Create a test database with an object
     db = MooDatabase()
     db.objects = {}
@@ -23,9 +27,9 @@ def test_push_get_prop():
     vm = VM(db=db)
 
     # OP_PUSH_GET_PROP should:
-    # 1. Push object ID and property name onto stack
-    # 2. Get the property value
-    # Stack layout: [obj_id, prop_name] -> [value]
+    # 1. Read (NOT pop) obj_id and prop_name from stack
+    # 2. Push the property value
+    # Stack layout: [obj_id, prop_name] -> [obj_id, prop_name, value]
     prog = Program()
     frame = StackFrame(
         func_id=0,
@@ -34,7 +38,7 @@ def test_push_get_prop():
         stack=[
             Instruction(opcode=Opcode.OP_IMM, operand=1),  # Push object ID
             Instruction(opcode=Opcode.OP_IMM, operand=MOOString("test_prop")),  # Push property name
-            Instruction(opcode=Opcode.OP_PUSH_GET_PROP),  # Get property
+            Instruction(opcode=Opcode.OP_PUSH_GET_PROP),  # Get property (keeps obj/propname on stack)
         ]
     )
     vm.call_stack.append(frame)
@@ -42,15 +46,20 @@ def test_push_get_prop():
     # Execute: push obj ID
     vm.step()
     assert vm.stack[-1] == 1
+    assert len(vm.stack) == 1
 
     # Execute: push prop name
     vm.step()
     assert vm.stack[-1] == MOOString("test_prop")
+    assert len(vm.stack) == 2
 
     # Execute: OP_PUSH_GET_PROP
     vm.step()
-    # Should have property value on stack
-    assert vm.stack[-1] == 42
+    # Should have obj_id, prop_name, AND property value on stack
+    assert len(vm.stack) == 3
+    assert vm.stack[0] == 1  # obj_id still there
+    assert vm.stack[1] == MOOString("test_prop")  # prop_name still there
+    assert vm.stack[2] == 42  # property value on top
 
 
 def test_indexset_list():
@@ -59,7 +68,9 @@ def test_indexset_list():
 
     # Create a list and set an element
     # list[index] = value
-    # Stack layout: [list, index, value] -> [value]
+    # Stack layout: [list, index, value] -> [modified_list]
+    # NOTE: INDEXSET returns the modified container, not the value.
+    # The compiler uses PUT_TEMP/PUSH_TEMP to get the value for expression result.
     test_list = MOOList(1, 2, 3, 4, 5)
     prog = Program()
     frame = StackFrame(
@@ -89,10 +100,12 @@ def test_indexset_list():
 
     # Execute: OP_INDEXSET
     vm.step()
-    # Should return the value
-    assert vm.stack[-1] == 99
-    # List should be modified (in MOO, lists are 1-indexed)
-    assert test_list[2] == 99  # Python 0-indexed, so index 2 is third element
+    # Returns the modified container (C semantics)
+    result = vm.stack[-1]
+    assert isinstance(result, MOOList)
+    # The modified list should have 99 at index 2 (MOO 1-indexed)
+    assert result[2] == 99
+    assert list(result._list) == [1, 99, 3, 4, 5]
 
 
 def test_indexset_map():
@@ -101,7 +114,9 @@ def test_indexset_map():
 
     # Create a map and set an entry
     # map[key] = value
-    # Stack layout: [map, key, value] -> [value]
+    # Stack layout: [map, key, value] -> [modified_map]
+    # NOTE: INDEXSET returns the modified container, not the value.
+    # The compiler uses PUT_TEMP/PUSH_TEMP to get the value for expression result.
     test_map = MOOMap({"a": 1, "b": 2})
     prog = Program()
     frame = StackFrame(
@@ -131,10 +146,11 @@ def test_indexset_map():
 
     # Execute: OP_INDEXSET
     vm.step()
-    # Should return the value
-    assert vm.stack[-1] == 42
+    # Returns the modified container (C semantics)
+    result = vm.stack[-1]
+    assert isinstance(result, MOOMap)
     # Map should have new entry
-    assert test_map[MOOString("c")] == 42
+    assert result[MOOString("c")] == 42
 
 
 def test_global_push():
