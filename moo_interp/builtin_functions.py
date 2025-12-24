@@ -645,10 +645,34 @@ class BuiltinFunctions:
         else:
             return base64.b64decode(x)
 
-    def generate_json(self, x):
+    def generate_json(self, x, mode: MOOString = None):
+        """Generate JSON from a MOO value.
+
+        Args:
+            x: MOO value to convert to JSON
+            mode: Optional mode - "common-subset" (default) or "embedded-types"
+
+        Returns:
+            MOOString containing JSON representation
+        """
+        # For now, both modes behave the same - just convert to JSON
+        # In full implementation, "embedded-types" would include type annotations
+        # like {"_type": "OBJ", "value": 123}
         return MOOString(json.dumps(x))
 
-    def parse_json(self, x):
+    def parse_json(self, x, mode: MOOString = None):
+        """Parse JSON string into MOO value.
+
+        Args:
+            x: JSON string to parse
+            mode: Optional mode - "common-subset" (default) or "embedded-types"
+
+        Returns:
+            MOO value parsed from JSON
+        """
+        # For now, both modes behave the same - just parse JSON
+        # In full implementation, "embedded-types" would recognize type annotations
+        # like {"_type": "OBJ", "value": 123} and convert to ObjNum(123)
         return to_moo(json.loads(x))
 
     def remove_ansi(self, input_string):
