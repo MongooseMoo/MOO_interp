@@ -1415,9 +1415,9 @@ class VM:
         if frame.exception_stack and frame.exception_stack[-1].get('type') == 'catch':
             frame.exception_stack.pop()
 
-        # Jump past the default expression
-        if instr.operand is not None and isinstance(instr.operand, int):
-            frame.ip += instr.operand
+        # Jump past the default expression - jump distance is in handler_offset
+        if instr.handler_offset is not None:
+            frame.ip += instr.handler_offset
 
         return result
 
