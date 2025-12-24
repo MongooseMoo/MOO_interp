@@ -1029,9 +1029,26 @@ class ToAst(Transformer):
     def BOOLEAN(self, b):
         return BooleanLiteral(b == "true")
 
+    # MOO type constants
+    MOO_TYPE_CONSTANTS = {
+        'INT': 0,
+        'OBJ': 1,
+        'STR': 2,
+        'ERR': 3,
+        'LIST': 4,
+        'FLOAT': 9,
+        'MAP': 10,
+        'BOOL': 12,
+        'WAIF': 13,
+        'ANON': 14,
+    }
+
     def IDENTIFIER(self, s):
         if s.value == "true" or s.value == "false":
             return BooleanLiteral(s.value == "true")
+        # Handle MOO type constants (INT, OBJ, STR, LIST, etc.)
+        if s.value in self.MOO_TYPE_CONSTANTS:
+            return NumberLiteral(self.MOO_TYPE_CONSTANTS[s.value])
         return Identifier(s.value)
 
     def ESCAPED_STRING(self, s):
