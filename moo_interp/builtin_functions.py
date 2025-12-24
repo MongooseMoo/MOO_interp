@@ -647,9 +647,9 @@ class BuiltinFunctions:
 
     def _moo_to_python(self, value):
         """Convert MOO types to native Python for JSON serialization."""
-        # Handle MOOString - has .value attribute
+        # Handle MOOString - UserString stores string in .data attribute
         if isinstance(value, MOOString):
-            return value.value
+            return value.data
 
         # Handle MOOList - iterate and convert elements
         elif isinstance(value, MOOList):
