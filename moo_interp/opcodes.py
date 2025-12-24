@@ -92,9 +92,50 @@ class Opcode(Enum):
     OP_MAP_INSERT = 52
     OPTIM_NUM_START = 53
     Last_Opcode = 255
-    # storage optimized imm-numbers can occupy 113-255, for 143 of them
-# OPTIM_NUM_LOW = -10
-# OPTIM_NUM_HI = Opcode.Last_Opcode - Opcode.OPTIM_NUM_START + OPTIM_NUM_LOW
+
+
+# OPTIM_NUM constants matching C implementation
+OPTIM_NUM_LOW = -10
+OPTIM_NUM_HI = Opcode.Last_Opcode.value - Opcode.OPTIM_NUM_START.value + OPTIM_NUM_LOW
+
+
+def is_optim_num_opcode(opcode: int) -> bool:
+    """Check if an opcode is an optimized immediate number.
+    
+    Matches C macro: IS_OPTIM_NUM_OPCODE(o) = (o) >= OPTIM_NUM_START
+    """
+    return opcode >= Opcode.OPTIM_NUM_START.value
+
+
+def opcode_to_optim_num(opcode: int) -> int:
+    """Convert an OPTIM_NUM opcode to its integer value.
+    
+    Matches C macro: OPCODE_TO_OPTIM_NUM(o) = (o) - OPTIM_NUM_START + OPTIM_NUM_LOW
+    
+    Examples:
+        53 -> -10 (first optimized number)
+        63 -> 0
+        64 -> 1
+        114 -> 51
+        255 -> 192 (last possible)
+    """
+    return opcode - Opcode.OPTIM_NUM_START.value + OPTIM_NUM_LOW
+
+
+def optim_num_to_opcode(num: int) -> int:
+    """Convert an integer to an OPTIM_NUM opcode.
+    
+    Matches C macro: OPTIM_NUM_TO_OPCODE(i) = OPTIM_NUM_START + (i) - OPTIM_NUM_LOW
+    """
+    return Opcode.OPTIM_NUM_START.value + num - OPTIM_NUM_LOW
+
+
+def in_optim_num_range(num: int) -> bool:
+    """Check if an integer can be represented as an OPTIM_NUM opcode.
+    
+    Matches C macro: IN_OPTIM_NUM_RANGE(i) = (i) >= OPTIM_NUM_LOW && (i) <= OPTIM_NUM_HI
+    """
+    return OPTIM_NUM_LOW <= num <= OPTIM_NUM_HI
 
 
 def is_push_n(
