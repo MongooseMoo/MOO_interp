@@ -481,10 +481,46 @@ class BuiltinFunctions:
         """
             Transforms the string source by replacing the characters specified by str1 with the corresponding characters specified by str2. All other characters are not transformed. If str2 has fewer characters than str1 the unmatched characters are simply removed from source. By default the transformation is done on both upper and lower case characters no matter the case. If case-matters is provided and true, then case is treated as significant.
         """
-        if case_matters:
-            return str1.translate(str.maketrans(str2, str3))
-        else:
-            return str1.translate(str.maketrans(str2, str3, str2.upper() + str2.lower()))
+        # Unwrap MOOString to native str for maketrans
+        s1 = str(str1)
+        from_chars = str(str2)
+        to_chars = str(str3)
+
+        # Build translation table
+        # If from is longer than to, extra chars should be deleted
+        trans_from = []
+        trans_to = []
+        trans_delete = []
+
+        for i, c in enumerate(from_chars):
+            if i < len(to_chars):
+                # Map from[i] to to[i]
+                if case_matters or not c.isalpha():
+                    # Case-sensitive or non-alphabetic: direct mapping
+                    trans_from.append(c)
+                    trans_to.append(to_chars[i])
+                else:
+                    # Case-insensitive alphabetic: map both upper and lower
+                    trans_from.append(c.upper())
+                    trans_to.append(to_chars[i].upper())
+                    trans_from.append(c.lower())
+                    trans_to.append(to_chars[i].lower())
+            else:
+                # from is longer than to, delete this char
+                if case_matters or not c.isalpha():
+                    trans_delete.append(c)
+                else:
+                    trans_delete.append(c.upper())
+                    trans_delete.append(c.lower())
+
+        table = str.maketrans(
+            ''.join(trans_from),
+            ''.join(trans_to),
+            ''.join(trans_delete)
+        )
+        result = s1.translate(table)
+        # Return MOOString, not native str
+        return MOOString(result)
 
     _chr = chr
 
