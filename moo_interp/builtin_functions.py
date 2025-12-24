@@ -1248,37 +1248,101 @@ class BuiltinFunctions:
 
     def encode_binary(self, *args) -> MOOString:
         """
-        Encode values to a binary string.
-        Each arg is either an int (0-255 byte) or a string (embedded directly).
+        Encode values to MOO binary string format using ~XX escapes.
+
+        Format: printable chars (except ~) stay as-is, others become ~XX.
+        Special case: ~ (0x7e) becomes ~~
+
+        Args can be: int (0-255), string, or list of ints/strings.
         """
-        result = bytearray()
+        result = []
+
+        def encode_bytes(data):
+            """Encode byte data to binary string format."""
+            for byte_val in data:
+                if isinstance(byte_val, int):
+                    b = byte_val & 0xFF
+                else:
+                    # String - encode each char
+                    for char in str(byte_val):
+                        b = ord(char)
+                        if b == 0x7e:  # tilde
+                            result.append('~~')
+                        elif 33 <= b <= 126 and b != 0x7e:  # printable except ~
+                            result.append(chr(b))
+                        else:
+                            result.append(f'~{b:02X}')
+                    continue
+
+                # Handle integer byte value
+                if b == 0x7e:  # tilde
+                    result.append('~~')
+                elif 32 <= b <= 126 and b != 0x7e:  # printable (space + graph)
+                    result.append(chr(b))
+                else:
+                    result.append(f'~{b:02X}')
+
+        # Process arguments
         for arg in args:
-            if isinstance(arg, int):
-                result.append(arg & 0xFF)
+            if isinstance(arg, (list, MOOList)):
+                encode_bytes(arg)
             elif isinstance(arg, (str, MOOString)):
-                result.extend(str(arg).encode('latin-1'))
-            elif isinstance(arg, (list, MOOList)):
-                for item in arg:
-                    if isinstance(item, int):
-                        result.append(item & 0xFF)
-                    else:
-                        result.extend(str(item).encode('latin-1'))
-        return MOOString(result.decode('latin-1'))
+                encode_bytes([arg])
+            elif isinstance(arg, int):
+                encode_bytes([arg])
+
+        return MOOString(''.join(result))
 
     def decode_binary(self, data, fully: int = 0) -> MOOList:
         """
-        Decode a binary string to a list of byte values.
-        If fully=1, returns list of integers. Otherwise returns mixed.
+        Decode MOO binary string format (~XX escapes) to list.
+
+        Format: ~XX = hex byte, ~~ = literal tilde, else literal char
+
+        If fully=1: returns list of integers (all bytes)
+        If fully=0: groups printable chars into strings, non-printable as ints
         """
-        binary = str(data).encode('latin-1')
+        s = str(data)
+        raw_bytes = []
+        i = 0
+
+        # First pass: decode ~XX escapes to raw bytes
+        while i < len(s):
+            if s[i] == '~' and i + 2 < len(s):
+                hex_chars = s[i+1:i+3].upper()
+                if all(c in '0123456789ABCDEF' for c in hex_chars):
+                    # Valid ~XX escape
+                    byte_val = int(hex_chars, 16)
+                    raw_bytes.append(byte_val)
+                    i += 3
+                    continue
+            # Regular character (or invalid escape - treat as literal)
+            raw_bytes.append(ord(s[i]))
+            i += 1
+
         if fully:
-            return MOOList([b for b in binary])
+            # Return all as integers
+            return MOOList(raw_bytes)
+
+        # Group consecutive printable chars into strings
         result = []
-        for b in binary:
-            if 32 <= b < 127:
-                result.append(MOOString(chr(b)))
+        current_string = []
+
+        for byte_val in raw_bytes:
+            # Check if printable (space, tab, or graphic char)
+            if byte_val == 32 or byte_val == 9 or (33 <= byte_val <= 126):
+                current_string.append(chr(byte_val))
             else:
-                result.append(b)
+                # Non-printable: flush string if any, add integer
+                if current_string:
+                    result.append(MOOString(''.join(current_string)))
+                    current_string = []
+                result.append(byte_val)
+
+        # Flush remaining string
+        if current_string:
+            result.append(MOOString(''.join(current_string)))
+
         return MOOList(result)
 
     # =========================================================================
