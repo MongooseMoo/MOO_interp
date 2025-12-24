@@ -1813,6 +1813,178 @@ class BuiltinFunctions:
 
         return ObjNum(new_id)
 
+    def chparent(self, obj, new_parent):
+        """Change the parent of an object.
+
+        chparent(obj, new-parent) => none
+
+        Args:
+            obj: Object to change parent of
+            new_parent: New parent object (or -1 for no parent)
+        """
+        if self.db is None:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        # Parse obj
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "chparent() requires object")
+
+        # Parse new_parent
+        if isinstance(new_parent, ObjNum):
+            parent_id = int(str(new_parent).lstrip('#'))
+        elif isinstance(new_parent, int):
+            parent_id = new_parent
+        else:
+            raise MOOException(MOOError.E_TYPE, "chparent() requires object as parent")
+
+        # Validate object exists
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        # Validate new parent exists (unless -1)
+        if parent_id != -1 and parent_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid parent: #{parent_id}")
+
+        # Change parent
+        db_obj = self.db.objects[obj_id]
+        if hasattr(db_obj, 'parents'):
+            db_obj.parents = [parent_id] if parent_id != -1 else []
+        else:
+            db_obj.parent = parent_id
+
+        return 0
+
+    def descendants(self, obj):
+        """Return list of all descendants of obj.
+
+        descendants(obj) => list of objects
+
+        Args:
+            obj: Object to get descendants of
+
+        Returns:
+            MOOList of all descendant object IDs (children, grandchildren, etc.)
+        """
+        if self.db is None:
+            return MOOList([])
+
+        # Parse obj
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        elif isinstance(obj, (str, MOOString)):
+            s = str(obj).strip().lstrip('#')
+            try:
+                obj_id = int(s)
+            except ValueError:
+                raise MOOException(MOOError.E_TYPE, f"descendants() requires an object")
+        else:
+            raise MOOException(MOOError.E_TYPE, "descendants() requires an object")
+
+        # Check if object exists
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        result = []
+
+        def collect_descendants(oid):
+            """Recursively collect all descendants."""
+            for o in self.db.objects.values():
+                # Check if this object has oid as a parent
+                is_child = False
+                if hasattr(o, 'parents') and o.parents:
+                    is_child = oid in o.parents
+                elif hasattr(o, 'parent') and o.parent is not None:
+                    is_child = o.parent == oid
+
+                if is_child:
+                    result.append(ObjNum(o.id))
+                    collect_descendants(o.id)
+
+        collect_descendants(obj_id)
+        return MOOList(result)
+
+    def move(self, obj, dest):
+        """Move object to new location.
+
+        move(obj, dest) => none
+
+        Args:
+            obj: Object to move
+            dest: Destination object (or -1 for nowhere)
+        """
+        if self.db is None:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        # Parse obj
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "move() requires object")
+
+        # Parse dest
+        if isinstance(dest, ObjNum):
+            dest_id = int(str(dest).lstrip('#'))
+        elif isinstance(dest, int):
+            dest_id = dest
+        else:
+            raise MOOException(MOOError.E_TYPE, "move() requires object as destination")
+
+        # Validate object exists
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        # Validate destination exists (unless -1)
+        if dest_id != -1 and dest_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid destination: #{dest_id}")
+
+        # Move object
+        db_obj = self.db.objects[obj_id]
+        db_obj.location = dest_id
+
+        return 0
+
+    def recycle(self, obj):
+        """Destroy an object.
+
+        recycle(obj) => none
+
+        Args:
+            obj: Object to recycle/destroy
+        """
+        if self.db is None:
+            raise MOOException(MOOError.E_INVARG, "No database available")
+
+        # Parse obj
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "recycle() requires object")
+
+        # Validate object exists
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        # Mark as recycled (MOO semantics - don't actually delete immediately)
+        db_obj = self.db.objects[obj_id]
+        if hasattr(db_obj, 'flags'):
+            # Set recycled flag (bit 4 = 0x10)
+            db_obj.flags |= 0x10
+        else:
+            # Add recycled attribute
+            db_obj.recycled = True
+
+        return 0
+
 
     def is_player(self, obj):
         """Check if an object is a player (has player flag set).
