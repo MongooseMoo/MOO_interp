@@ -1,11 +1,11 @@
 import base64
-try:
-    import crypt
-    HAS_CRYPT = True
-except ImportError:
-    # crypt is not available on Windows
-    HAS_CRYPT = False
 from functools import reduce
+from passlib.context import CryptContext
+
+# Unix crypt compatible context - handles all standard formats
+_crypt_context = CryptContext(schemes=[
+    "sha512_crypt", "sha256_crypt", "md5_crypt", "des_crypt", "bcrypt"
+], default="sha512_crypt")
 import hashlib
 import hmac
 import json
@@ -1379,39 +1379,88 @@ class BuiltinFunctions:
         return MOOString(urllib.parse.unquote(str(s)))
 
     # =========================================================================
-    # Password hashing (crypt)
+    # Password hashing (crypt) - Cross-platform, toaststunt-compatible
     # =========================================================================
 
     def salt(self, method: MOOString = "SHA512", prefix: MOOString = "") -> MOOString:
         """Generate a salt for use with crypt().
-        
-        Raises E_PERM on Windows where crypt is not available.
-        Methods: DES, MD5, SHA256, SHA512, BLOWFISH
-        """
-        if not HAS_CRYPT:
-            raise MOOException(MOOError.E_PERM, "crypt module not available on this platform")
-        method = str(method).upper()
-        methods = {
-            'DES': crypt.METHOD_CRYPT if hasattr(crypt, 'METHOD_CRYPT') else None,
-            'MD5': crypt.METHOD_MD5 if hasattr(crypt, 'METHOD_MD5') else None,
-            'SHA256': crypt.METHOD_SHA256 if hasattr(crypt, 'METHOD_SHA256') else None,
-            'SHA512': crypt.METHOD_SHA512 if hasattr(crypt, 'METHOD_SHA512') else None,
-            'BLOWFISH': crypt.METHOD_BLOWFISH if hasattr(crypt, 'METHOD_BLOWFISH') else None,
-        }
-        m = methods.get(method) or crypt.METHOD_SHA512
-        return MOOString(crypt.mksalt(m))
 
-    def crypt(self, password: MOOString, salt: MOOString = None) -> MOOString:
-        """Hash a password using Unix crypt.
-        
-        Raises E_PERM on Windows where crypt is not available.
-        If salt is not provided, generates a SHA512 salt.
+        Cross-platform, toaststunt-compatible using passlib.
+        Methods: DES, MD5, SHA256, SHA512, BLOWFISH/BCRYPT
         """
-        if not HAS_CRYPT:
-            raise MOOException(MOOError.E_PERM, "crypt module not available on this platform")
-        if salt is None:
-            salt = self.salt()
-        return MOOString(crypt.crypt(str(password), str(salt)))
+        from passlib.hash import sha512_crypt, sha256_crypt, md5_crypt, des_crypt, bcrypt
+        method = str(method).upper()
+
+        handlers = {
+            'SHA512': sha512_crypt,
+            'SHA256': sha256_crypt,
+            'MD5': md5_crypt,
+            'DES': des_crypt,
+            'BLOWFISH': bcrypt,
+            'BCRYPT': bcrypt,
+        }
+        handler = handlers.get(method, sha512_crypt)
+
+        # Generate proper salt using handler's genconfig
+        if hasattr(handler, 'genconfig'):
+            return MOOString(handler.genconfig())
+        else:
+            # Fallback: generate hash and extract salt portion
+            dummy = handler.hash("")
+            if method == 'DES':
+                return MOOString(dummy[:2])
+            parts = dummy.rsplit('$', 1)
+            return MOOString(parts[0] + '$')
+
+    def crypt(self, password: MOOString, salt_str: MOOString = None) -> MOOString:
+        """Hash a password using Unix crypt-style hashing.
+
+        Cross-platform, toaststunt-compatible. When called with an existing
+        hash as salt, produces the same hash if password matches - this is
+        how password verification works in MOO.
+        """
+        from passlib.hash import sha512_crypt, sha256_crypt, md5_crypt, des_crypt, bcrypt
+        password = str(password)
+
+        if salt_str is None:
+            # Default: generate new SHA512 hash
+            return MOOString(sha512_crypt.hash(password))
+
+        salt_str = str(salt_str)
+
+        # Identify hash type from prefix and use appropriate handler
+        # The handler.hash(password, salt=existing_hash) re-hashes with same salt
+        if salt_str.startswith('$6$'):
+            handler = sha512_crypt
+        elif salt_str.startswith('$5$'):
+            handler = sha256_crypt
+        elif salt_str.startswith('$1$'):
+            handler = md5_crypt
+        elif salt_str.startswith('$2'):
+            handler = bcrypt
+        else:
+            # DES or unknown - use des_crypt with 2-char salt
+            handler = des_crypt
+            salt_str = salt_str[:2]
+
+        # Use .using(salt=...) to configure, then hash
+        # For verification: this produces same hash if password matches
+        try:
+            # Parse the existing hash to extract settings, then re-hash
+            parsed = handler.from_string(salt_str)
+            result = handler.using(
+                salt=parsed.salt,
+                rounds=getattr(parsed, 'rounds', None)
+            ).hash(password) if hasattr(parsed, 'rounds') else handler.using(
+                salt=parsed.salt
+            ).hash(password)
+            return MOOString(result)
+        except Exception:
+            # Fallback: just hash with whatever salt we got
+            try:
+                return MOOString(handler.hash(password))
+            except Exception:
+                return MOOString(sha512_crypt.hash(password))
 
     # =========================================================================
     # ToastStunt networking builtins

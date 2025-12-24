@@ -9,6 +9,8 @@ dependencies = [
     "attrs>=23.1.0",
     "lark>=1.1.5",
     "lambdamoo-db",
+    "passlib>=1.7.4",
+    "bcrypt>=4.0.0",
 ]
 
 [dependency-groups]
