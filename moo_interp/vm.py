@@ -664,7 +664,28 @@ class VM:
 
     @operator(Opcode.OP_PUSH_REF)
     def exec_push_ref(self, lst: Container, index: int) -> MOOAny:
-        raise NotImplementedError()
+        """Push a reference from a nested container with copy-on-write.
+
+        This is used for nested assignments like x[1][1] = value.
+        Stack before: [..., container, index]
+        Stack after: [..., container_copy, element]
+
+        If container has refcount > 1, it's copied before indexing.
+        """
+        # The operator decorator has already popped lst and index from stack
+        # We need to check if lst should be copied, then push lst back and the result
+
+        # Copy-on-write: if container has multiple references, copy it
+        if isinstance(lst, (MOOList, MOOMap)):
+            if lst.refcount() > 1:
+                lst = lst.shallow_copy()
+
+        # Now get the indexed element
+        element = self.exec_ref(lst, index)
+
+        # Push the (possibly copied) container back, then the element
+        self.push(lst)
+        return element
 
     @operator(Opcode.OP_RANGE_REF)
     def exec_range_ref(self, lst: Container, start: int, end: int) -> MOOAny:
