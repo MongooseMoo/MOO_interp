@@ -726,7 +726,7 @@ class BuiltinFunctions:
         x[y] = z
         return x
 
-    def eval(self, x):
+    def eval(self, *args):
         """\
         The MOO-code compiler processes <string> as if it were to be the program associated with some verb and, if no errors are found, that fictional verb is invoked.  If the programmer is not, in fact, a programmer, then E_PERM is raised.  The normal result of calling `eval()' is a two element list. The first element is true if there were no compilation errors and false otherwise.  The second element is either the result returned from the fictional verb (if there were no compilation errors) or a list of the compiler's error messages (otherwise).
         When the fictional verb is invoked, the various built-in variables have values as shown below:
@@ -742,14 +742,28 @@ class BuiltinFunctions:
         iobjstr   ""
         iobj      #-1
         The fictional verb runs with the permissions of the programmer and as if its `d' permissions bit were on.
+
+        eval() accepts multiple string arguments and concatenates them before evaluation.
         """
+        # Check for no arguments
+        if len(args) == 0:
+            raise MOOException(MOOError.E_ARGS, "eval() requires at least one argument")
+
+        # Check all arguments are strings
+        for arg in args:
+            if not isinstance(arg, (str, MOOString)):
+                raise MOOException(MOOError.E_TYPE, "eval() requires string arguments")
+
+        # Concatenate all string arguments
+        code = ''.join(str(arg.data if hasattr(arg, 'data') else arg) for arg in args)
+
         from .moo_ast import compile, run
         try:
-            compiled = compile(x)
+            compiled = compile(code)
             compiled.debug = True
             compiled.this = -1
             compiled.verb = ""
-            result = run(x)
+            result = run(code)
         except Exception as e:
             return MOOList([False, MOOList([e])])
         return MOOList([True, result.result])
@@ -1041,6 +1055,17 @@ class BuiltinFunctions:
         """Reseed the random number generator."""
         random.seed()
         return 0
+    def shift(self, n, count):
+        """Shift n by count bits. Positive count=left shift, negative=right shift.
+        
+        shift(1, 3) => 8 (1 << 3)
+        shift(8, -3) => 1 (8 >> 3)
+        """
+        if count >= 0:
+            return n << count
+        else:
+            return n >> (-count)
+
 
     def relative_heading(self, p1: MOOList, p2: MOOList) -> float:
         """Calculate heading from p1 to p2 in degrees (0-360, north=0)."""
@@ -1309,22 +1334,25 @@ class BuiltinFunctions:
 
     def toobj(self, x):
         """Convert a value to an object reference."""
-        if isinstance(x, MooObject):
+        if isinstance(x, ObjNum):
             return x
+        elif isinstance(x, MooObject):
+            return ObjNum(x.id)
         elif isinstance(x, int):
-            return x  # Return int as object number for now
+            return ObjNum(x)
         elif isinstance(x, (str, MOOString)):
             s = str(x).strip()
             if s.startswith('#'):
                 s = s[1:]
             try:
-                return int(s)
+                obj_id = int(s)
+                return ObjNum(obj_id)
             except ValueError:
-                return -1
+                return ObjNum(0)  # Invalid strings return #0 per MOO spec
         elif isinstance(x, float):
-            return int(x)
+            return ObjNum(int(x))
         else:
-            return -1
+            return ObjNum(0)
 
     # =========================================================================
     # Object manipulation builtins
