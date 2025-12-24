@@ -116,7 +116,7 @@ def operator(opcode):
 
         def typecheck(args, func_params):
             for arg, param in zip(args, func_params):
-                if param.annotation not in {inspect._empty, Any}:
+                if param.annotation in {inspect._empty, Any}:
                     continue
                 if not isinstance(arg, param.annotation):
                     raise VMError(
@@ -1007,8 +1007,12 @@ class VM:
 
     @operator(Extended_Opcode.EOP_FOR_LIST_1)
     def exec_for_list_1(self):
-        """For-list loop: for x in (list)
+        """For-list loop: for x in (list|string|map)
         Loop state stored on frame.loop_stack as: ('list', ip, collection, iter_state)
+
+        For strings: iterates over each character
+        For lists: iterates over each element
+        For maps: iterates over values only
         """
         frame = self.current_frame
         instr = frame.current_instruction
@@ -1025,23 +1029,59 @@ class VM:
 
         if is_first_entry:
             base_collection = self.pop()
-            if not isinstance(base_collection, MOOList):
+
+            # Type check: must be string, list, or map
+            if not isinstance(base_collection, (MOOString, str, MOOList, MOOMap)):
                 self._skip_to_end_of_for_loop(frame)
                 return None
+
+            # Check for empty collection
             if len(base_collection) == 0:
                 self._skip_to_end_of_for_loop(frame)
                 return None
-            # MOO lists are 1-indexed, iter_state is next index to use
-            self.put(loop_var, base_collection[1])
-            frame.loop_stack.append(('list', frame.ip, base_collection, 2))
+
+            # Get first element based on type
+            if isinstance(base_collection, (MOOString, str)):
+                # For strings: first character as MOOString
+                self.put(loop_var, MOOString(str(base_collection)[0]))
+                frame.loop_stack.append(('list', frame.ip, base_collection, 1))  # 0-based for strings
+            elif isinstance(base_collection, MOOList):
+                # For lists: first element (1-indexed)
+                self.put(loop_var, base_collection[1])
+                frame.loop_stack.append(('list', frame.ip, base_collection, 2))
+            elif isinstance(base_collection, MOOMap):
+                # For maps: first value only
+                first_value = next(iter(base_collection.values()))
+                self.put(loop_var, first_value)
+                frame.loop_stack.append(('list', frame.ip, base_collection, 1))  # 0-based for maps
         else:
             _, _, base_collection, iter_state = frame.loop_stack[loop_index]
-            if iter_state > len(base_collection):
-                frame.loop_stack.pop(loop_index)
-                self._skip_to_end_of_for_loop(frame)
-                return None
-            self.put(loop_var, base_collection[iter_state])
-            frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
+
+            if isinstance(base_collection, (MOOString, str)):
+                # String iteration: iter_state is 0-based index for next char
+                if iter_state >= len(base_collection):
+                    frame.loop_stack.pop(loop_index)
+                    self._skip_to_end_of_for_loop(frame)
+                    return None
+                self.put(loop_var, MOOString(str(base_collection)[iter_state]))
+                frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
+            elif isinstance(base_collection, MOOList):
+                # List iteration: iter_state is 1-based index for next element
+                if iter_state > len(base_collection):
+                    frame.loop_stack.pop(loop_index)
+                    self._skip_to_end_of_for_loop(frame)
+                    return None
+                self.put(loop_var, base_collection[iter_state])
+                frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
+            elif isinstance(base_collection, MOOMap):
+                # Map iteration: iter_state is 0-based index into values
+                values_list = list(base_collection.values())
+                if iter_state >= len(values_list):
+                    frame.loop_stack.pop(loop_index)
+                    self._skip_to_end_of_for_loop(frame)
+                    return None
+                self.put(loop_var, values_list[iter_state])
+                frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
         return None
 
     def _find_loop_end_jump(self, frame):
@@ -1510,15 +1550,17 @@ class VM:
 
     @operator(Extended_Opcode.EOP_FOR_LIST_2)
     def exec_for_list_2(self):
-        """For-list loop with index: for i, x in (list)
+        """For-list loop with index: for val, idx in (list|string|map)
 
-        Like EOP_FOR_LIST_1 but also stores the iteration index in a variable.
+        Like EOP_FOR_LIST_1 but also stores a second variable:
+        - For lists/strings: (value, 1-based index)
+        - For maps: (value, key)
         Loop state stored on frame.loop_stack as: ('list2', ip, collection, iter_state)
         """
         frame = self.current_frame
         instr = frame.current_instruction
         loop_var = instr.loop_var  # The value variable
-        loop_index = instr.loop_index  # The index variable
+        loop_index = instr.loop_index  # The index/key variable
 
         # Check if we have existing loop state for this IP
         is_first_entry = True
@@ -1531,23 +1573,67 @@ class VM:
 
         if is_first_entry:
             base_collection = self.pop()
-            if not isinstance(base_collection, MOOList):
+
+            # Type check: must be string, list, or map
+            if not isinstance(base_collection, (MOOString, str, MOOList, MOOMap)):
                 self._skip_to_end_of_for_loop(frame)
                 return None
+
+            # Check for empty collection
             if len(base_collection) == 0:
                 self._skip_to_end_of_for_loop(frame)
                 return None
-            # MOO lists are 1-indexed, iter_state is next index to use
-            self.put(loop_var, base_collection[1])
-            self.put(loop_index, 1)  # Index is 1-based
-            frame.loop_stack.append(('list2', frame.ip, base_collection, 2))
+
+            # Get first element and index/key based on type
+            if isinstance(base_collection, (MOOString, str)):
+                # For strings: (character, 1-based index)
+                self.put(loop_var, MOOString(str(base_collection)[0]))
+                self.put(loop_index, 1)  # 1-based index
+                frame.loop_stack.append(('list2', frame.ip, base_collection, 1))  # 0-based for next
+            elif isinstance(base_collection, MOOList):
+                # For lists: (element, 1-based index)
+                self.put(loop_var, base_collection[1])
+                self.put(loop_index, 1)  # 1-based index
+                frame.loop_stack.append(('list2', frame.ip, base_collection, 2))
+            elif isinstance(base_collection, MOOMap):
+                # For maps: (value, key) - note the order!
+                keys_list = list(base_collection.keys())
+                first_key = keys_list[0]
+                first_value = base_collection[first_key]
+                self.put(loop_var, first_value)  # Value first
+                self.put(loop_index, first_key)  # Key second
+                frame.loop_stack.append(('list2', frame.ip, base_collection, 1))  # 0-based for next
         else:
             _, _, base_collection, iter_state = frame.loop_stack[loop_stack_index]
-            if iter_state > len(base_collection):
-                frame.loop_stack.pop(loop_stack_index)
-                self._skip_to_end_of_for_loop(frame)
-                return None
-            self.put(loop_var, base_collection[iter_state])
-            self.put(loop_index, iter_state)  # Index is 1-based
-            frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
+
+            if isinstance(base_collection, (MOOString, str)):
+                # String iteration: iter_state is 0-based index for next char
+                if iter_state >= len(base_collection):
+                    frame.loop_stack.pop(loop_stack_index)
+                    self._skip_to_end_of_for_loop(frame)
+                    return None
+                self.put(loop_var, MOOString(str(base_collection)[iter_state]))
+                self.put(loop_index, iter_state + 1)  # 1-based index
+                frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
+            elif isinstance(base_collection, MOOList):
+                # List iteration: iter_state is 1-based index for next element
+                if iter_state > len(base_collection):
+                    frame.loop_stack.pop(loop_stack_index)
+                    self._skip_to_end_of_for_loop(frame)
+                    return None
+                self.put(loop_var, base_collection[iter_state])
+                self.put(loop_index, iter_state)  # 1-based index
+                frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
+            elif isinstance(base_collection, MOOMap):
+                # Map iteration: iter_state is 0-based index into keys
+                keys_list = list(base_collection.keys())
+                if iter_state >= len(keys_list):
+                    frame.loop_stack.pop(loop_stack_index)
+                    self._skip_to_end_of_for_loop(frame)
+                    return None
+                key = keys_list[iter_state]
+                value = base_collection[key]
+                self.put(loop_var, value)  # Value first
+                self.put(loop_index, key)  # Key second
+                frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
         return None
