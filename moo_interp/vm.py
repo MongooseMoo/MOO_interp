@@ -758,7 +758,7 @@ class VM:
         if not isinstance(args, MOOList):
             raise VMError(f"OP_CALL_VERB: args must be MOOList, got {type(args)}")
         if not isinstance(verb_name, MOOString):
-            raise VMError(f"OP_CALL_VERB: verb_name must be MOOString, got {type(verb_name)}")
+            raise VMError(f"OP_CALL_VERB: verb_name must be MOOString, got {type(verb_name).__name__}={repr(verb_name)}")
         if not isinstance(obj_id, int):
             raise VMError(f"OP_CALL_VERB: obj_id must be int, got {type(obj_id)}")
 
@@ -1316,7 +1316,15 @@ class VM:
 
             for p in getattr(current_obj, 'properties', []):
                 if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
-                    return p.value
+                    # Convert raw Python types to MOO types
+                    value = p.value
+                    if isinstance(value, str) and not isinstance(value, MOOString):
+                        value = MOOString(value)
+                    elif isinstance(value, list) and not isinstance(value, MOOList):
+                        value = MOOList(value)
+                    elif isinstance(value, dict) and not isinstance(value, MOOMap):
+                        value = MOOMap(value)
+                    return value
 
             # Move to parent
             parent_id = getattr(current_obj, 'parent', -1)
