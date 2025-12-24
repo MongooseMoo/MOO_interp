@@ -865,6 +865,61 @@ class _TryFinallyStatement(_Statement):
         return result
 
 
+@dataclass
+class _Catch(_Expression):
+    """Inline catch expression: `expr ! codes => default'."""
+    expr: _Expression
+    codes: list
+    default: _Expression = None
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        from moo_interp.opcodes import Extended_Opcode
+
+        expr_bc = self.expr.to_bytecode(state, program)
+        default_bc = self.default.to_bytecode(state, program) if self.default else []
+
+        result = []
+
+        # 1. Push error codes as list
+        result.append(Instruction(opcode=Opcode.OP_IMM, operand=self.codes))
+
+        # 2. EOP_PUSH_LABEL - handler offset (where to jump on error)
+        # handler is after: CATCH + expr_bc + END_CATCH
+        handler_offset = len(expr_bc) + 2
+        result.append(Instruction(
+            opcode=Opcode.OP_EXTENDED,
+            operand=Extended_Opcode.EOP_PUSH_LABEL.value,
+            handler_offset=handler_offset
+        ))
+
+        # 3. EOP_CATCH - set up catch handler
+        result.append(Instruction(
+            opcode=Opcode.OP_EXTENDED,
+            operand=Extended_Opcode.EOP_CATCH.value,
+            error_codes=self.codes
+        ))
+
+        # 4. Main expression
+        result.extend(expr_bc)
+
+        # 5. EOP_END_CATCH - success path, jump past default
+        jump_dist = len(default_bc) + 1 if default_bc else 2
+        result.append(Instruction(
+            opcode=Opcode.OP_EXTENDED,
+            operand=Extended_Opcode.EOP_END_CATCH.value,
+            handler_offset=jump_dist
+        ))
+
+        # 6. Handler: pop exception tuple, evaluate default
+        result.append(Instruction(opcode=Opcode.OP_POP, operand=0))
+        if default_bc:
+            result.extend(default_bc)
+        else:
+            result.append(Instruction(opcode=Opcode.OP_IMM, operand=0))
+
+        return result
+
+
 class ToAst(Transformer):
 
     def BOOLEAN(self, b):
@@ -1000,6 +1055,34 @@ class ToAst(Transformer):
         obj = args[0]
         name = args[1].value if hasattr(args[1], 'value') else str(args[1])
         return _WaifProperty(object=obj, name=name)
+
+    def catch(self, args):
+        # catch: "`" expression "!" exception_codes ("=>" expression)? "'"
+        # args = [expr, exception_codes_tree, optional_default_expr]
+        expr = args[0]
+
+        # Parse exception codes
+        codes = []
+        codes_tree = args[1]
+        if isinstance(codes_tree, lark.tree.Tree):
+            for child in codes_tree.children:
+                if isinstance(child, lark.tree.Tree) and child.data == 'exception_code':
+                    code_id = child.children[0]
+                    if isinstance(code_id, Identifier):
+                        codes.append(code_id.value)
+                    else:
+                        codes.append(str(code_id))
+                elif isinstance(child, Identifier):
+                    codes.append(child.value)
+                elif hasattr(child, 'value'):
+                    codes.append(child.value)
+        if not codes:
+            codes = ['ANY']
+
+        # Optional default expression
+        default = args[2] if len(args) > 2 else None
+
+        return _Catch(expr=expr, codes=codes, default=default)
 
     def try_except_statement(self, args):
         # args = [statement*, except_statement+]

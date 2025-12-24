@@ -326,7 +326,9 @@ class VM:
         # Look for a matching handler (search from top of stack)
         for i in range(len(frame.exception_stack) - 1, -1, -1):
             handler = frame.exception_stack[i]
-            if handler['type'] == 'except':
+            handler_type = handler['type']
+
+            if handler_type in ('except', 'catch'):
                 error_codes = handler['error_codes']
                 # Check if this handler catches this error type
                 if 'ANY' in error_codes or error_type in error_codes:
@@ -335,19 +337,23 @@ class VM:
                     frame.ip = handler_ip  # Set directly, step() returns without incrementing
                     # Pop this handler and any handlers above it
                     frame.exception_stack = frame.exception_stack[:i]
-                    # Bind error to variable if specified
-                    error_vars = handler.get('error_vars', [])
-                    if error_vars:
-                        # Use the first error var (for now, one clause = one var)
-                        error_var = error_vars[0] if error_vars else None
-                        if error_var:
-                            # Add variable to var_names if not present
-                            var_name = MOOString(error_var)
-                            if var_name not in frame.prog.var_names:
-                                frame.prog.var_names.append(var_name)
-                                frame.rt_env.append(None)
-                            var_index = frame.prog.var_names.index(var_name)
-                            frame.rt_env[var_index] = error_type
+
+                    if handler_type == 'except':
+                        # Bind error to variable if specified
+                        error_vars = handler.get('error_vars', [])
+                        if error_vars:
+                            error_var = error_vars[0] if error_vars else None
+                            if error_var:
+                                var_name = MOOString(error_var)
+                                if var_name not in frame.prog.var_names:
+                                    frame.prog.var_names.append(var_name)
+                                    frame.rt_env.append(None)
+                                var_index = frame.prog.var_names.index(var_name)
+                                frame.rt_env[var_index] = error_type
+                    elif handler_type == 'catch':
+                        # For catch expressions, push error tuple onto stack
+                        # The handler will pop this and replace with default value
+                        self.push([error_type, str(exception), []])
                     return True
         return False
 
@@ -1268,24 +1274,33 @@ class VM:
 
     @operator(Extended_Opcode.EOP_PUSH_LABEL)
     def exec_push_label(self) -> int:
-        """Push a label (integer) onto the stack for loop targeting."""
+        """Push a label offset onto the stack for catch/loop targeting."""
         frame = self.current_frame
         instr = frame.current_instruction
-        # The label is in the operand
-        return instr.operand if instr.operand is not None else 0
+        # The label offset is in handler_offset field
+        return instr.handler_offset if instr.handler_offset is not None else 0
 
     @operator(Extended_Opcode.EOP_CATCH)
     def exec_catch(self) -> None:
-        """Push a catch marker for inline error catching (`expr ! codes').
+        """Set up catch handler for inline error catching (`expr ! codes').
 
-        In MOO, this is for expressions like: `foo() ! E_PROPNF => default_value'
-        Pushes a TYPE_CATCH marker with 1 handler.
+        Stack before: [error_codes_list, handler_offset]
+        Pops handler_offset and error_codes, sets up exception handler.
         """
         frame = self.current_frame
         instr = frame.current_instruction
-        # Push catch marker info onto exception stack
-        handler_ip = frame.ip + instr.handler_offset if instr.handler_offset else frame.ip + 1
-        error_codes = instr.error_codes or ['ANY']
+
+        # Pop handler offset from stack (pushed by PUSH_LABEL)
+        handler_offset = self.pop()
+        # Pop error codes list from stack
+        error_codes_from_stack = self.pop()
+
+        # Use error codes from instruction or stack
+        error_codes = instr.error_codes or error_codes_from_stack or ['ANY']
+
+        # Calculate absolute handler IP
+        handler_ip = frame.ip + handler_offset
+
         frame.exception_stack.append({
             'type': 'catch',
             'handler_ip': handler_ip,
