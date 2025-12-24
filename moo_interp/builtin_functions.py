@@ -764,11 +764,18 @@ class BuiltinFunctions:
         if self.db is None:
             return MOOList([])
 
-        # Get object ID
+        # Get object ID - handle various types
         if isinstance(obj, ObjNum):
             obj_id = int(str(obj).lstrip('#'))
         elif isinstance(obj, int):
             obj_id = obj
+        elif isinstance(obj, (str, MOOString)):
+            # Handle string representations like "#10" or "10"
+            s = str(obj).strip().lstrip('#')
+            try:
+                obj_id = int(s)
+            except ValueError:
+                raise MOOException(MOOError.E_TYPE, f"ancestors() requires an object, got string: {obj}")
         else:
             raise MOOException(MOOError.E_TYPE, "ancestors() requires an object")
 

@@ -154,10 +154,15 @@ class _Statement(_AstNode):
 @dataclass
 class _SingleStatement(_AstNode):
     """Single statement ending with semicolon. Underscore prefix avoids ast_utils conflict."""
-    statement: _Statement
+    statement: _Statement  # Can also be _Expression when expression is used as statement
 
     def to_bytecode(self, state: CompilerState, program: Program):
-        return self.statement.to_bytecode(state, program)
+        bc = self.statement.to_bytecode(state, program)
+        # If the statement is an expression (not a proper statement like return/break/etc),
+        # its value should be discarded - add a POP
+        if isinstance(self.statement, _Expression):
+            bc.append(Instruction(opcode=Opcode.OP_POP, operand=1))
+        return bc
 
     def to_moo(self) -> str:
         return self.statement.to_moo() + ";"
@@ -339,6 +344,43 @@ class BinaryExpression(_Expression):
     def to_bytecode(self, state: CompilerState, program: Program):
         left_bc = self.left.to_bytecode(state, program)
         right_bc = self.right.to_bytecode(state, program)
+
+        # Handle short-circuit operators with proper MOO semantics
+        # In MOO: a || b returns a if truthy, else b
+        #         a && b returns a if falsy, else b
+        if self.operator == '||':
+            # Pattern: [a] PUT_TEMP IF_QUES(skip to b) PUSH_TEMP JUMP(end) [b]
+            # - [a] evaluates left side
+            # - PUT_TEMP saves a (peek, doesn't pop)
+            # - IF_QUES pops and jumps if false
+            # - If true: PUSH_TEMP pushes a's value, JUMP skips b
+            # - If false: falls through to [b]
+            result = left_bc
+            result += [Instruction(opcode=Opcode.OP_PUT_TEMP)]
+            # IF_QUES: if false, skip 2 instructions (PUSH_TEMP and JUMP) to evaluate b
+            result += [Instruction(opcode=Opcode.OP_IF_QUES, operand=2)]
+            result += [Instruction(opcode=Opcode.OP_PUSH_TEMP)]
+            result += [Instruction(opcode=Opcode.OP_JUMP, operand=len(right_bc) + 1)]
+            result += right_bc
+            return result
+
+        elif self.operator == '&&':
+            # Pattern: [a] PUT_TEMP NOT IF_QUES(skip to b) PUSH_TEMP JUMP(end) [b]
+            # - [a] evaluates left side
+            # - PUT_TEMP saves a (peek, doesn't pop)
+            # - NOT inverts for the conditional
+            # - IF_QUES pops and jumps if false (i.e., if a was truthy)
+            # - If a was falsy: PUSH_TEMP pushes a's value, JUMP skips b
+            # - If a was truthy: falls through to [b]
+            result = left_bc
+            result += [Instruction(opcode=Opcode.OP_PUT_TEMP)]
+            result += [Instruction(opcode=Opcode.OP_NOT)]
+            result += [Instruction(opcode=Opcode.OP_IF_QUES, operand=2)]
+            result += [Instruction(opcode=Opcode.OP_PUSH_TEMP)]
+            result += [Instruction(opcode=Opcode.OP_JUMP, operand=len(right_bc) + 1)]
+            result += right_bc
+            return result
+
         return left_bc + right_bc + [Instruction(opcode=binary_opcodes[self.operator])]
 
     def to_moo(self) -> str:
@@ -507,7 +549,7 @@ class _IfStatement(_Statement):
         # update end label for jumps relative to the end of the if statement
         # (i.e. jumps to the end of the if statement before the elseif or else clauses)
         for index, instruction in enumerate(full_bc):
-            if instruction.opcode == Opcode.OP_JUMP:
+            if instruction.opcode == Opcode.OP_JUMP and instruction.operand == end_label:
                 instruction.operand = len(full_bc) - index
         return full_bc
 
