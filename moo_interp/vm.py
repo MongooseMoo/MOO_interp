@@ -184,8 +184,18 @@ class VM:
                 self.opcode_handlers[opcode] = method
                 handled_opcodes.add(opcode)
 
+        # Opcodes that don't need implementation (retired, sentinels, handled specially)
+        ignored_opcodes = {
+            Opcode.OP_FOR_LIST,      # Retired - replaced by EOP_FOR_LIST_1/2
+            Opcode.OPTIM_NUM_START,  # Sentinel for optimized number range
+            Opcode.Last_Opcode,      # Sentinel
+        }
+        ignored_eopcodes = {
+            Extended_Opcode.Last_Extended_Opcode,  # Sentinel
+        }
+
         # Set of all opcodes
-        all_opcodes = set(Opcode)
+        all_opcodes = set(Opcode) - ignored_opcodes
         unhandled_opcodes = all_opcodes - handled_opcodes
 
         if unhandled_opcodes:
@@ -193,7 +203,7 @@ class VM:
                 f"The following {len(unhandled_opcodes)} opcodes are not implemented: {[opcode.name for opcode in unhandled_opcodes]}", UserWarning)
 
         # Set of all extended opcodes
-        all_eopcodes = set(Extended_Opcode)
+        all_eopcodes = set(Extended_Opcode) - ignored_eopcodes
         unhandled_eopcodes = all_eopcodes - handled_opcodes
 
         if unhandled_eopcodes:
