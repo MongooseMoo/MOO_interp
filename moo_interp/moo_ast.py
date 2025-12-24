@@ -346,6 +346,42 @@ class BinaryExpression(_Expression):
 
 
 @dataclass
+class _Ternary(_Expression):
+    """Ternary conditional: condition ? true_value | false_value."""
+    condition: _Expression
+    true_value: _Expression
+    false_value: _Expression
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # Bytecode structure:
+        # 1. condition_bc (pushes condition)
+        # 2. OP_IF_QUES with jump to false_value (pops condition, jumps if false)
+        # 3. true_value_bc
+        # 4. OP_JUMP to end
+        # 5. false_value_bc
+        condition_bc = self.condition.to_bytecode(state, program)
+        true_bc = self.true_value.to_bytecode(state, program)
+        false_bc = self.false_value.to_bytecode(state, program)
+
+        # OP_IF_QUES: if condition is false, jump past true_bc + OP_JUMP
+        # operand is how many instructions to skip
+        if_ques_jump = len(true_bc) + 1  # +1 for the OP_JUMP instruction
+
+        # OP_JUMP: after evaluating true_value, jump past false_bc
+        end_jump = len(false_bc)
+
+        result = condition_bc
+        result.append(Instruction(opcode=Opcode.OP_IF_QUES, operand=if_ques_jump))
+        result.extend(true_bc)
+        result.append(Instruction(opcode=Opcode.OP_JUMP, operand=end_jump))
+        result.extend(false_bc)
+        return result
+
+    def to_moo(self) -> str:
+        return f"({self.condition.to_moo()} ? {self.true_value.to_moo()} | {self.false_value.to_moo()})"
+
+
+@dataclass
 class _Assign(_Statement):
     target: Identifier
     value: _Expression
@@ -1215,6 +1251,14 @@ class ToAst(Transformer):
         default = args[2] if len(args) > 2 else None
 
         return _Catch(expr=expr, codes=codes, default=default)
+
+    def ternary(self, args):
+        """ternary: logical_or "?" expression "|" expression."""
+        # args = [condition, true_value, false_value]
+        condition = args[0]
+        true_value = args[1]
+        false_value = args[2]
+        return _Ternary(condition=condition, true_value=true_value, false_value=false_value)
 
     def scatter(self, args):
         """scatter: "{" scattering_target "}" "=" expression."""
