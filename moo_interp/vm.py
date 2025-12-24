@@ -1249,16 +1249,53 @@ class VM:
 
     @operator(Opcode.OP_GET_PROP)
     def exec_get_prop(self, obj: MOOAny, prop: MOOString) -> MOOAny:
-        """Get the value of a property on an object"""
+        """Get the value of a property on an object.
 
-        object = self.db.objects.get(obj)
-        if object is None:
+        Handles:
+        1. Special pseudo-properties (wizard, programmer, player, etc.)
+        2. Regular properties with inheritance
+        """
+        moo_object = self.db.objects.get(obj)
+        if moo_object is None:
             raise VMError(f"E_INVIND: Object #{obj} not found")
-        # Search for property by name
+
         prop_name = str(prop)
-        for p in getattr(object, 'properties', []):
-            if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
-                return p.value
+
+        # Handle special pseudo-properties from object flags
+        # MOO flags: bit 0=player, bit 1=programmer, bit 2=wizard
+        flags = getattr(moo_object, 'flags', 0)
+        if prop_name == 'wizard':
+            return 1 if (flags & 4) else 0
+        elif prop_name == 'programmer':
+            return 1 if (flags & 2) else 0
+        elif prop_name == 'player':
+            return 1 if (flags & 1) else 0
+        elif prop_name == 'r':
+            return 1 if (flags & 8) else 0  # readable
+        elif prop_name == 'w':
+            return 1 if (flags & 16) else 0  # writable
+        elif prop_name == 'f':
+            return 1 if (flags & 32) else 0  # fertile
+
+        # Search for property by name (with inheritance)
+        current_obj = moo_object
+        visited = set()
+        while current_obj is not None:
+            obj_id = getattr(current_obj, 'id', None)
+            if obj_id in visited:
+                break  # Prevent infinite loops
+            visited.add(obj_id)
+
+            for p in getattr(current_obj, 'properties', []):
+                if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                    return p.value
+
+            # Move to parent
+            parent_id = getattr(current_obj, 'parent', -1)
+            if parent_id < 0:
+                break
+            current_obj = self.db.objects.get(parent_id)
+
         raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
 
     @operator(Opcode.OP_PUT_PROP)
