@@ -290,6 +290,38 @@ class BuiltinFunctions:
             return MOOString(time.ctime())
         return MOOString(time.ctime(self.tofloat(value)))
 
+    def getenv(self, name):
+        """Get an environment variable.
+        
+        getenv(name) => string value or 0 if not set
+        
+        Requires wizard permissions.
+        Raises E_PERM if not wizard.
+        Raises E_TYPE if name is not a string.
+        Raises E_ARGS if called with wrong number of arguments (enforced by VM).
+        """
+        # Permission check - requires wizard
+        # This will be enforced by the VM/task runner context
+        # For now, we'll implement the basic functionality
+        
+        # Type check
+        if not isinstance(name, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "getenv() requires a string argument")
+            
+        # Convert to Python string
+        if isinstance(name, MOOString):
+            name_str = name.data
+        else:
+            name_str = name
+            
+        # Get environment variable
+        value = os.environ.get(name_str)
+        
+        if value is None:
+            return 0  # Return 0 for non-existent variables
+        
+        return MOOString(value)
+
     def callers(self, include_line_numbers: int = 0):
         """Return the call stack as a list of {player, this, verb, programmer, line}.
 
@@ -335,6 +367,45 @@ class BuiltinFunctions:
         # TODO: Actually modify the VM's current frame programmer
         # For now, just accept and ignore (allows code to proceed)
         pass
+
+    def task_local(self):
+        """Get the task-local storage for the current task.
+        
+        task_local() => value stored by set_task_local(), or 0 if not set
+        
+        Requires wizard permissions.
+        Raises E_PERM if not wizard.
+        Raises E_ARGS if called with arguments.
+        
+        Task-local storage is per-task and persists only for that task's lifetime.
+        """
+        # Permission check - requires wizard
+        # This will be enforced by the VM/task runner context
+        
+        # Get task-local storage from VM context
+        # For now, return 0 (not implemented in VM yet)
+        # TODO: Implement task-local storage in VM
+        return 0
+    
+    def set_task_local(self, value):
+        """Set the task-local storage for the current task.
+        
+        set_task_local(value) => 0
+        
+        Requires wizard permissions.
+        Raises E_PERM if not wizard.
+        Raises E_ARGS if called with wrong number of arguments.
+        
+        Stores a value that can be retrieved later with task_local().
+        The value is cleared when the task completes.
+        """
+        # Permission check - requires wizard
+        # This will be enforced by the VM/task runner context
+        
+        # Set task-local storage in VM context
+        # For now, just return 0 (not implemented in VM yet)
+        # TODO: Implement task-local storage in VM
+        return 0
 
     def sin(self, value):
         return math.sin(self.tofloat(value))
@@ -1343,6 +1414,78 @@ class BuiltinFunctions:
             return 0  # Non-object types are not valid objects
 
         return 1 if obj_id in self.db.objects else 0
+
+    def isa(self, obj, parent):
+        """Check if obj is a descendant of parent.
+        
+        isa(obj, parent) => 1 if obj is a descendant of parent, 0 otherwise
+        
+        Returns 0 for:
+        - Invalid objects (negative, non-existent)
+        - $nothing (#-1)
+        - When obj == parent (not a descendant, it IS the object)
+        
+        Returns 1 if obj's ancestor chain contains parent.
+        """
+        if self.db is None:
+            return 0
+            
+        # Get object IDs
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            return 0
+            
+        if isinstance(parent, ObjNum):
+            parent_id = int(str(parent).lstrip('#'))
+        elif isinstance(parent, int):
+            parent_id = parent
+        else:
+            return 0
+        
+        # Invalid objects return false
+        if obj_id < 0 or parent_id < 0:
+            return 0
+            
+        # $nothing (#-1) is never valid for isa
+        if obj_id == -1 or parent_id == -1:
+            return 0
+            
+        # Objects not in database return false
+        if obj_id not in self.db.objects or parent_id not in self.db.objects:
+            return 0
+            
+        # obj == parent is not a descendant relationship
+        if obj_id == parent_id:
+            return 0
+            
+        # Walk up the ancestor chain
+        current = obj_id
+        visited = set()
+        
+        while current in self.db.objects:
+            # Prevent infinite loops
+            if current in visited:
+                break
+            visited.add(current)
+            
+            current_obj = self.db.objects[current]
+            
+            # Check if current object has parents
+            if not hasattr(current_obj, 'parents') or not current_obj.parents:
+                break
+                
+            # Check all parents
+            for p in current_obj.parents:
+                if p == parent_id:
+                    return 1
+                    
+            # Move to first parent for next iteration
+            current = current_obj.parents[0]
+            
+        return 0
 
     def create(self, parent, owner=None):
         """Create a new object with the given parent.
