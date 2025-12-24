@@ -204,9 +204,13 @@ class VM:
         self.stack.append(value)
 
     def pop(self) -> MOOAny:
-        """Pop a value off the stack"""
+        """Pop a value off the stack, converting dicts to MOOMap"""
         try:
-            return self.stack.pop()
+            value = self.stack.pop()
+            # Convert plain dicts to MOOMap
+            if isinstance(value, dict) and not isinstance(value, MOOMap):
+                value = MOOMap(value)
+            return value
         except IndexError:
             raise VMError("Stack underflow")
 
@@ -270,7 +274,9 @@ class VM:
             if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP, Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES}:
                 args = [instr.operand]
             elif handler is not None and handler.num_args:
-                args = self.stack[-handler.num_args:]
+                # Convert any dicts to MOOMap when getting args
+                args = [MOOMap(v) if isinstance(v, dict) and not isinstance(v, MOOMap) else v
+                        for v in self.stack[-handler.num_args:]]
 
             logger.debug(f"Args: {args}")
 
