@@ -385,13 +385,11 @@ class MooDebugger:
         while steps_executed < max_steps:
             # Check if execution is complete
             if not self.vm.call_stack or self.vm.state is not None:
-                stopped_reason = 'complete'
-                break
-
-            # Check if there's a VM error
-            if stop_on_error and self.vm.state == VMOutcome.ERROR:
-                stopped_reason = 'error'
-                error_msg = str(self.vm.result) if self.vm.result else "VM error"
+                if self.vm.state == VMOutcome.OUTCOME_ABORTED:
+                    stopped_reason = 'error'
+                    error_msg = str(self.vm.result) if self.vm.result else "VM error"
+                else:
+                    stopped_reason = 'complete'
                 break
 
             # Check for breakpoints before stepping
