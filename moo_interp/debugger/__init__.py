@@ -121,8 +121,15 @@ class MooDebugger:
 
         # Detect returns (call depth decreased)
         if depth_after < depth_before:
-            # A return happened
-            return_value = self.vm.result if self.vm.result is not None else (self.vm.stack[-1] if self.vm.stack else None)
+            # A return happened - the return value is on top of the value stack
+            # (pushed there by the returning verb). Only use vm.result when the
+            # entire VM has finished (empty call stack).
+            if depth_after == 0 and not self.vm.call_stack:
+                # Final return - VM is done, result is in vm.result
+                return_value = self.vm.result
+            else:
+                # Mid-execution return - return value was pushed onto the stack
+                return_value = self.vm.stack[-1] if self.vm.stack else None
 
             for plugin in self.plugins:
                 if plugin.enabled:
