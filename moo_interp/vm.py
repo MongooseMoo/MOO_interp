@@ -644,13 +644,19 @@ class VM:
 
     @operator(Opcode.OP_RANGE_REF)
     def exec_range_ref(self, lst: Container, start: int, end: int) -> MOOAny:
+        # MOO uses 1-based indexing, Python uses 0-based
+        # MOO x[2..4] means elements 2, 3, 4 (inclusive)
+        # Python slice [1:4] means indices 1, 2, 3 (exclusive end)
+        py_start = start - 1
+        py_end = end  # end stays same because Python is exclusive
+
         if isinstance(lst, MOOString):
-            return MOOString(lst[start:end])
+            return MOOString(str(lst)[py_start:py_end])
         elif isinstance(lst, MOOList):
-            return MOOList(lst[start:end])
+            return MOOList(lst._list[py_start:py_end])
         else:
-            # the keys in our maps are ordered,
-            return MOOMap(list(lst.items())[start:end])
+            # the keys in our maps are ordered
+            return MOOMap(list(lst.items())[py_start:py_end])
 
     # Map operations
 

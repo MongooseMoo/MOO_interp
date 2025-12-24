@@ -738,6 +738,24 @@ class _Index(_Expression):
 
 
 @dataclass
+class _Range(_Expression):
+    """Range expression: obj[start..end]"""
+    object: _Expression
+    start: _Expression
+    end: _Expression
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        result = self.object.to_bytecode(state, program)
+        result += self.start.to_bytecode(state, program)
+        result += self.end.to_bytecode(state, program)
+        result += [self.emit_byte(Opcode.OP_RANGE_REF)]
+        return result
+
+    def to_moo(self) -> str:
+        return f"{self.object.to_moo()}[{self.start.to_moo()}..{self.end.to_moo()}]"
+
+
+@dataclass
 class ReturnStatement(_Statement):
     value: Optional[_Expression] = None
 
@@ -1030,6 +1048,13 @@ class ToAst(Transformer):
         obj = args[0]
         idx = args[1]
         return _Index(object=obj, index=idx)
+
+    def range(self, args):
+        # args = [object, range_start, range_end]
+        obj = args[0]
+        start = args[1]
+        end = args[2]
+        return _Range(object=obj, start=start, end=end)
 
     def first_index(self, args):
         return _FirstIndex()
