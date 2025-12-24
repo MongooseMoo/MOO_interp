@@ -850,7 +850,13 @@ class VM:
             obj = self.db.objects[current_id]
 
             # Check verbs on this object
+            # MOO verbs can have multiple aliases separated by spaces
             for verb in obj.verbs:
+                # Split verb name into aliases and check each
+                verb_aliases = verb.name.split()
+                if verb_name in verb_aliases:
+                    return verb
+                # Also check exact match for simple verbs
                 if verb.name == verb_name:
                     return verb
 
