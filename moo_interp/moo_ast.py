@@ -424,7 +424,7 @@ class _Ternary(_Expression):
 
 
 @dataclass
-class _Assign(_Statement):
+class _Assign(_Expression):
     target: Identifier
     value: _Expression
 
@@ -433,30 +433,28 @@ class _Assign(_Statement):
         if isinstance(self.target, Identifier):
             # Register variable with compiler state
             state.add_var(self.target.value)
-            # OP_PUT peeks (doesn't pop), so we need OP_POP after to clean up stack
+            # OP_PUT peeks (doesn't pop) - leaves value on stack for expression result
+            # _SingleStatement will add OP_POP when assignment is used as statement
             return value_bc + [
-                Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value)),
-                Instruction(opcode=Opcode.OP_POP, operand=1)
+                Instruction(opcode=Opcode.OP_PUT, operand=MOOString(self.target.value))
             ]
         elif isinstance(self.target, _Property):
             # OP_PUT_PROP expects stack: [obj, propname, value] with value on top
             # C code: rhs = POP(); propname = POP(); obj = POP();
             obj_bc = self.target.object.to_bytecode(state, program)
             name_bc = self.target.name.to_bytecode(state, program)
-            # OP_PUT_PROP pops all 3 and pushes result, so we need OP_POP after
+            # OP_PUT_PROP pops all 3 and pushes result (value assigned)
             return obj_bc + name_bc + value_bc + [
-                Instruction(opcode=Opcode.OP_PUT_PROP),
-                Instruction(opcode=Opcode.OP_POP, operand=1)
+                Instruction(opcode=Opcode.OP_PUT_PROP)
             ]
         elif isinstance(self.target, _Index):
             # Indexed assignment: obj[index] = value
             # Stack: push obj, push index, push value, then INDEXSET
             obj_bc = self.target.object.to_bytecode(state, program)
             index_bc = self.target.index.to_bytecode(state, program)
-            # INDEXSET pops 3, pushes result, so we need OP_POP after
+            # INDEXSET pops 3, pushes result (value assigned)
             return obj_bc + index_bc + value_bc + [
-                Instruction(opcode=Opcode.OP_INDEXSET),
-                Instruction(opcode=Opcode.OP_POP, operand=1)
+                Instruction(opcode=Opcode.OP_INDEXSET)
             ]
         elif isinstance(self.target, _List):
             # Destructuring assignment: {a, b, c} = list
