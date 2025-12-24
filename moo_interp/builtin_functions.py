@@ -694,22 +694,23 @@ class BuiltinFunctions:
         return len(x)
 
     def toliteral(self, x):
-        if isinstance(x, MOOString):
-            return MOOString("\"" + x.data + "\"")
-        elif isinstance(x, MOONumber):
-            return MOOString(str(x))
-        elif isinstance(x, MOOList):
-            return MOOString("{" + ", ".join([str(self.toliteral(y)) for y in x]) + "}")
-        elif isinstance(x, MOOMap):
-            return MOOString("[" + ", ".join([self.toliteral(y) + ": " + self.toliteral(z) for y, z in x.items()]) + "]")
-        elif isinstance(x, ObjNum):
+        # Check ObjNum FIRST (before int/float) since it inherits from int
+        if isinstance(x, ObjNum):
             return MOOString("#" + str(x))
         elif isinstance(x, MooObject):
             return MOOString("#" + str(x))
         elif isinstance(x, bool):
             return MOOString(str(x).lower())
-        elif isinstance(x, MOOAny):
+        elif isinstance(x, MOOString):
+            return MOOString("\"" + x.data + "\"")
+        elif isinstance(x, (int, float)):
             return MOOString(str(x))
+        elif isinstance(x, MOOList):
+            return MOOString("{" + ", ".join([str(self.toliteral(y)) for y in x]) + "}")
+        elif isinstance(x, MOOMap):
+            # Convert each key-value pair to strings before joining
+            items = [str(self.toliteral(k)) + ": " + str(self.toliteral(v)) for k, v in x.items()]
+            return MOOString("[" + ", ".join(items) + "]")
         else:
             raise (TypeError, "Unknown type: " + str(type(x)))
 
