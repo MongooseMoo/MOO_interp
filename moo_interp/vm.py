@@ -15,7 +15,7 @@ from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
                         MOONumber, Subtractable, is_truthy)
-from .opcodes import Extended_Opcode, Opcode
+from .opcodes import Extended_Opcode, Opcode, is_optim_num_opcode, opcode_to_optim_num
 from .string import MOOString
 
 # basicConfig(level="DEBUG")
@@ -264,8 +264,9 @@ class VM:
                 if not handler:
                     raise VMError(f"Unknown extended opcode {instr.operand}")
             if not handler:
-                if type(instr.opcode) == int:
-                    result = int(instr.opcode) - 113
+                # Check if it's an OPTIM_NUM opcode (optimized immediate number)
+                if type(instr.opcode) == int and is_optim_num_opcode(instr.opcode):
+                    result = opcode_to_optim_num(instr.opcode)
                 else:
                     raise VMError(f"Unknown opcode {instr.opcode}")
         if result is None:

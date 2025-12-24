@@ -9,7 +9,7 @@ from lark.tree import Meta
 
 from .builtin_functions import BuiltinFunctions
 from .moo_types import MOOAny, to_moo
-from .opcodes import Extended_Opcode, Opcode
+from .opcodes import Extended_Opcode, Opcode, optim_num_to_opcode, in_optim_num_range, OPTIM_NUM_LOW, OPTIM_NUM_HI
 from .parser import parser
 from .string import MOOString
 from .vm import VM, Instruction, Program, StackFrame
@@ -242,8 +242,8 @@ class NumberLiteral(_Literal, _Expression):
     value: int
 
     def to_bytecode(self, state: CompilerState, program: Program):
-        if self.value > -1 and self.value < 256:
-            return [self.emit_byte(113+self.value, None)]
+        if in_optim_num_range(self.value):
+            return [self.emit_byte(optim_num_to_opcode(self.value), None)]
         return [self.emit_byte(Opcode.OP_IMM, self.value)]
 
 
@@ -1467,8 +1467,9 @@ def compile(tree, bi_funcs=None):
 def disassemble(frame: StackFrame):
     bc = frame.stack
     for instruction in bc:
-        if isinstance(instruction.opcode, int) and instruction.opcode >= 113:
-            print(f"Num            {instruction.opcode-113}")
+        if isinstance(instruction.opcode, int) and instruction.opcode >= 53:
+            from .opcodes import opcode_to_optim_num
+            print(f"Num            {opcode_to_optim_num(instruction.opcode)}")
             continue
         print(
             f"{instruction.opcode.value} {instruction.opcode.name} {type(instruction.operand).__name__} {instruction.operand}")
