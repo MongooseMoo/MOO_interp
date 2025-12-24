@@ -1251,7 +1251,7 @@ class BuiltinFunctions:
         Encode values to MOO binary string format using ~XX escapes.
 
         Format: printable chars (except ~) stay as-is, others become ~XX.
-        Special case: ~ (0x7e) becomes ~~
+        Tilde (0x7e) is treated as non-printable and becomes ~7E.
 
         Args can be: int (0-255), string, or list of ints/strings.
         """
@@ -1266,18 +1266,14 @@ class BuiltinFunctions:
                     # String - encode each char
                     for char in str(byte_val):
                         b = ord(char)
-                        if b == 0x7e:  # tilde
-                            result.append('~~')
-                        elif 33 <= b <= 126 and b != 0x7e:  # printable except ~
+                        if 33 <= b <= 126 and b != 0x7e:  # printable except ~
                             result.append(chr(b))
                         else:
                             result.append(f'~{b:02X}')
                     continue
 
                 # Handle integer byte value
-                if b == 0x7e:  # tilde
-                    result.append('~~')
-                elif 32 <= b <= 126 and b != 0x7e:  # printable (space + graph)
+                if 32 <= b <= 126 and b != 0x7e:  # printable (space + graph, except ~)
                     result.append(chr(b))
                 else:
                     result.append(f'~{b:02X}')
