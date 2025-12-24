@@ -1339,6 +1339,8 @@ class VM:
     @operator(Opcode.OP_PUSH_GET_PROP)
     def exec_push_get_prop(self, obj_id: int, prop_name: MOOString) -> MOOAny:
         """Get property value from object with inheritance."""
+        from lambdamoo_db.database import Clear
+        
         obj = self.db.objects.get(obj_id)
         if obj is None:
             raise VMError(f"E_INVIND: Invalid object #{obj_id}")
@@ -1356,8 +1358,13 @@ class VM:
             
             for prop in getattr(current_obj, 'properties', []):
                 if getattr(prop, 'propertyName', getattr(prop, 'name', '')) == prop_name_str:
-                    # Convert raw Python types to MOO types
                     value = prop.value
+                    
+                    # Skip Clear values - they mean "inherited, check parent"
+                    if isinstance(value, Clear):
+                        break  # Break inner loop to move to parent
+                    
+                    # Convert raw Python types to MOO types
                     if isinstance(value, str) and not isinstance(value, MOOString):
                         value = MOOString(value)
                     elif isinstance(value, list) and not isinstance(value, MOOList):
@@ -1439,8 +1446,14 @@ class VM:
 
             for p in getattr(current_obj, 'properties', []):
                 if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
-                    # Convert raw Python types to MOO types
                     value = p.value
+                    
+                    # Skip Clear values - they mean "inherited, check parent"
+                    from lambdamoo_db.database import Clear
+                    if isinstance(value, Clear):
+                        break  # Break inner loop to move to parent
+                    
+                    # Convert raw Python types to MOO types
                     if isinstance(value, str) and not isinstance(value, MOOString):
                         value = MOOString(value)
                     elif isinstance(value, list) and not isinstance(value, MOOList):

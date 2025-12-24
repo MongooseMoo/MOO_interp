@@ -1024,6 +1024,10 @@ class BuiltinFunctions:
             
             for prop in getattr(current_obj, 'properties', []):
                 if getattr(prop, 'propertyName', getattr(prop, 'name', '')) == prop_name:
+                    # Skip Clear values - they mean "inherited, check parent"
+                    from lambdamoo_db.database import Clear
+                    if isinstance(prop.value, Clear):
+                        break  # Break inner loop to move to parent
                     return prop
             
             # Move to parent
