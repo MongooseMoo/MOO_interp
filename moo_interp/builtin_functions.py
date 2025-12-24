@@ -645,27 +645,44 @@ class BuiltinFunctions:
         else:
             return base64.b64decode(x)
 
-    def _moo_to_python(self, value):
-        """Convert MOO types to native Python for JSON serialization."""
+    def _moo_to_python(self, value, mode="common-subset"):
+        """Convert MOO types to native Python for JSON serialization.
+
+        Args:
+            value: The MOO value to convert
+            mode: "common-subset" (default) or "embedded-types"
+        """
         # Handle MOOString - UserString stores string in .data attribute
         if isinstance(value, MOOString):
             return value.data
 
         # Handle MOOList - iterate and convert elements
         elif isinstance(value, MOOList):
-            return [self._moo_to_python(v) for v in value]
+            return [self._moo_to_python(v, mode) for v in value]
 
         # Handle MOOMap - convert keys and values
         elif isinstance(value, MOOMap):
-            return {self._moo_to_python(k): self._moo_to_python(v) for k, v in value.items()}
+            return {self._moo_to_python(k, mode): self._moo_to_python(v, mode) for k, v in value.items()}
 
-        # Handle ObjNum - convert to integer
+        # Handle ObjNum - convert to string format "#N" or "#N|obj"
         elif isinstance(value, ObjNum):
-            return int(value)
+            if mode == "embedded-types":
+                return f"#{int(value)}|obj"
+            else:
+                return f"#{int(value)}"
 
-        # Handle MOOError/MOOException - convert to string
-        elif isinstance(value, (MOOError, MOOException)):
-            return str(value)
+        # Handle MOOError - convert to string format or with type annotation
+        elif isinstance(value, MOOError):
+            if mode == "embedded-types":
+                return f"{value.name}|err"
+            else:
+                return value.name
+
+        elif isinstance(value, MOOException):
+            if mode == "embedded-types":
+                return f"{value.error_code.name}|err"
+            else:
+                return value.error_code.name
 
         # Pass through native Python types (int, float, str, bool, None)
         return value
@@ -680,11 +697,62 @@ class BuiltinFunctions:
         Returns:
             MOOString containing JSON representation
         """
-        # For now, both modes behave the same - just convert to JSON
-        # In full implementation, "embedded-types" would include type annotations
-        # like {"_type": "OBJ", "value": 123}
-        native = self._moo_to_python(x)
+        # Convert mode from MOOString if needed
+        if mode is None:
+            mode_str = "common-subset"
+        elif isinstance(mode, MOOString):
+            mode_str = mode.data
+        else:
+            mode_str = str(mode)
+
+        native = self._moo_to_python(x, mode_str)
         return MOOString(json.dumps(native))
+
+    def _python_to_moo(self, value, mode="common-subset"):
+        """Convert Python value from JSON to MOO types.
+
+        Args:
+            value: Python value from json.loads()
+            mode: "common-subset" or "embedded-types"
+
+        Raises:
+            MOOException: E_INVARG if common-subset mode encounters non-JSON types
+        """
+        if isinstance(value, str):
+            # Check for embedded type annotations in string
+            if mode == "embedded-types":
+                # Handle "#N|obj" -> ObjNum(N)
+                if value.startswith("#") and "|obj" in value:
+                    try:
+                        num_str = value[1:value.index("|obj")]
+                        return ObjNum(int(num_str))
+                    except (ValueError, IndexError):
+                        pass
+
+                # Handle "E_XXX|err" -> MOOError
+                if "|err" in value:
+                    try:
+                        error_name = value[:value.index("|err")]
+                        if hasattr(MOOError, error_name):
+                            return getattr(MOOError, error_name)
+                    except (ValueError, AttributeError):
+                        pass
+
+            # Check if string looks like an object/error in common-subset mode (should fail)
+            if mode == "common-subset":
+                if value.startswith("#") or (value.startswith("E_") and value.isupper()):
+                    raise MOOException(MOOError.E_INVARG, "Object/error types not allowed in common-subset mode")
+
+            return MOOString(value)
+
+        elif isinstance(value, list):
+            return MOOList([self._python_to_moo(v, mode) for v in value])
+
+        elif isinstance(value, dict):
+            return MOOMap({self._python_to_moo(k, mode): self._python_to_moo(v, mode) for k, v in value.items()})
+
+        # Pass through primitives (int, float, bool, None)
+        return value
 
     def parse_json(self, x, mode: MOOString = None):
         """Parse JSON string into MOO value.
@@ -695,16 +763,28 @@ class BuiltinFunctions:
 
         Returns:
             MOO value parsed from JSON
+
+        Raises:
+            MOOException: E_INVARG for invalid JSON or disallowed types
         """
-        # For now, both modes behave the same - just parse JSON
-        # In full implementation, "embedded-types" would recognize type annotations
-        # like {"_type": "OBJ", "value": 123} and convert to ObjNum(123)
+        # Convert mode from MOOString if needed
+        if mode is None:
+            mode_str = "common-subset"
+        elif isinstance(mode, MOOString):
+            mode_str = mode.data
+        else:
+            mode_str = str(mode)
 
         # Convert MOOString to Python string if needed
         if isinstance(x, MOOString):
             x = x.data
 
-        return to_moo(json.loads(x))
+        try:
+            parsed = json.loads(x)
+        except (json.JSONDecodeError, TypeError) as e:
+            raise MOOException(MOOError.E_INVARG, f"Invalid JSON: {e}")
+
+        return self._python_to_moo(parsed, mode_str)
 
     def remove_ansi(self, input_string):
         return reduce(lambda s, tag: s.replace(tag, ''), BuiltinFunctions.ANSI_TAGS, input_string)
