@@ -230,9 +230,8 @@ class BuiltinFunctions:
                 return 0
         elif isinstance(value, float):
             return int(value)
-        elif isinstance(value,
-                        MOOObj):
-            return value.id
+        elif isinstance(value, ObjNum):
+            return int(value)
         elif isinstance(value, MOOError):
             return self.unparse_error(value)
         elif isinstance(value, bool):
@@ -368,40 +367,52 @@ class BuiltinFunctions:
         # For now, just accept and ignore (allows code to proceed)
         pass
 
-    def task_local(self):
+    def task_local(self, *args):
         """Get the task-local storage for the current task.
-        
-        task_local() => value stored by set_task_local(), or 0 if not set
-        
+
+        task_local() => value stored by set_task_local(), or {} if not set
+
         Requires wizard permissions.
         Raises E_PERM if not wizard.
         Raises E_ARGS if called with arguments.
-        
+
         Task-local storage is per-task and persists only for that task's lifetime.
         """
+        # Validate argument count
+        if len(args) != 0:
+            raise MOOException(MOOError.E_ARGS, "task_local() takes no arguments")
+
         # Permission check - requires wizard
+        # TODO: Check if caller is wizard and raise E_PERM if not
         # This will be enforced by the VM/task runner context
-        
+
         # Get task-local storage from VM context
-        # For now, return 0 (not implemented in VM yet)
+        # For now, return empty map (not implemented in VM yet)
         # TODO: Implement task-local storage in VM
-        return 0
-    
-    def set_task_local(self, value):
+        return MOOMap({})
+
+    def set_task_local(self, *args):
         """Set the task-local storage for the current task.
-        
+
         set_task_local(value) => 0
-        
+
         Requires wizard permissions.
         Raises E_PERM if not wizard.
         Raises E_ARGS if called with wrong number of arguments.
-        
+
         Stores a value that can be retrieved later with task_local().
         The value is cleared when the task completes.
         """
+        # Validate argument count
+        if len(args) != 1:
+            raise MOOException(MOOError.E_ARGS, "set_task_local() requires exactly 1 argument")
+
         # Permission check - requires wizard
+        # TODO: Check if caller is wizard and raise E_PERM if not
         # This will be enforced by the VM/task runner context
-        
+
+        value = args[0]
+
         # Set task-local storage in VM context
         # For now, just return 0 (not implemented in VM yet)
         # TODO: Implement task-local storage in VM
