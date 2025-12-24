@@ -19,7 +19,7 @@ from logging import getLogger
 from typing import Union
 
 from lambdamoo_db.database import MooDatabase, MooObject, ObjNum
-from .errors import MOOError
+from .errors import MOOError, MOOException
 from .list import MOOList
 from .map import MOOMap
 from .string import MOOString
@@ -60,6 +60,15 @@ class BuiltinFunctions:
             attr = getattr(self, attr_name)
             if callable(attr) and not attr_name.startswith('__'):
                 self(attr)
+
+        # Register aliases (raise is a Python keyword, so we use raise_error internally)
+        if 'raise_error' in self.functions:
+            func = self.functions['raise_error']
+            func_id = self.function_to_id.get(func)
+            self.functions['raise'] = func
+            if func_id is not None:
+                # Point 'raise' to the same ID
+                pass  # ID lookup uses get_id_by_name which checks self.functions
 
     def __call__(self, fn):
         if self.current_id > 255:
@@ -722,6 +731,79 @@ class BuiltinFunctions:
             return self.TYPE_ERR
         else:
             return self.TYPE_INT  # fallback
+
+    def raise_error(self, code, message=None, value=None):
+        """Raise an error that can be caught by try/except.
+
+        raise(code [, message [, value]])
+
+        Args:
+            code: Error code (E_TYPE, E_PERM, etc.)
+            message: Optional error message string
+            value: Optional value to include in the error
+        """
+        if message is None:
+            if isinstance(code, MOOError):
+                message = code.name
+            else:
+                message = str(code)
+        raise MOOException(code, str(message))
+
+    def ancestors(self, obj, full=False):
+        """Return the ancestors of an object.
+
+        ancestors(obj [, full])
+
+        Args:
+            obj: Object ID or ObjNum to get ancestors of
+            full: If true, return full tree including duplicates
+
+        Returns:
+            MOOList of ancestor object IDs
+        """
+        if self.db is None:
+            return MOOList([])
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "ancestors() requires an object")
+
+        # Check if object exists
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        ancestors = []
+        visited = set()
+        to_visit = []
+
+        # Start with direct parents
+        db_obj = self.db.objects[obj_id]
+        if hasattr(db_obj, 'parents') and db_obj.parents:
+            to_visit.extend(db_obj.parents)
+        elif hasattr(db_obj, 'parent') and db_obj.parent is not None and db_obj.parent >= 0:
+            to_visit.append(db_obj.parent)
+
+        while to_visit:
+            parent_id = to_visit.pop(0)
+            if parent_id < 0:
+                continue
+            if not full and parent_id in visited:
+                continue
+            visited.add(parent_id)
+            ancestors.append(ObjNum(parent_id))
+
+            if parent_id in self.db.objects:
+                parent_obj = self.db.objects[parent_id]
+                if hasattr(parent_obj, 'parents') and parent_obj.parents:
+                    to_visit.extend(parent_obj.parents)
+                elif hasattr(parent_obj, 'parent') and parent_obj.parent is not None and parent_obj.parent >= 0:
+                    to_visit.append(parent_obj.parent)
+
+        return MOOList(ancestors)
 
     def toobj(self, x):
         """Convert a value to an object reference."""
