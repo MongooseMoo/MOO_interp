@@ -637,6 +637,9 @@ class VM:
     @operator(Opcode.OP_REF)
     def exec_ref(self, lst: Container, index: int) -> MOOAny:
         # MOOString and MOOList already handle 1-based indexing in __getitem__
+        # Plain Python lists (e.g., from database properties) need conversion
+        if isinstance(lst, list) and not isinstance(lst, MOOList):
+            return lst[index - 1]  # Convert 1-based to 0-based for plain lists
         return lst[index]
 
     @operator(Opcode.OP_PUSH_REF)
