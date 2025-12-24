@@ -812,6 +812,132 @@ class BuiltinFunctions:
 
         return MOOList(ancestors)
 
+    def verbs(self, obj):
+        """Return list of verb names defined on an object.
+
+        verbs(obj) => list of strings
+        """
+        if self.db is None:
+            return MOOList([])
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        elif isinstance(obj, (str, MOOString)):
+            s = str(obj).strip().lstrip('#')
+            try:
+                obj_id = int(s)
+            except ValueError:
+                raise MOOException(MOOError.E_TYPE, f"verbs() requires an object")
+        else:
+            raise MOOException(MOOError.E_TYPE, "verbs() requires an object")
+
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        db_obj = self.db.objects[obj_id]
+        verb_names = []
+        for v in getattr(db_obj, 'verbs', []):
+            name = getattr(v, 'name', '')
+            verb_names.append(MOOString(name))
+        return MOOList(verb_names)
+
+    def verb_info(self, obj, verb_desc):
+        """Return info about a verb: {owner, perms, names}.
+
+        verb_info(obj, verb-desc) => {owner, perms, names}
+        """
+        if self.db is None:
+            return MOOList([])
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "verb_info() requires an object")
+
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        db_obj = self.db.objects[obj_id]
+        verbs = getattr(db_obj, 'verbs', [])
+
+        # verb_desc can be a name (string) or index (int)
+        verb = None
+        if isinstance(verb_desc, int):
+            idx = verb_desc - 1  # MOO is 1-indexed
+            if 0 <= idx < len(verbs):
+                verb = verbs[idx]
+        else:
+            verb_name = str(verb_desc)
+            for v in verbs:
+                if verb_name in getattr(v, 'name', '').split():
+                    verb = v
+                    break
+
+        if verb is None:
+            raise MOOException(MOOError.E_VERBNF, f"Verb not found")
+
+        owner = ObjNum(getattr(verb, 'owner', -1))
+        perms = MOOString(getattr(verb, 'perms', 'rd'))
+        names = MOOString(getattr(verb, 'name', ''))
+        return MOOList([owner, perms, names])
+
+    def verb_args(self, obj, verb_desc):
+        """Return argument spec for a verb: {dobj, prep, iobj}.
+
+        verb_args(obj, verb-desc) => {dobj, prep, iobj}
+        """
+        if self.db is None:
+            return MOOList([])
+
+        # Get object ID
+        if isinstance(obj, ObjNum):
+            obj_id = int(str(obj).lstrip('#'))
+        elif isinstance(obj, int):
+            obj_id = obj
+        else:
+            raise MOOException(MOOError.E_TYPE, "verb_args() requires an object")
+
+        if obj_id not in self.db.objects:
+            raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
+
+        db_obj = self.db.objects[obj_id]
+        verbs = getattr(db_obj, 'verbs', [])
+
+        # verb_desc can be a name (string) or index (int)
+        verb = None
+        if isinstance(verb_desc, int):
+            idx = verb_desc - 1  # MOO is 1-indexed
+            if 0 <= idx < len(verbs):
+                verb = verbs[idx]
+        else:
+            verb_name = str(verb_desc)
+            for v in verbs:
+                if verb_name in getattr(v, 'name', '').split():
+                    verb = v
+                    break
+
+        if verb is None:
+            raise MOOException(MOOError.E_VERBNF, f"Verb not found")
+
+        # Map arg spec values to strings
+        dobj_map = {0: 'none', 1: 'any', 2: 'this'}
+        prep_map = {0: 'none', 1: 'any', -1: 'none'}  # Simplified
+        iobj_map = {0: 'none', 1: 'any', 2: 'this'}
+
+        dobj = dobj_map.get(getattr(verb, 'dobj', 0), 'none')
+        prep = getattr(verb, 'prep', 'none')
+        if isinstance(prep, int):
+            prep = prep_map.get(prep, 'none')
+        iobj = iobj_map.get(getattr(verb, 'iobj', 0), 'none')
+
+        return MOOList([MOOString(dobj), MOOString(str(prep)), MOOString(iobj)])
+
     def toobj(self, x):
         """Convert a value to an object reference."""
         if isinstance(x, MooObject):
