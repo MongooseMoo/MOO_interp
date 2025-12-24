@@ -1035,6 +1035,9 @@ class BuiltinFunctions:
         """Return the parent of an object.
 
         parent(obj) => objnum or E_INVARG
+
+        Note: In MOO, parent() returns a single object. With multiple inheritance,
+        this returns the first parent in the parents list.
         """
         if self.db is None:
             raise MOOException(MOOError.E_INVARG, "No database available")
@@ -1051,8 +1054,14 @@ class BuiltinFunctions:
             raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
 
         db_obj = self.db.objects[obj_id]
-        parent_id = getattr(db_obj, 'parent', -1)
-        if parent_id is None:
+        # Check for both 'parent' (old single-inheritance) and 'parents' (new multi-inheritance)
+        if hasattr(db_obj, 'parents') and db_obj.parents:
+            parent_id = db_obj.parents[0] if db_obj.parents else -1
+        elif hasattr(db_obj, 'parent'):
+            parent_id = db_obj.parent
+            if parent_id is None:
+                parent_id = -1
+        else:
             parent_id = -1
         return ObjNum(parent_id)
 
@@ -1075,12 +1084,17 @@ class BuiltinFunctions:
         if obj_id not in self.db.objects:
             raise MOOException(MOOError.E_INVARG, f"Invalid object: #{obj_id}")
 
-        # Find all objects that have this object as parent
+        # Find all objects that have this object as a parent
         children = []
-        for oid, obj in self.db.objects.items():
-            parent_id = getattr(obj, 'parent', -1)
-            if parent_id == obj_id:
-                children.append(ObjNum(oid))
+        for oid, child_obj in self.db.objects.items():
+            # Check both 'parent' (old) and 'parents' (new) attributes
+            if hasattr(child_obj, 'parents') and child_obj.parents:
+                if obj_id in child_obj.parents:
+                    children.append(ObjNum(oid))
+            elif hasattr(child_obj, 'parent'):
+                parent_id = child_obj.parent
+                if parent_id == obj_id:
+                    children.append(ObjNum(oid))
 
         return MOOList(children)
 
@@ -1139,22 +1153,15 @@ class BuiltinFunctions:
         # Create new object - find next available ID
         new_id = max(self.db.objects.keys()) + 1 if self.db.objects else 0
 
-        # Create minimal object
+        # Create minimal object using MooObject constructor
+        # Note: MooObject uses 'parents' (list) not 'parent' (single)
         new_obj = MooObject(
             id=new_id,
-            owner=owner_id,
-            parent=parent_id,
             name=MOOString(""),
-            location=-1,
-            contents=[],
-            programmer=0,
-            wizard=0,
-            r=0,
-            w=0,
-            f=0,
             flags=0,
-            verbs=[],
-            propvals={},
+            owner=owner_id,
+            location=-1,
+            parents=[parent_id],
         )
 
         # Add to database
