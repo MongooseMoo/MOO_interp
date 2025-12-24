@@ -221,7 +221,15 @@ class BuiltinFunctions:
         return MOOString("".join(map(self.to_string, args)))
 
     def toint(self, value):
-        if isinstance(value, int):
+        # Check ObjNum FIRST before int (ObjNum inherits from int)
+        if isinstance(value, ObjNum):
+            # Extract numeric value, not the ObjNum object
+            # int() on ObjNum just returns itself, so use int.__new__ or .value
+            return int.__index__(value)
+        elif isinstance(value, bool):
+            # Check bool before int (bool inherits from int)
+            return 1 if value else 0
+        elif isinstance(value, int):
             return value
         elif isinstance(value, MOOString):
             try:
@@ -230,12 +238,8 @@ class BuiltinFunctions:
                 return 0
         elif isinstance(value, float):
             return int(value)
-        elif isinstance(value, ObjNum):
-            return int(value)
         elif isinstance(value, MOOError):
             return self.unparse_error(value)
-        elif isinstance(value, bool):
-            return 1 if value else 0
         # elif isinstance(value, MOOAnon):
             # return 0
         else:
