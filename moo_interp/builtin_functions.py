@@ -558,8 +558,10 @@ class BuiltinFunctions:
 
         pos = search_str.find(s2)
         if pos >= 0:
-            # Convert back to 1-based index in original string
-            return offset + pos + 1
+            # Return 1-based index within the searched substring (like C strindex)
+            # This matches toaststunt behavior: offset shifts the search window,
+            # but the result is relative to that window, not the original string
+            return pos + 1
         return 0
 
     def rindex(self, str1: MOOString, str2: MOOString, case_matters: int = 0, offset: int = 0):
