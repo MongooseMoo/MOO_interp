@@ -1770,6 +1770,9 @@ def compile(tree, bi_funcs=None, context_vars=None):
             state.add_var(var_name)
 
     for node in tree.children:
+        # Skip non-AST nodes (e.g., empty Tree from parser)
+        if not hasattr(node, 'to_bytecode'):
+            continue
         bc += node.to_bytecode(state, None)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
 
