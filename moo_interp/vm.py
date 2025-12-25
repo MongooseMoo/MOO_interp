@@ -7,7 +7,7 @@ from logging import basicConfig, getLogger
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 from attr import define, field
-from lambdamoo_db.database import MooDatabase
+from lambdamoo_db.database import Anon, MooDatabase, ObjNum
 
 from .builtin_functions import BuiltinFunctions
 from .errors import ERROR_CODES, MOOError, MOOException
@@ -17,6 +17,14 @@ from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
                         MOONumber, Subtractable, is_truthy)
 from .opcodes import Extended_Opcode, Opcode, is_optim_num_opcode, opcode_to_optim_num
 from .string import MOOString
+
+# Type alias for primitive MOO values (not objects)
+# These use prototype lookup for verb calls
+MOOPrimitive = Union[int, float, str, MOOString, MOOError, MOOList, MOOMap]
+
+# Type alias for all values that can be verb call targets
+# Objects (ObjNum, Anon) call verbs directly; primitives use prototype lookup
+MOOValue = Union[ObjNum, Anon, MOOPrimitive]
 
 # basicConfig(level="DEBUG")
 logger = getLogger(__name__)
@@ -992,7 +1000,7 @@ class VM:
     # Verb Call Operations
 
     @operator(Opcode.OP_CALL_VERB)
-    def exec_call_verb(self, obj_id: Any, verb_name: MOOString, args: MOOList):
+    def exec_call_verb(self, obj_id: MOOValue, verb_name: MOOString, args: MOOList):
         """Call a verb on an object
 
         Stack layout (bottom to top, popped in reverse):
@@ -1010,8 +1018,7 @@ class VM:
             raise VMError(f"OP_CALL_VERB: verb_name must be MOOString, got {type(verb_name).__name__}={repr(verb_name)}")
 
         # Handle primitive values - calling verbs on primitives uses prototype objects
-        from lambdamoo_db.database import ObjNum, Anon
-        primitive_this = None  # Will hold the primitive value if calling on prototype
+        primitive_this: MOOValue | None = None  # Will hold the primitive value if calling on prototype
 
         if not isinstance(obj_id, (ObjNum, Anon)):
             # Primitive value (int, float, string, error, list, map)
@@ -1107,7 +1114,7 @@ class VM:
         # Don't return a value - the verb will execute and eventually OP_RETURN
         return None
 
-    def _get_primitive_prototype(self, value: Any) -> Optional[int]:
+    def _get_primitive_prototype(self, value: MOOPrimitive) -> ObjNum | None:
         """Get the prototype object for a primitive value.
 
         MOO allows calling verbs on primitive values (int, float, string, etc.)
@@ -1122,24 +1129,19 @@ class VM:
         Returns:
             Object ID of the prototype, or None if no prototype exists
         """
-        from lambdamoo_db.database import ObjNum
-
         if not self.db or 0 not in self.db.objects:
             return None
 
         # Map Python types to MOO prototype property names
         # Based on ToastStunt's MATCH_TYPE macro in execute.cc
         # Order matters: check subclasses before parent classes (MOOError before int)
-        proto_name = None
+        proto_name: str | None = None
         if isinstance(value, bool):
             # Booleans are ints in MOO, use int_proto
             proto_name = "int_proto"
         elif isinstance(value, MOOError):
             # Check MOOError before int since MOOError is an IntEnum
             proto_name = "err_proto"
-        elif isinstance(value, ObjNum):
-            # ObjNum that's not in db - use obj_proto
-            proto_name = "obj_proto"
         elif isinstance(value, int):
             proto_name = "int_proto"
         elif isinstance(value, float):
