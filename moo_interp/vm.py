@@ -1268,7 +1268,7 @@ class VM:
                 raise MOOException(MOOError.E_RANGE)
             # Return last key
             # Maps maintain insertion order in Python 3.7+
-            return next(reversed(container.keys()))
+            return list(container.keys())[-1]
         else:
             raise VMError(f"E_TYPE: last index requires list, string, or map, got {type(container)}")
 
