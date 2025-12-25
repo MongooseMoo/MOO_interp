@@ -2326,8 +2326,8 @@ class BuiltinFunctions:
     # bcrypt alphabet: ./A-Za-z0-9
     _BCRYPT64 = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-    def _encode_b64(self, data: bytes, alphabet: str, output_len: int) -> str:
-        """Encode bytes to base64-like string using given alphabet."""
+    def _encode_crypt64(self, data: bytes, alphabet: str, output_len: int) -> str:
+        """Encode bytes to crypt-style base64 (LSB first) for DES/MD5/SHA."""
         result = []
         value = 0
         bits = 0
@@ -2344,6 +2344,36 @@ class BuiltinFunctions:
         while len(result) < output_len:
             result.append(alphabet[0])
         return ''.join(result[:output_len])
+
+    def _encode_bcrypt64(self, data: bytes) -> str:
+        """Encode bytes to bcrypt base64 (MSB first, like standard base64)."""
+        alphabet = self._BCRYPT64
+        result = []
+        i = 0
+        while i < len(data):
+            c1 = data[i]
+            i += 1
+            result.append(alphabet[c1 >> 2])
+            c1 = (c1 & 0x03) << 4
+            if i >= len(data):
+                result.append(alphabet[c1])
+                break
+
+            c2 = data[i]
+            i += 1
+            c1 |= c2 >> 4
+            result.append(alphabet[c1])
+            c1 = (c2 & 0x0f) << 2
+            if i >= len(data):
+                result.append(alphabet[c1])
+                break
+
+            c2 = data[i]
+            i += 1
+            c1 |= c2 >> 6
+            result.append(alphabet[c1])
+            result.append(alphabet[c2 & 0x3f])
+        return ''.join(result)
 
     def salt(self, prefix: MOOString, random_data: MOOString) -> MOOString:
         """Generate a salt for use with crypt().
@@ -2371,13 +2401,13 @@ class BuiltinFunctions:
             # DES: requires 2 bytes, produces 2-char salt
             if len(random_bytes) < 2:
                 raise MOOException(MOOError.E_INVARG, "DES salt requires at least 2 bytes of random data")
-            return MOOString(self._encode_b64(random_bytes[:2], self._ITOA64, 2))
+            return MOOString(self._encode_crypt64(random_bytes[:2], self._ITOA64, 2))
 
         elif prefix == "$1$":
             # MD5: requires 3+ bytes, produces $1$ + 8 chars
             if len(random_bytes) < 3:
                 raise MOOException(MOOError.E_INVARG, "MD5 salt requires at least 3 bytes of random data")
-            salt_chars = self._encode_b64(random_bytes, self._ITOA64, 8)
+            salt_chars = self._encode_crypt64(random_bytes, self._ITOA64, 8)
             return MOOString(f"$1${salt_chars}")
 
         elif prefix.startswith("$5$") or prefix.startswith("$6$"):
@@ -2399,7 +2429,7 @@ class BuiltinFunctions:
 
             if len(random_bytes) < 3:
                 raise MOOException(MOOError.E_INVARG, "SHA salt requires at least 3 bytes of random data")
-            salt_chars = self._encode_b64(random_bytes, self._ITOA64, 16)
+            salt_chars = self._encode_crypt64(random_bytes, self._ITOA64, 16)
             return MOOString(f"{prefix_out}{salt_chars}")
 
         elif prefix.startswith("$2a$") or prefix.startswith("$2b$"):
@@ -2421,7 +2451,7 @@ class BuiltinFunctions:
             if len(random_bytes) < 16:
                 raise MOOException(MOOError.E_INVARG, "bcrypt salt requires 16 bytes of random data")
 
-            salt_chars = self._encode_b64(random_bytes[:16], self._BCRYPT64, 22)
+            salt_chars = self._encode_bcrypt64(random_bytes[:16])
             return MOOString(f"${variant}${cost:02d}${salt_chars}")
 
         else:
