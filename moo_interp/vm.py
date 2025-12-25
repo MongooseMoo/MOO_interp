@@ -1321,13 +1321,62 @@ class VM:
             raise VMError(f"E_TYPE: last index requires list, string, or map, got {type(container)}")
 
     @operator(Extended_Opcode.EOP_RANGESET)
-    def exec_rangeset(self, lst: MOOList, start: int, end: int, value: MOOList) -> MOOList:
-        """Replace elements in range [start..end] with value list."""
-        if not isinstance(lst, MOOList):
-            raise VMError(f"E_TYPE: rangeset requires list, got {type(lst)}")
-        # Convert to 0-indexed for internal list operations
-        result = MOOList(*lst._list[:start-1], *value._list, *lst._list[end:])
-        return result
+    def exec_rangeset(self, base, start, end, value):
+        """Replace elements in range [start..end] with value.
+
+        For lists: standard range replacement
+        For maps: replace keys in range [start..end] with value map's entries
+        """
+        if isinstance(base, MOOList):
+            # List range set
+            if not isinstance(start, int) or not isinstance(end, int):
+                raise MOOException(MOOError.E_TYPE, "list range indices must be integers")
+            # Convert to 0-indexed for internal list operations
+            result = MOOList(*base._list[:start-1], *value._list, *base._list[end:])
+            return result
+        elif isinstance(base, MOOMap):
+            # Map range set - start and end are keys
+            if not isinstance(value, MOOMap):
+                raise MOOException(MOOError.E_TYPE, "map range set requires map value")
+
+            # Get sorted keys
+            sorted_keys = list(base)  # __iter__ returns sorted keys
+
+            # Find positions of start and end keys
+            start_pos = None
+            end_pos = None
+            for i, key in enumerate(sorted_keys):
+                if key == start:
+                    start_pos = i
+                if key == end:
+                    end_pos = i
+
+            # Handle inverted ranges (start > end means insert between)
+            if start_pos is not None and end_pos is not None and start_pos > end_pos:
+                # Inverted range: insert without removing
+                # Just merge the value map into base
+                result = base.shallow_copy()
+                for k, v in value.items():
+                    result[k] = v
+                return result
+
+            # If either key not found, E_RANGE
+            if start_pos is None or end_pos is None:
+                raise MOOException(MOOError.E_RANGE, "key not found in map")
+
+            # Create new map: entries before start + value entries + entries after end
+            result = MOOMap()
+            for i, key in enumerate(sorted_keys):
+                if i < start_pos:
+                    result[key] = base[key]
+                elif i > end_pos:
+                    result[key] = base[key]
+            # Add value map entries
+            for k, v in value.items():
+                result[k] = v
+            return result
+        else:
+            raise MOOException(MOOError.E_TYPE, f"rangeset requires list or map, got {type(base)}")
 
     @operator(Extended_Opcode.EOP_COMPLEMENT)
     def exec_complement(self, value: int) -> int:
