@@ -158,22 +158,23 @@ UNARY_OP: "!" | "~" | "-"
      | function_call
      | dollar_property
      | dollar_verb_call
+     | first_index
+     | last_index
      | dollar
      | IDENTIFIER
+
+first_index: CARET
+last_index: DOLLAR
 
 // ============================================================================
 // Supporting rules
 // ============================================================================
 
-?index_target: CARET -> first_index
-             | DOLLAR -> last_index
-             | expression
+?index_target: expression
 
-?range_start: CARET -> first_index
-            | expression
+?range_start: expression
 
-?range_end: DOLLAR -> last_index
-          | expression
+?range_end: expression
 
 CARET: "^"
 DOLLAR.1: "$"  // Higher priority to avoid conflict with dollar_property
