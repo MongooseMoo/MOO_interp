@@ -31,6 +31,8 @@ class Extended_Opcode(Enum):
     EOP_BITSHL = 23
     EOP_BITSHR = 24
     EOP_COMPLEMENT = 25
+    EOP_FIRST_INDEX = 26  # Get first key/index of container
+    EOP_LAST_INDEX = 27  # Get last key/index of container
     Last_Extended_Opcode = 255
 
 

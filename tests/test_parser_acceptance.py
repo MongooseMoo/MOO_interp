@@ -31,6 +31,7 @@ LITERAL_TESTS = [
     ('return "hello";', "simple string"),
     ('return "";', "empty string"),
     ('return "hello\\nworld";', "string with escape"),
+    ('return "say \\"hello\\"";', "string with escaped quotes"),
 
     # Booleans
     ("return true;", "true literal"),

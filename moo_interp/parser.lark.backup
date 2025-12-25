@@ -1,0 +1,217 @@
+start: code
+
+code:
+	| statement*
+
+?statement:
+	| single_statement
+	| if_statement
+	| for_statement
+	| while_statement
+	| fork_statement
+	| try_except_statement
+	| try_finally_statement
+
+single_statement: (return_statement | fork_statement | break_statement | continue_statement | expression)? _SEMI
+
+?condition: expression
+
+if_clause: "if" "(" condition ")" body
+elseif_clause: "elseif" "(" condition ")" body
+else_clause: "else" body
+
+if_statement: if_clause elseif_clause* else_clause? "endif"
+
+for_clause: "for" IDENTIFIER ("," IDENTIFIER)? IN "(" expression ")" | "for" IDENTIFIER ("," IDENTIFIER)? "in" "[" (expression ".." (expression | dollar)) "]"
+
+for_statement: for_clause body "endfor"
+
+?while_clause: "while" IDENTIFIER? "(" condition ")"
+
+body: statement*
+while_statement: while_clause body "endwhile"
+
+?fork_clause: "fork" IDENTIFIER? "(" expression ")"
+fork_statement: fork_clause statement* "endfork"
+
+return_statement: "return" expression?
+
+
+scatter: "{" scattering_target "}" "=" expression
+
+try_except_statement: "try" statement* except_statement+ "endtry"
+
+except_statement: except_clause statement*
+
+except_clause: "except" (IDENTIFIER)? "(" exception_codes ")"
+
+exception_code: IDENTIFIER | "error" | ESCAPED_STRING
+
+exception_codes: "@" expression | "any" | exception_code ("," exception_code)*
+
+try_finally_statement: "try" statement* finally_statement "endtry"
+
+finally_statement: "finally" statement*
+
+break_statement: "break" IDENTIFIER?
+
+continue_statement: "continue" IDENTIFIER?
+
+dict: "[" map_entry_expression? ("," map_entry_expression)* "]"
+list: "{" [expression ("," expression)*] "}"
+map_entry_expression: expression "->" expression
+
+// ============================================================================
+// Expression hierarchy - from lowest to highest precedence
+// ============================================================================
+
+// Top level expression
+?expression: assign
+           | ternary
+           | catch
+           | splicer
+           | scatter
+           | logical_or
+
+// Assignment (right-associative)
+assign: postfix "=" expression
+
+// Ternary conditional
+ternary: logical_or "?" expression "|" expression
+
+// Catch expression
+catch: "`" expression "!" exception_codes ("=>" expression)? "'"
+
+// Splicer
+splicer: "@" expression
+
+// Logical OR (lowest binary precedence)
+?logical_or: logical_and
+           | logical_or OP_OR logical_and -> binary_expression
+
+// Logical AND
+?logical_and: bitwise_or
+            | logical_and OP_AND bitwise_or -> binary_expression
+
+// Bitwise OR
+?bitwise_or: bitwise_xor
+           | bitwise_or OP_BIT_OR bitwise_xor -> binary_expression
+
+// Bitwise XOR
+?bitwise_xor: bitwise_and
+            | bitwise_xor OP_BIT_XOR bitwise_and -> binary_expression
+
+// Bitwise AND
+?bitwise_and: comparison
+            | bitwise_and OP_BIT_AND comparison -> binary_expression
+
+// Comparison operators including 'in'
+?comparison: shift
+           | comparison CMP_OP shift -> binary_expression
+
+// Shift operators
+?shift: additive
+      | shift SHIFT_OP additive -> binary_expression
+
+// Additive operators
+?additive: multiplicative
+         | additive ADD_OP multiplicative -> binary_expression
+
+// Multiplicative operators
+?multiplicative: power
+               | multiplicative MUL_OP power -> binary_expression
+
+// Power operator (right-associative)
+?power: unary
+      | unary OP_POW power -> binary_expression
+
+// Binary operator terminals
+OP_OR: "||"
+OP_AND: "&&"
+OP_BIT_OR: "|."
+OP_BIT_XOR: "^."
+OP_BIT_AND: "&."
+CMP_OP: "<=" | ">=" | "==" | "!=" | "<" | ">" | IN
+SHIFT_OP: ">>" | "<<"
+ADD_OP: "+" | "-"
+MUL_OP: "*" | "/" | "%"
+OP_POW: "^"
+
+// Unary operators
+?unary: postfix
+      | UNARY_OP unary -> unary_expression
+
+UNARY_OP: "!" | "~" | "-"
+
+// Postfix operators - highest precedence
+?postfix: atom
+        | postfix "." (IDENTIFIER | "(" expression ")") -> property
+        | postfix ".:" IDENTIFIER -> waif_property
+        | postfix "[" index_target "]" -> index
+        | postfix "[" range_start ".." range_end "]" -> range
+        | postfix ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")" -> verb_call
+
+// Atoms - base expressions (catch can be used directly, e.g., !`expr!ANY')
+?atom: "(" expression ")"
+     | catch
+     | literal
+     | function_call
+     | dollar_property
+     | dollar_verb_call
+     | dollar
+     | IDENTIFIER
+
+// ============================================================================
+// Supporting rules
+// ============================================================================
+
+?index_target: CARET -> first_index
+             | DOLLAR -> last_index
+             | expression
+
+?range_start: CARET -> first_index
+            | expression
+
+?range_end: DOLLAR -> last_index
+          | expression
+
+CARET: "^"
+DOLLAR.1: "$"  // Higher priority to avoid conflict with dollar_property
+
+dollar_property: "$" IDENTIFIER
+
+dollar_verb_call: "$" (IDENTIFIER | "(" expression ")") "(" call_arguments ")"
+
+function_call: IDENTIFIER "(" call_arguments ")"
+
+?literal: "error" | ESCAPED_STRING | objnum | NUMBER | FLOAT | BOOLEAN | list | dict
+objnum: "#" NUMBER
+BOOLEAN: "true" | "false"
+
+call_arguments: (expression ("," expression)*)?
+
+scattering_target: scattering_target_item ("," scattering_target_item)*
+
+scattering_target_item: IDENTIFIER | QMARK IDENTIFIER (EQUALS expression)? | AT IDENTIFIER
+QMARK: "?"
+AT: "@"
+EQUALS: "="
+
+_SEMI: ";"
+IDENTIFIER: (("_"|LETTER) ("_"|LETTER|DIGIT)*)
+dollar: "$"
+
+IN: "in"
+NUMBER: /-?[0-9]+/
+FLOAT: /-?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?/
+LETTER: /[a-zA-Z]/
+DIGIT: /\d/
+WS: /[ \t\n\r\f]+/
+
+%import common.ESCAPED_STRING
+%ignore WS
+
+// Comments - block /* */ and line //
+COMMENT: /\/\*[\s\S]*?\*\// | /\/\/[^\n]*/
+%ignore COMMENT
+

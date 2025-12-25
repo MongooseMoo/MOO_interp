@@ -932,8 +932,14 @@ class _VerbCall(_Expression):
 class _FirstIndex(_Expression):
     """Represents ^ (first element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
     def to_bytecode(self, state: CompilerState, program: Program):
-        # EXPR_FIRST - first element of the indexed object
-        return [Instruction(opcode=Opcode.OP_IMM, operand=1)]
+        # EOP_FIRST_INDEX needs the container on stack to determine index/key
+        if state.indexed_object is not None:
+            result = state.indexed_object.to_bytecode(state, program)
+            result += [self.emit_extended_byte(Extended_Opcode.EOP_FIRST_INDEX)]
+            return result
+        else:
+            # No context - just return 1 for lists/strings
+            return [Instruction(opcode=Opcode.OP_IMM, operand=1)]
 
     def to_moo(self) -> str:
         return "^"
@@ -942,15 +948,15 @@ class _FirstIndex(_Expression):
 class _LastIndex(_Expression):
     """Represents $ (last element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
     def to_bytecode(self, state: CompilerState, program: Program):
-        # $ means length of the currently indexed object
+        # EOP_LAST_INDEX needs the container on stack to determine last index/key
         if state.indexed_object is not None:
-            # Emit bytecode to push the indexed object and get its length
             result = state.indexed_object.to_bytecode(state, program)
-            result += [self.emit_extended_byte(Extended_Opcode.EOP_LENGTH)]
+            result += [self.emit_extended_byte(Extended_Opcode.EOP_LAST_INDEX)]
             return result
         else:
-            # Fallback - get length of top of stack (legacy behavior)
-            return [self.emit_extended_byte(Extended_Opcode.EOP_LENGTH)]
+            # Fallback - no context available
+            # This shouldn't happen in well-formed code, but return a safe default
+            return [Instruction(opcode=Opcode.OP_IMM, operand=1)]
 
     def to_moo(self) -> str:
         return "$"
