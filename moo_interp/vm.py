@@ -807,13 +807,37 @@ class VM:
                 return lst._list[py_start]
             return MOOList(lst._list[py_start:py_end])
         else:
-            # the keys in our maps are ordered - convert slice back to dict for MOOMap
-            # Note: attrs uses 'map' as init param for the '_map' field
-            items = list(lst.items())[py_start:py_end]
+            # Map range: start and end are KEY values, not positions
+            sorted_keys = list(lst)  # __iter__ returns sorted keys
+
+            # Find positions of start and end keys
+            start_pos = None
+            end_pos = None
+            for i, key in enumerate(sorted_keys):
+                if key == start:
+                    start_pos = i
+                if key == end:
+                    end_pos = i
+
+            # Check for inverted range (start > end in sort order)
+            if start_pos is not None and end_pos is not None and start_pos > end_pos:
+                # Inverted range returns empty map
+                return MOOMap()
+
+            # For non-inverted ranges, if either key not found, E_RANGE
+            if start_pos is None or end_pos is None:
+                raise MOOException(MOOError.E_RANGE, "key not found in map")
+
+            # Build result from keys in range [start_pos..end_pos]
+            result_items = []
+            for i, key in enumerate(sorted_keys):
+                if start_pos <= i <= end_pos:
+                    result_items.append((key, lst[key]))
+
             # Single element range returns the value itself
-            if start == end and items:
-                return items[0][1]
-            return MOOMap(map=dict(items))
+            if start == end and result_items:
+                return result_items[0][1]
+            return MOOMap(map=dict(result_items))
 
     # Map operations
 
