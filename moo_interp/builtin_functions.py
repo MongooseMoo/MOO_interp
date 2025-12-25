@@ -2006,34 +2006,44 @@ class BuiltinFunctions:
     def binary_hash(self, data, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Hash binary/string data. Returns hex unless binary=1."""
         h = hashlib.new(self._get_hash_algo(algo))
-        h.update(str(data).encode('latin-1'))
-        return MOOString(h.digest() if binary else h.hexdigest().upper())
+        h.update(self._unwrap_bytes(data))
+        if binary:
+            return MOOString(self._bytes_to_binary_string(h.digest()))
+        return MOOString(h.hexdigest().upper())
 
     def value_hash(self, val, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Hash any MOO value by converting to literal first."""
         literal = str(self.toliteral(val))
         h = hashlib.new(self._get_hash_algo(algo))
         h.update(literal.encode('utf-8'))
-        return MOOString(h.digest() if binary else h.hexdigest().upper())
+        if binary:
+            return MOOString(self._bytes_to_binary_string(h.digest()))
+        return MOOString(h.hexdigest().upper())
 
     def string_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Compute HMAC of string data."""
         h = hmac.new(str(key).encode('utf-8'), str(data).encode('utf-8'),
                      self._get_hash_algo(algo))
-        return MOOString(h.digest() if binary else h.hexdigest().upper())
+        if binary:
+            return MOOString(self._bytes_to_binary_string(h.digest()))
+        return MOOString(h.hexdigest().upper())
 
     def binary_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Compute HMAC of binary data."""
-        h = hmac.new(str(key).encode('latin-1'), str(data).encode('latin-1'),
+        h = hmac.new(self._unwrap_bytes(key), self._unwrap_bytes(data),
                      self._get_hash_algo(algo))
-        return MOOString(h.digest() if binary else h.hexdigest().upper())
+        if binary:
+            return MOOString(self._bytes_to_binary_string(h.digest()))
+        return MOOString(h.hexdigest().upper())
 
     def value_hmac(self, val, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Compute HMAC of any MOO value."""
         literal = str(self.toliteral(val))
         h = hmac.new(str(key).encode('utf-8'), literal.encode('utf-8'),
                      self._get_hash_algo(algo))
-        return MOOString(h.digest() if binary else h.hexdigest().upper())
+        if binary:
+            return MOOString(self._bytes_to_binary_string(h.digest()))
+        return MOOString(h.hexdigest().upper())
 
     # =========================================================================
     # Regex functions
