@@ -776,6 +776,18 @@ class VM:
         #
         # Special case: x[n..n] returns the single element, not a sublist/substring
         # This is toaststunt/MOO behavior
+
+        # Range bounds checking (like toaststunt)
+        if isinstance(lst, MOOString):
+            lst_len = len(str(lst))
+            if start > lst_len + 1 or end < 0:
+                raise MOOException(MOOError.E_RANGE, "string range out of bounds")
+        elif isinstance(lst, MOOList):
+            lst_len = len(lst._list)
+            if start > lst_len + 1 or end < 0:
+                raise MOOException(MOOError.E_RANGE, "list range out of bounds")
+        # Maps don't have numeric range bounds - they use key ranges
+
         py_start = start - 1
         py_end = end  # end stays same because Python is exclusive
 
@@ -1339,6 +1351,12 @@ class VM:
             # List range set
             if not isinstance(start, int) or not isinstance(end, int):
                 raise MOOException(MOOError.E_TYPE, "list range indices must be integers")
+            if not isinstance(value, MOOList):
+                raise MOOException(MOOError.E_TYPE, "list range set requires list value")
+            # Range validation (like toaststunt)
+            base_len = len(base._list)
+            if start > base_len + 1 or end < 0:
+                raise MOOException(MOOError.E_RANGE, "list range out of bounds")
             # Convert to 0-indexed for internal list operations
             result = MOOList(*base._list[:start-1], *value._list, *base._list[end:])
             return result
