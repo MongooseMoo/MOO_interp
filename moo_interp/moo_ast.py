@@ -549,6 +549,76 @@ class _Assign(_Expression):
             base = self.target.object
             result = []
 
+            # For nested index+range like l[3][2..$] = "u", we need to:
+            # 1. Push outer container and index for later OP_INDEXSET
+            # 2. Push current value at that index as base for EOP_RANGESET
+            # 3. After EOP_RANGESET, use OP_INDEXSET to store back
+
+            if isinstance(base, _Index):
+                # Nested case: x[idx][start..end] = value
+                # For x = variable: Stack flow:
+                # 1. Push x value (for final OP_PUT to x)
+                # 2. Push idx (for OP_INDEXSET)
+                # 3. Push x[idx] value (for EOP_RANGESET)
+                # 4. Push start, end, value
+                # 5. EOP_RANGESET -> modified inner value
+                # 6. OP_INDEXSET -> modified x
+                # 7. OP_PUT x -> store modified x back to variable
+                # 8. Pop, push original value
+
+                outer_base = base.object
+
+                if isinstance(outer_base, Identifier):
+                    # Push outer variable value (for OP_INDEXSET)
+                    result += [Instruction(opcode=Opcode.OP_PUSH, operand=MOOString(outer_base.value))]
+                    # Push outer index
+                    result += base.index.to_bytecode(state, program)
+                    # Push current value at that index (for EOP_RANGESET)
+                    result += [Instruction(opcode=Opcode.OP_PUSH, operand=MOOString(outer_base.value))]
+                    result += base.index.to_bytecode(state, program)
+                    result += [Instruction(opcode=Opcode.OP_INDEX)]
+                else:
+                    # Non-variable outer base - just evaluate
+                    result += outer_base.to_bytecode(state, program)
+                    result += base.index.to_bytecode(state, program)
+                    result += outer_base.to_bytecode(state, program)
+                    result += base.index.to_bytecode(state, program)
+                    result += [Instruction(opcode=Opcode.OP_INDEX)]
+
+                # Set indexed_object for ^ and $ operators
+                old_indexed = state.indexed_object
+                state.indexed_object = base
+
+                # Push start and end
+                result += self.target.start.to_bytecode(state, program)
+                result += self.target.end.to_bytecode(state, program)
+
+                # Restore indexed_object
+                state.indexed_object = old_indexed
+
+                # Push value and save to temp
+                result += value_bc
+                result += [Instruction(opcode=Opcode.OP_PUT_TEMP)]
+
+                # EOP_RANGESET: [inner_value, start, end, value] -> [modified_inner]
+                result += [Instruction(opcode=Opcode.OP_EXTENDED,
+                                       operand=Extended_Opcode.EOP_RANGESET.value)]
+
+                # Stack now: [outer_value, index, modified_inner]
+                # OP_INDEXSET: outer_value[index] = modified_inner -> modified_outer
+                result += [Instruction(opcode=Opcode.OP_INDEXSET)]
+
+                # Store modified outer back to variable
+                if isinstance(outer_base, Identifier):
+                    state.add_var(outer_base.value)
+                    result += [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(outer_base.value))]
+
+                # Pop modified value, push original assigned value
+                result += [Instruction(opcode=Opcode.OP_POP, operand=1)]
+                result += [Instruction(opcode=Opcode.OP_PUSH_TEMP)]
+
+                return result
+
             # Step 1: Push base
             if isinstance(base, Identifier):
                 result += [Instruction(opcode=Opcode.OP_PUSH, operand=MOOString(base.value))]
