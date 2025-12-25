@@ -2521,6 +2521,10 @@ class BuiltinFunctions:
                 result.append(moo_row)
 
             conn.commit()
+
+            # Store cursor for lastrowid access
+            conn_data['last_cursor'] = cursor
+
             conn_data['locks'] -= 1
 
             return result
@@ -2589,6 +2593,10 @@ class BuiltinFunctions:
                 result.append(moo_row)
 
             conn.commit()
+
+            # Store cursor for lastrowid access
+            conn_data['last_cursor'] = cursor
+
             conn_data['locks'] -= 1
 
             return result
@@ -2614,9 +2622,14 @@ class BuiltinFunctions:
             raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
 
         conn_data = self._sqlite_handles[handle]
-        conn = conn_data['connection']
 
-        return conn.lastrowid if hasattr(conn, 'lastrowid') else 0
+        # Get lastrowid from stored cursor or connection
+        # SQLite3 stores lastrowid on the connection itself after execute
+        cursor = conn_data.get('last_cursor')
+        if cursor and hasattr(cursor, 'lastrowid'):
+            return cursor.lastrowid
+
+        return 0
 
     def sqlite_handles(self) -> MOOList:
         """Return a list of all open SQLite database handles.
@@ -2722,6 +2735,10 @@ class BuiltinFunctions:
                 result.append(row_map)
 
             conn.commit()
+
+            # Store cursor for lastrowid access
+            conn_data['last_cursor'] = cursor
+
             conn_data['locks'] -= 1
 
             return result
