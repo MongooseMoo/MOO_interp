@@ -289,6 +289,9 @@ class VM:
             if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP, Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES}:
                 args = [instr.operand]
             elif handler is not None and handler.num_args:
+                # Check for stack underflow (especially for Extended_Opcodes which skip the decorator check)
+                if len(self.stack) < handler.num_args:
+                    raise MOOException(MOOError.E_RANGE, f"Stack underflow: need {handler.num_args} args, have {len(self.stack)}")
                 # Convert any dicts to MOOMap when getting args
                 args = [MOOMap(v) if isinstance(v, dict) and not isinstance(v, MOOMap) else v
                         for v in self.stack[-handler.num_args:]]
