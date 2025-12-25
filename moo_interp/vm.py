@@ -1009,12 +1009,19 @@ class VM:
         if not isinstance(verb_name, MOOString):
             raise VMError(f"OP_CALL_VERB: verb_name must be MOOString, got {type(verb_name).__name__}={repr(verb_name)}")
 
-        # Check for primitive values - calling verbs on primitives requires a prototype
-        # Without prototype support, raise E_TYPE for all primitive verb calls
+        # Handle primitive values - calling verbs on primitives uses prototype objects
         from lambdamoo_db.database import ObjNum, Anon
+        primitive_this = None  # Will hold the primitive value if calling on prototype
+
         if not isinstance(obj_id, (ObjNum, Anon)):
-            # Plain int, float, string, error, list, map, etc. - no prototype support yet
-            raise MOOException(MOOError.E_TYPE, f"Cannot call verb on primitive value")
+            # Primitive value (int, float, string, error, list, map)
+            # Look up the corresponding prototype on #0
+            proto_obj = self._get_primitive_prototype(obj_id)
+            if proto_obj is None:
+                raise MOOException(MOOError.E_TYPE, f"Cannot call verb on primitive value")
+            # Store the primitive for use as 'this', call verb on prototype
+            primitive_this = obj_id
+            obj_id = proto_obj
 
         # Find the object
         if obj_id not in self.db.objects:
@@ -1065,12 +1072,14 @@ class VM:
         # Create new stack frame for the verb
         # stack_base: VM stack position after CALL_VERB args are popped
         # The 3 args (obj_id, verb_name, args) will be deleted after this handler returns
+        # For primitive prototype calls, 'this' is the primitive value, not the prototype object
+        this_value = primitive_this if primitive_this is not None else obj_id
         new_frame = StackFrame(
             func_id=verb.object,
             prog=Program(var_names=verb_var_names),  # Already has context vars at 0-10
             ip=0,
             stack=bytecode,
-            this=obj_id,
+            this=this_value,
             player=player_id,
             verb=str(verb_name),
             verb_name=verb.name,
@@ -1081,7 +1090,7 @@ class VM:
         new_frame.rt_env = list(verb_rt_env)  # Copy to avoid mutation
         argstr = " ".join(str(a) for a in args._list) if args._list else ""
         new_frame.rt_env[0] = player_id              # player
-        new_frame.rt_env[1] = obj_id                 # this
+        new_frame.rt_env[1] = this_value             # this (primitive value for prototype calls)
         new_frame.rt_env[2] = caller_id              # caller
         new_frame.rt_env[3] = MOOString(str(verb_name))  # verb
         new_frame.rt_env[4] = args                   # args
@@ -1096,6 +1105,68 @@ class VM:
         self.call_stack.append(new_frame)
 
         # Don't return a value - the verb will execute and eventually OP_RETURN
+        return None
+
+    def _get_primitive_prototype(self, value: Any) -> Optional[int]:
+        """Get the prototype object for a primitive value.
+
+        MOO allows calling verbs on primitive values (int, float, string, etc.)
+        by looking up a prototype object on #0 (the system object).
+
+        For example, calling 123:foo() looks up #0.int_proto and calls
+        the 'foo' verb on that object with 'this' set to 123.
+
+        Args:
+            value: The primitive value
+
+        Returns:
+            Object ID of the prototype, or None if no prototype exists
+        """
+        from lambdamoo_db.database import ObjNum
+
+        if not self.db or 0 not in self.db.objects:
+            return None
+
+        # Map Python types to MOO prototype property names
+        # Based on ToastStunt's MATCH_TYPE macro in execute.cc
+        proto_name = None
+        if isinstance(value, bool):
+            # Booleans are ints in MOO, use int_proto
+            proto_name = "int_proto"
+        elif isinstance(value, int) and not isinstance(value, ObjNum):
+            proto_name = "int_proto"
+        elif isinstance(value, float):
+            proto_name = "float_proto"
+        elif isinstance(value, MOOString):
+            proto_name = "str_proto"
+        elif isinstance(value, str):
+            proto_name = "str_proto"
+        elif isinstance(value, MOOError):
+            proto_name = "err_proto"
+        elif isinstance(value, MOOList):
+            proto_name = "list_proto"
+        elif isinstance(value, MOOMap):
+            proto_name = "map_proto"
+        elif isinstance(value, ObjNum):
+            # ObjNum that's not in db - use obj_proto
+            proto_name = "obj_proto"
+
+        if proto_name is None:
+            return None
+
+        # Look up the prototype property on #0
+        system_obj = self.db.objects[0]
+        for prop in getattr(system_obj, 'properties', []):
+            prop_name = getattr(prop, 'propertyName', getattr(prop, 'name', ''))
+            if prop_name == proto_name:
+                prop_value = getattr(prop, 'value', None)
+                # Must be a valid object
+                if isinstance(prop_value, ObjNum) and int(prop_value) in self.db.objects:
+                    return prop_value
+                elif isinstance(prop_value, int) and prop_value in self.db.objects:
+                    return ObjNum(prop_value)
+                break
+
         return None
 
     def _find_verb(self, obj_id: int, verb_name: str):
