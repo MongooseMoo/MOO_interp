@@ -23,8 +23,8 @@ class MOOError(IntEnum):
     E_EXEC = 17
 
 
-# Dictionary mapping error name strings to values for runtime lookup
-ERROR_CODES = {e.name: e.value for e in MOOError}
+# Dictionary mapping error name strings to MOOError enum members for runtime lookup
+ERROR_CODES = {e.name: e for e in MOOError}
 
 
 class MOOException(Exception):
