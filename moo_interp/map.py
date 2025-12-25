@@ -1,7 +1,69 @@
 from collections.abc import MutableMapping
+from functools import cmp_to_key
 import sys
 
 from attr import define, field
+
+
+def moo_compare(a, b):
+    """MOO value comparison function.
+
+    Comparison rules:
+    1. If types are different, compare type IDs (int < obj < str < err < float < ...)
+    2. If types are the same, compare values:
+       - int, obj, err: numeric comparison
+       - str: lexicographic (case-insensitive for maps)
+       - float: numeric comparison
+    """
+    # Get type priorities for MOO (matching toaststunt's TYPE_* enum order)
+    def type_priority(val):
+        """Return type priority for sorting (int=0, obj=1, str=2, err=3, float=4, ...)."""
+        # Check ObjNum before int (ObjNum inherits from int)
+        if type(val).__name__ == 'ObjNum':
+            return 1  # TYPE_OBJ
+        if isinstance(val, bool):
+            return 6  # TYPE_BOOL (after float)
+        if isinstance(val, int):
+            # Check if it's a MOOError (IntEnum)
+            if type(val).__name__ == 'MOOError':
+                return 3  # TYPE_ERR
+            return 0  # TYPE_INT
+        if isinstance(val, str) or type(val).__name__ == 'MOOString':
+            return 2  # TYPE_STR
+        if isinstance(val, float):
+            return 4  # TYPE_FLOAT
+        # Lists and maps
+        if hasattr(val, '_list'):
+            return 5  # TYPE_LIST
+        if hasattr(val, '_map'):
+            return 6  # TYPE_MAP
+        # Fallback: compare by type name
+        return 10
+
+    type_a = type_priority(a)
+    type_b = type_priority(b)
+
+    # Different types: compare type priorities
+    if type_a != type_b:
+        return type_a - type_b
+
+    # Same type: compare values
+    # For strings: case-insensitive comparison (for map key ordering)
+    if isinstance(a, str) or type(a).__name__ == 'MOOString':
+        a_lower = str(a).lower()
+        b_lower = str(b).lower()
+        if a_lower < b_lower:
+            return -1
+        elif a_lower > b_lower:
+            return 1
+        return 0
+
+    # For numbers (int, float, obj, err): direct comparison
+    if a < b:
+        return -1
+    elif a > b:
+        return 1
+    return 0
 
 
 @define(repr=False)
@@ -20,7 +82,8 @@ class MOOMap(MutableMapping):
 
     def __iter__(self):
         # MOO maps are ordered by sorted keys (like C++ std::map / red-black tree)
-        return iter(sorted(self._map.keys()))
+        # Use MOO's comparison function for sorting
+        return iter(sorted(self._map.keys(), key=cmp_to_key(moo_compare)))
 
     def __len__(self):
         return len(self._map)
