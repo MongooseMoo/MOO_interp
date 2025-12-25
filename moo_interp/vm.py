@@ -778,13 +778,15 @@ class VM:
         # This is toaststunt/MOO behavior
 
         # Range bounds checking (like toaststunt)
+        # For non-inverted ranges (start <= end): check all bounds
+        # For inverted ranges (start > end): no bounds check (returns empty)
         if isinstance(lst, MOOString):
             lst_len = len(str(lst))
-            if start > lst_len + 1 or end < 0:
+            if start <= end and (start <= 0 or start > lst_len or end <= 0 or end > lst_len):
                 raise MOOException(MOOError.E_RANGE, "string range out of bounds")
         elif isinstance(lst, MOOList):
             lst_len = len(lst._list)
-            if start > lst_len + 1 or end < 0:
+            if start <= end and (start <= 0 or start > lst_len or end <= 0 or end > lst_len):
                 raise MOOException(MOOError.E_RANGE, "list range out of bounds")
         # Maps don't have numeric range bounds - they use key ranges
 
@@ -1354,8 +1356,9 @@ class VM:
             if not isinstance(value, MOOList):
                 raise MOOException(MOOError.E_TYPE, "list range set requires list value")
             # Range validation (like toaststunt)
+            # For non-inverted ranges: check all bounds
             base_len = len(base._list)
-            if start > base_len + 1 or end < 0:
+            if start <= end and (start <= 0 or start > base_len + 1 or end < 0):
                 raise MOOException(MOOError.E_RANGE, "list range out of bounds")
             # Convert to 0-indexed for internal list operations
             result = MOOList(*base._list[:start-1], *value._list, *base._list[end:])
