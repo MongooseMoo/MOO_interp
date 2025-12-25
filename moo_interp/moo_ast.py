@@ -999,10 +999,17 @@ class _Property(_Expression):
         return result
 
     def to_moo(self) -> str:
+        # Extract raw property name from StringLiteral (without quotes)
+        # Property names are identifiers, not string expressions
+        if isinstance(self.name, StringLiteral):
+            prop_name = self.name.value
+        else:
+            prop_name = self.name.to_moo()
+
         # Use $name shorthand when accessing properties on #0
         if isinstance(self.object, ObjnumLiteral) and self.object.value == 0:
-            return f"${self.name.to_moo()}"
-        return f"{self.object.to_moo()}.{self.name.to_moo()}"
+            return f"${prop_name}"
+        return f"{self.object.to_moo()}.{prop_name}"
 
 
 @dataclass
