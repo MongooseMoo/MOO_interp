@@ -1393,16 +1393,26 @@ class VM:
             if start_pos is None or end_pos is None:
                 raise MOOException(MOOError.E_RANGE, "key not found in map")
 
-            # Create new map: entries before start + value entries + entries after end
+            # Create new map following toaststunt semantics:
+            # 1. Entries before start from base
+            # 2. All entries from value map
+            # 3. Entries after end from base (these override value entries!)
             result = MOOMap()
+
+            # Step 1: entries before start
             for i, key in enumerate(sorted_keys):
                 if i < start_pos:
                     result[key] = base[key]
-                elif i > end_pos:
-                    result[key] = base[key]
-            # Add value map entries
+
+            # Step 2: all value entries
             for k, v in value.items():
                 result[k] = v
+
+            # Step 3: entries after end (override any matching value entries)
+            for i, key in enumerate(sorted_keys):
+                if i > end_pos:
+                    result[key] = base[key]
+
             return result
         elif isinstance(base, (str, MOOString)):
             # String range set
