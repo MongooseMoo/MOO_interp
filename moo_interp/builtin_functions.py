@@ -1705,12 +1705,18 @@ class BuiltinFunctions:
     TYPE_LIST = 4
     TYPE_FLOAT = 9
     TYPE_MAP = 10
+    TYPE_ANON = 12
+    TYPE_WAIF = 13
     TYPE_BOOL = 14
 
     def typeof(self, x) -> int:
         """Return the MOO type code for a value."""
+        from lambdamoo_db.database import Anon
         if isinstance(x, bool):
             return self.TYPE_BOOL
+        elif isinstance(x, Anon):
+            # Anon must be checked before ObjNum since it also inherits from int
+            return self.TYPE_ANON
         elif isinstance(x, ObjNum):
             # ObjNum must be checked before int since it inherits from int
             return self.TYPE_OBJ
@@ -1732,7 +1738,7 @@ class BuiltinFunctions:
             return self.TYPE_INT  # fallback
 
     # Type name mapping
-    TYPE_NAMES = {0: "INT", 1: "OBJ", 2: "STR", 3: "ERR", 4: "LIST", 9: "FLOAT", 10: "MAP", 14: "BOOL"}
+    TYPE_NAMES = {0: "INT", 1: "OBJ", 2: "STR", 3: "ERR", 4: "LIST", 9: "FLOAT", 10: "MAP", 12: "ANON", 13: "WAIF", 14: "BOOL"}
 
     def typename(self, x):
         """Return the type name as a string."""
