@@ -1773,17 +1773,56 @@ class VM:
 
     @operator(Opcode.OP_PUT_PROP)
     def exec_put_prop(self, obj: MOOAny, prop: MOOString, value: MOOAny):
-        """Set the value of a property on an object"""
-        object = self.db.objects.get(obj)
-        if object is None:
+        """Set the value of a property on an object.
+
+        Handles inherited properties with copy-on-write semantics:
+        1. If property exists on object (even with Clear value), update it
+        2. If property is inherited from parent, create local copy with new value
+        """
+        moo_object = self.db.objects.get(obj)
+        if moo_object is None:
             raise VMError(f"E_INVIND: Object #{obj} not found")
-        # Search for property by name
+
         prop_name = str(prop)
-        for p in getattr(object, 'properties', []):
+
+        # First, check if property exists on this object directly
+        for p in getattr(moo_object, 'properties', []):
             if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
                 p.value = value
                 return value
-        raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
+
+        # Property not on object - check if it's inherited
+        current_obj = moo_object
+        parent_id = getattr(current_obj, 'parent', -1)
+        inherited_prop = None
+
+        while parent_id >= 0:
+            parent_obj = self.db.objects.get(parent_id)
+            if parent_obj is None:
+                break
+            for p in getattr(parent_obj, 'properties', []):
+                if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                    inherited_prop = p
+                    break
+            if inherited_prop:
+                break
+            parent_id = getattr(parent_obj, 'parent', -1)
+
+        if inherited_prop is None:
+            raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
+
+        # Create a local copy of the inherited property with the new value
+        from lambdamoo_db.database import Property
+        new_prop = Property(
+            propertyName=prop_name,
+            value=value,
+            owner=getattr(inherited_prop, 'owner', 0),
+            perms=getattr(inherited_prop, 'perms', 0)
+        )
+        if not hasattr(moo_object, 'properties'):
+            moo_object.properties = []
+        moo_object.properties.append(new_prop)
+        return value
 
     @operator(Extended_Opcode.EOP_TRY_EXCEPT)
     def exec_try_except(self) -> None:
