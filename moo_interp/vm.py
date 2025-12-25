@@ -727,6 +727,11 @@ class VM:
                 return lst[index]
             except KeyError:
                 raise MOOException(MOOError.E_RANGE)
+        # For lists and strings: index must be int
+        if isinstance(lst, (MOOList, list, MOOString, str)):
+            # Check index type - must be int (but not bool, and not ObjNum)
+            if not isinstance(index, int) or isinstance(index, bool) or type(index).__name__ == 'ObjNum':
+                raise MOOException(MOOError.E_TYPE, "list/string index must be integer")
         # MOOString and MOOList already handle 1-based indexing in __getitem__
         # Plain Python lists (e.g., from database properties) need conversion
         if isinstance(lst, list) and not isinstance(lst, MOOList):
@@ -1487,6 +1492,9 @@ class VM:
         Returns the modified container (which may be a shallow copy if refcount > 1).
         """
         if isinstance(container, MOOList):
+            # Index must be int (but not bool, and not ObjNum)
+            if not isinstance(index, int) or isinstance(index, bool) or type(index).__name__ == 'ObjNum':
+                raise MOOException(MOOError.E_TYPE, "list index must be integer")
             # Copy-on-write: if refcount > 1, make shallow copy before modifying
             if container.refcount() > 1:
                 container = container.shallow_copy()
@@ -1503,6 +1511,9 @@ class VM:
             container[index] = value
             return container
         elif isinstance(container, MOOString):
+            # Index must be int (but not bool, and not ObjNum)
+            if not isinstance(index, int) or isinstance(index, bool) or type(index).__name__ == 'ObjNum':
+                raise MOOException(MOOError.E_TYPE, "string index must be integer")
             container[index] = value
             return container
         else:
