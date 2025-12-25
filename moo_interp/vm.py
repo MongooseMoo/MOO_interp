@@ -754,7 +754,8 @@ class VM:
             return MOOList(lst._list[py_start:py_end])
         else:
             # the keys in our maps are ordered - convert slice back to dict for MOOMap
-            return MOOMap(_map=dict(list(lst.items())[py_start:py_end]))
+            # Note: attrs uses 'map' as init param for the '_map' field
+            return MOOMap(map=dict(list(lst.items())[py_start:py_end]))
 
     # Map operations
 
