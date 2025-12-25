@@ -1047,11 +1047,18 @@ class BuiltinFunctions:
 
         Args:
             x: MOO value to convert to JSON
-            mode: Optional mode - "common-subset" (default) or "embedded-types"
+            mode: Optional mode string - "common-subset" (default) or "embedded-types"
 
         Returns:
             MOOString containing JSON representation
+
+        Raises:
+            MOOException: E_TYPE if mode is not a string
         """
+        # Type check: mode must be a string if provided
+        if mode is not None and not isinstance(mode, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "generate_json() mode must be a string")
+
         # Convert mode from MOOString if needed
         if mode is None:
             mode_str = "common-subset"
@@ -1141,8 +1148,13 @@ class BuiltinFunctions:
             MOO value parsed from JSON
 
         Raises:
-            MOOException: E_INVARG for invalid JSON or disallowed types
+            MOOException: E_TYPE for non-string argument
+            MOOException: E_INVARG for invalid JSON
         """
+        # Type check: x must be a string
+        if not isinstance(x, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "parse_json() requires a string argument")
+
         # Convert mode from MOOString if needed
         if mode is None:
             mode_str = "common-subset"
