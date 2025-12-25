@@ -548,7 +548,54 @@ class VM:
 
     @operator(Opcode.OP_EQ)
     def exec_eq(self, op1: MOOAny, op2: MOOAny) -> bool:
-        return op1 == op2
+        """MOO equality: types must match (except bool==int cross-compare)."""
+        return self._moo_equality(op1, op2)
+
+    def _moo_equality(self, lhs: MOOAny, rhs: MOOAny) -> bool:
+        """MOO strict type equality.
+
+        In MOO, 1 == 1.0 is false because int != float.
+        Only exception: bool and int can be compared across types.
+        """
+        lhs_type = type(lhs)
+        rhs_type = type(rhs)
+
+        # Same type: compare values
+        if lhs_type == rhs_type:
+            if isinstance(lhs, MOOList):
+                return self._list_equal(lhs, rhs)
+            if isinstance(lhs, MOOMap):
+                return self._map_equal(lhs, rhs)
+            return lhs == rhs
+
+        # Cross-type bool==int comparison (MOO specific)
+        if isinstance(lhs, bool) and isinstance(rhs, int) and not isinstance(rhs, bool):
+            return (1 if lhs else 0) == rhs
+        if isinstance(rhs, bool) and isinstance(lhs, int) and not isinstance(lhs, bool):
+            return lhs == (1 if rhs else 0)
+
+        # Different types: not equal
+        return False
+
+    def _list_equal(self, lhs: 'MOOList', rhs: 'MOOList') -> bool:
+        """Compare two MOO lists element by element."""
+        if len(lhs._list) != len(rhs._list):
+            return False
+        for a, b in zip(lhs._list, rhs._list):
+            if not self._moo_equality(a, b):
+                return False
+        return True
+
+    def _map_equal(self, lhs: 'MOOMap', rhs: 'MOOMap') -> bool:
+        """Compare two MOO maps."""
+        if len(lhs._map) != len(rhs._map):
+            return False
+        for k, v in lhs._map.items():
+            if k not in rhs._map:
+                return False
+            if not self._moo_equality(v, rhs._map[k]):
+                return False
+        return True
 
     @operator(Opcode.OP_IN)
     def exec_in(self, lhs: MOOAny, rhs: Container) -> int:
