@@ -1011,8 +1011,8 @@ class VM:
 
         # Check for primitive values - calling verbs on primitives requires a prototype
         # Without prototype support, raise E_TYPE for all primitive verb calls
-        from lambdamoo_db.database import ObjNum
-        if not isinstance(obj_id, ObjNum):
+        from lambdamoo_db.database import ObjNum, Anon
+        if not isinstance(obj_id, (ObjNum, Anon)):
             # Plain int, float, string, error, list, map, etc. - no prototype support yet
             raise MOOException(MOOError.E_TYPE, f"Cannot call verb on primitive value")
 
