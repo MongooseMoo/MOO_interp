@@ -1738,24 +1738,30 @@ class VM:
         elif prop_name == 'name':
             return MOOString(getattr(moo_object, 'name', ''))
 
-        # Search for property by name (with inheritance)
-        current_obj = moo_object
+        # Search for property by name (with multi-inheritance support)
+        # Use BFS through parent chain to find the property
+        from lambdamoo_db.database import Clear
+        to_check = [moo_object]
         visited = set()
-        while current_obj is not None:
+
+        while to_check:
+            current_obj = to_check.pop(0)
             obj_id = getattr(current_obj, 'id', None)
             if obj_id in visited:
-                break  # Prevent infinite loops
+                continue  # Prevent infinite loops
             visited.add(obj_id)
 
+            # Check this object's properties
+            found_clear = False
             for p in getattr(current_obj, 'properties', []):
                 if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
                     value = p.value
-                    
+
                     # Skip Clear values - they mean "inherited, check parent"
-                    from lambdamoo_db.database import Clear
                     if isinstance(value, Clear):
-                        break  # Break inner loop to move to parent
-                    
+                        found_clear = True
+                        break  # Break inner loop to move to parents
+
                     # Convert raw Python types to MOO types
                     if isinstance(value, str) and not isinstance(value, MOOString):
                         value = MOOString(value)
@@ -1765,11 +1771,25 @@ class VM:
                         value = MOOMap(value)
                     return value
 
-            # Move to parent
-            parent_id = getattr(current_obj, 'parent', -1)
-            if parent_id < 0:
-                break
-            current_obj = self.db.objects.get(parent_id)
+            # Add parents to check queue (support both single and multi-parent)
+            parents = getattr(current_obj, 'parents', None)
+            if parents is None:
+                # Fallback to single parent (legacy support)
+                try:
+                    parent_id = current_obj.parent
+                    if parent_id >= 0:
+                        parent_obj = self.db.objects.get(parent_id)
+                        if parent_obj:
+                            to_check.append(parent_obj)
+                except Exception:
+                    pass
+            else:
+                # Multi-parent support
+                for parent_id in parents:
+                    if parent_id >= 0:
+                        parent_obj = self.db.objects.get(parent_id)
+                        if parent_obj:
+                            to_check.append(parent_obj)
 
         raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
 
@@ -1888,22 +1908,45 @@ class VM:
                 p.value = value
                 return value
 
-        # Property not on object - check if it's inherited
-        current_obj = moo_object
-        parent_id = getattr(current_obj, 'parent', -1)
+        # Property not on object - check if it's inherited (multi-parent support)
+        to_check = [moo_object]
+        visited = set()
         inherited_prop = None
 
-        while parent_id >= 0:
-            parent_obj = self.db.objects.get(parent_id)
-            if parent_obj is None:
-                break
-            for p in getattr(parent_obj, 'properties', []):
-                if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
-                    inherited_prop = p
-                    break
+        while to_check and inherited_prop is None:
+            current_obj = to_check.pop(0)
+            obj_id = getattr(current_obj, 'id', None)
+            if obj_id in visited:
+                continue
+            visited.add(obj_id)
+
+            # Check this object's properties (skip the original object, already checked above)
+            if current_obj is not moo_object:
+                for p in getattr(current_obj, 'properties', []):
+                    if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                        inherited_prop = p
+                        break
             if inherited_prop:
                 break
-            parent_id = getattr(parent_obj, 'parent', -1)
+
+            # Add parents to check queue
+            parents = getattr(current_obj, 'parents', None)
+            if parents is None:
+                # Fallback to single parent
+                try:
+                    parent_id = current_obj.parent
+                    if parent_id >= 0:
+                        parent_obj = self.db.objects.get(parent_id)
+                        if parent_obj:
+                            to_check.append(parent_obj)
+                except Exception:
+                    pass
+            else:
+                for parent_id in parents:
+                    if parent_id >= 0:
+                        parent_obj = self.db.objects.get(parent_id)
+                        if parent_obj:
+                            to_check.append(parent_obj)
 
         if inherited_prop is None:
             raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
