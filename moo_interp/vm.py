@@ -234,6 +234,9 @@ class VM:
 
     def run(self):
         """Run the program"""
+        # Give builtins access to VM context (for eval, callers, etc.)
+        if hasattr(self.bi_funcs, '_vm'):
+            self.bi_funcs._vm = self
         while self.state is None:
             self.step()
             yield self.stack

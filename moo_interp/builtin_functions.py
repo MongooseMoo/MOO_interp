@@ -52,6 +52,7 @@ class BuiltinFunctions:
         self.id_to_function = {}  # Stores function_id: function pairs
         self.function_to_id = {}  # Stores function: function_id pairs
         self.current_id = 0
+        self._vm = None  # VM context, set by VM before execution
 
         # automatically register functions
         for attr_name in dir(self):
@@ -782,16 +783,37 @@ class BuiltinFunctions:
         # Concatenate all string arguments
         code = ''.join(str(arg.data if hasattr(arg, 'data') else arg) for arg in args)
 
-        from .moo_ast import compile, run
+        from .moo_ast import compile
+        from .vm import VM
+
         try:
-            compiled = compile(code)
+            # Get bi_funcs from VM context (needed for server builtins like add_property)
+            bi_funcs = self._vm.bi_funcs if self._vm else self
+            db = self._vm.db if self._vm else None
+
+            # Compile with the same bi_funcs as the parent VM
+            compiled = compile(code, bi_funcs=bi_funcs)
             compiled.debug = True
             compiled.this = -1
             compiled.verb = ""
-            result = run(code)
+
+            # Get player from parent VM if available
+            player = -1
+            if self._vm and self._vm.call_stack:
+                player = getattr(self._vm.call_stack[-1], 'player', -1)
+            compiled.player = player
+
+            # Create new VM with same db and bi_funcs
+            vm = VM(db=db, bi_funcs=bi_funcs)
+            vm.call_stack = [compiled]
+
+            # Run to completion
+            for _ in vm.run():
+                pass
+
+            return MOOList([True, vm.result])
         except Exception as e:
-            return MOOList([False, MOOList([e])])
-        return MOOList([True, result.result])
+            return MOOList([False, MOOList([MOOString(str(e))])])
 
     def encode_base64(self, x, safe=False):
         x = self._unwrap_bytes(x)
