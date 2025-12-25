@@ -1796,11 +1796,6 @@ class VM:
         if not hasattr(moo_object, 'flags'):
             moo_object.flags = 0
 
-        # Anonymous objects cannot have wizard/programmer/player flags set
-        is_anon = getattr(moo_object, 'anon', False)
-        if is_anon and prop_name in ('wizard', 'programmer', 'player'):
-            raise VMError(f"E_INVARG: Cannot set {prop_name} flag on anonymous object")
-
         # Helper to check if caller is a wizard
         def caller_is_wizard():
             frame = self.current_frame
@@ -1813,25 +1808,36 @@ class VM:
                 return bool(player_flags & 0x04)
             return False
 
+        is_anon = getattr(moo_object, 'anon', False)
+
         if prop_name == 'wizard':
-            # Only wizards can set wizard flag
+            # Only wizards can set wizard flag (check permission first)
             if not caller_is_wizard():
                 raise VMError("E_PERM: Only wizards can set wizard flag")
+            # Anonymous objects cannot have wizard flag (check after permission)
+            if is_anon:
+                raise VMError("E_INVARG: Cannot set wizard flag on anonymous object")
             if bool_val:
                 moo_object.flags |= 0x04
             else:
                 moo_object.flags &= ~0x04
             return value
         elif prop_name == 'programmer':
-            # Only wizards can set programmer flag
+            # Only wizards can set programmer flag (check permission first)
             if not caller_is_wizard():
                 raise VMError("E_PERM: Only wizards can set programmer flag")
+            # Anonymous objects cannot have programmer flag (check after permission)
+            if is_anon:
+                raise VMError("E_INVARG: Cannot set programmer flag on anonymous object")
             if bool_val:
                 moo_object.flags |= 0x02
             else:
                 moo_object.flags &= ~0x02
             return value
         elif prop_name == 'player':
+            # Anonymous objects cannot be players
+            if is_anon:
+                raise VMError("E_INVARG: Cannot set player flag on anonymous object")
             if bool_val:
                 moo_object.flags |= 0x01
             else:
