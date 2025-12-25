@@ -555,6 +555,7 @@ class VM:
         """MOO strict type equality.
 
         In MOO, 1 == 1.0 is false because int != float.
+        String comparison is case-insensitive.
         Only exception: bool and int can be compared across types.
         """
         lhs_type = type(lhs)
@@ -566,7 +567,14 @@ class VM:
                 return self._list_equal(lhs, rhs)
             if isinstance(lhs, MOOMap):
                 return self._map_equal(lhs, rhs)
+            # String comparison is case-insensitive in MOO
+            if isinstance(lhs, (str, MOOString)):
+                return str(lhs).lower() == str(rhs).lower()
             return lhs == rhs
+
+        # MOOString vs str should be treated as same type
+        if isinstance(lhs, (str, MOOString)) and isinstance(rhs, (str, MOOString)):
+            return str(lhs).lower() == str(rhs).lower()
 
         # Cross-type bool==int comparison (MOO specific)
         if isinstance(lhs, bool) and isinstance(rhs, int) and not isinstance(rhs, bool):
@@ -587,13 +595,24 @@ class VM:
         return True
 
     def _map_equal(self, lhs: 'MOOMap', rhs: 'MOOMap') -> bool:
-        """Compare two MOO maps."""
+        """Compare two MOO maps with case-insensitive string keys."""
         if len(lhs._map) != len(rhs._map):
             return False
+        # Build case-normalized key lookup for rhs
+        rhs_normalized = {}
+        for k, v in rhs._map.items():
+            norm_k = str(k).lower() if isinstance(k, (str, MOOString)) else k
+            rhs_normalized[norm_k] = (k, v)
+
         for k, v in lhs._map.items():
-            if k not in rhs._map:
+            norm_k = str(k).lower() if isinstance(k, (str, MOOString)) else k
+            if norm_k not in rhs_normalized:
                 return False
-            if not self._moo_equality(v, rhs._map[k]):
+            rhs_k, rhs_v = rhs_normalized[norm_k]
+            # Keys must have same type (but case-insensitive for strings)
+            if not self._moo_equality(k, rhs_k):
+                return False
+            if not self._moo_equality(v, rhs_v):
                 return False
         return True
 
