@@ -553,6 +553,8 @@ class VM:
 
         For `x in list`: lhs=x, rhs=list - returns 1-based index of x in list
         For `x in string`: lhs=x, rhs=string - returns 1-based position
+        For `x in map`: lhs=x, rhs=map - searches VALUES (case-insensitive for strings),
+                        returns 1-based position of key in sorted order, or 0 if not found
 
         Stack order: push x, push container, OP_IN -> args=[x, container]
         So first param is lhs (value), second is rhs (container).
@@ -571,6 +573,21 @@ class VM:
             if index == -1:
                 return 0
             return index + 1  # MOO uses 1-based indexing
+        elif isinstance(rhs, MOOMap):
+            # For maps: search VALUES (case-insensitive for strings)
+            # Return 1-based position of key in sorted order, or 0 if not found
+            lhs_lower = str(lhs).lower() if isinstance(lhs, (str, MOOString)) else None
+            sorted_keys = list(rhs)  # __iter__ returns sorted keys
+
+            for position, key in enumerate(sorted_keys, 1):
+                value = rhs[key]
+                if lhs_lower is not None and isinstance(value, (str, MOOString)):
+                    # Case-insensitive string comparison
+                    if str(value).lower() == lhs_lower:
+                        return position
+                elif value == lhs:
+                    return position
+            return 0
         else:
             # Try generic 'in' operator
             if lhs in rhs:

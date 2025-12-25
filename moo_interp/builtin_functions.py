@@ -804,9 +804,12 @@ class BuiltinFunctions:
         return MOOList([x[k] for k in x])
 
     def mapdelete(self, x, y):
-        """Delete key y from map x. Returns E_RANGE if key not found."""
+        """Delete key y from map x. Returns E_RANGE if key not found, E_TYPE for invalid key types."""
+        # Lists and maps cannot be keys
+        if isinstance(y, (MOOList, MOOMap)):
+            raise MOOException(MOOError.E_TYPE, "lists and maps cannot be map keys")
         if y not in x:
-            return MOOError.E_RANGE
+            raise MOOException(MOOError.E_RANGE, "key not found in map")
         # Create a shallow copy for copy-on-write
         result = x.shallow_copy()
         del result[y]
@@ -1772,18 +1775,17 @@ class BuiltinFunctions:
     def is_member(self, val, lst, case_matters: int = 1) -> int:
         """Return 1-based index of val in lst/map, or 0 if not found.
 
-        For maps: checks if val is a key in the map, returns sorted position (always case-sensitive).
+        For maps: searches for val in VALUES (always case-sensitive),
+                  returns 1-based position of key in sorted order.
         For lists: returns 1-based index of val in list.
         """
-        # For maps: check if val is in keys (always case-sensitive for keys)
+        # For maps: search VALUES (always case-sensitive for maps)
         if isinstance(lst, MOOMap):
-            # Maps check keys, not values
-            # Return 1-based position in sorted key list
-            try:
-                sorted_keys = list(lst)  # __iter__ returns sorted keys
-                return sorted_keys.index(val) + 1
-            except ValueError:
-                return 0
+            sorted_keys = list(lst)  # __iter__ returns sorted keys
+            for position, key in enumerate(sorted_keys, 1):
+                if lst[key] == val:
+                    return position
+            return 0
 
         # For lists: original behavior
         if case_matters or not isinstance(val, (str, MOOString)):
