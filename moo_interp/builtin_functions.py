@@ -443,13 +443,27 @@ class BuiltinFunctions:
         string = self._unwrap(string)
         algo = self._unwrap(algo).upper()
 
-        if algo not in ['MD5', 'SHA1', 'SHA256']:
-            raise ValueError(
-                "Unsupported hash algorithm. Please choose either 'MD5', 'SHA1', or 'SHA256'.")
+        # Supported algorithms - map to hashlib names
+        algo_map = {
+            'MD5': 'md5',
+            'SHA1': 'sha1',
+            'SHA224': 'sha224',
+            'SHA256': 'sha256',
+            'SHA384': 'sha384',
+            'SHA512': 'sha512',
+            'RIPEMD160': 'ripemd160',
+        }
 
-        hash_object = hashlib.new(algo)
+        if algo not in algo_map:
+            raise MOOException('E_INVARG', f"Invalid hash algorithm: {algo}")
+
+        try:
+            hash_object = hashlib.new(algo_map[algo])
+        except ValueError:
+            # Some algorithms may not be available on all platforms
+            raise MOOException('E_INVARG', f"Hash algorithm not available: {algo}")
+
         hash_object.update(string.encode('utf-8'))
-
         return MOOString(hash_object.hexdigest())
 
     def exp(self, x):
@@ -788,10 +802,17 @@ class BuiltinFunctions:
 
     def decode_base64(self, x, safe=False):
         x = self._unwrap_bytes(x)
-        if safe:
-            return MOOString(base64.urlsafe_b64decode(x).decode('latin-1'))
-        else:
-            return MOOString(base64.b64decode(x).decode('latin-1'))
+        try:
+            if safe:
+                # URL-safe base64 often omits padding - add it back
+                padding = 4 - len(x) % 4
+                if padding != 4:
+                    x = x + b'=' * padding
+                return MOOString(base64.urlsafe_b64decode(x).decode('latin-1'))
+            else:
+                return MOOString(base64.b64decode(x).decode('latin-1'))
+        except Exception as e:
+            raise MOOException('E_INVARG', str(e))
 
     def _moo_to_python(self, value, mode="common-subset"):
         """Convert MOO types to native Python for JSON serialization.
