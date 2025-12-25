@@ -125,6 +125,15 @@ class BuiltinFunctions:
                 i += 1
         return bytes(raw_bytes)
 
+    def _validate_binary_escapes(self, s: str) -> None:
+        """Validate that a string contains only valid binary escapes.
+
+        Raises E_INVARG if invalid escape sequence found.
+        Does not return the bytes - just validates.
+        """
+        if '~' in s:
+            self._parse_binary_escapes(s)  # Raises on invalid
+
     def _unwrap_bytes(self, value):
         """Unwrap MOO string to bytes for binary operations.
 
@@ -475,7 +484,7 @@ class BuiltinFunctions:
         # Regular float to string conversion
         return MOOString(format(x, f".{precision}f"))
 
-    def string_hash(self, string, algo='SHA256'):
+    def string_hash(self, string, algo='SHA256', binary: int = 0):
         string = self._unwrap(string)
         algo = self._unwrap(algo).upper()
 
@@ -500,6 +509,8 @@ class BuiltinFunctions:
             raise MOOException('E_INVARG', f"Hash algorithm not available: {algo}")
 
         hash_object.update(string.encode('utf-8'))
+        if binary:
+            return MOOString(hash_object.digest().decode('latin-1'))
         return MOOString(hash_object.hexdigest().upper())
 
     def exp(self, x):
@@ -964,6 +975,11 @@ class BuiltinFunctions:
     def decode_base64(self, x, safe=0):
         # Input is base64 text, not binary-escaped
         text = str(self._unwrap(x))
+
+        # Check for binary escapes (~XX) in input - not allowed
+        if '~' in text:
+            raise MOOException('E_INVARG', "Binary escapes not allowed in base64 input")
+
         try:
             if safe:
                 # URL-safe base64 often omits padding - add it back
@@ -972,7 +988,8 @@ class BuiltinFunctions:
                     text = text + '=' * padding
                 decoded = base64.urlsafe_b64decode(text)
             else:
-                decoded = base64.b64decode(text)
+                # Use validate=True to reject invalid characters
+                decoded = base64.b64decode(text, validate=True)
             # Convert to MOO binary string format
             return MOOString(self._bytes_to_binary_string(decoded))
         except Exception as e:
@@ -1997,18 +2014,21 @@ class BuiltinFunctions:
     # =========================================================================
 
     def _get_hash_algo(self, algo: str):
-        """Get hashlib algorithm by name."""
+        """Get hashlib algorithm by name. Raises E_INVARG for unknown algorithms."""
         algo = str(algo).upper()
         algos = {'MD5': 'md5', 'SHA1': 'sha1', 'SHA256': 'sha256',
                  'SHA512': 'sha512', 'SHA224': 'sha224', 'SHA384': 'sha384'}
-        return algos.get(algo, 'sha256')
+        if algo not in algos:
+            raise MOOException(MOOError.E_INVARG, f"Invalid hash algorithm: {algo}")
+        return algos[algo]
 
     def binary_hash(self, data, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Hash binary/string data. Returns hex unless binary=1."""
         h = hashlib.new(self._get_hash_algo(algo))
         h.update(self._unwrap_bytes(data))
         if binary:
-            return MOOString(self._bytes_to_binary_string(h.digest()))
+            # Return raw bytes as string (latin-1 preserves byte values)
+            return MOOString(h.digest().decode('latin-1'))
         return MOOString(h.hexdigest().upper())
 
     def value_hash(self, val, algo: str = 'SHA256', binary: int = 0) -> MOOString:
@@ -2017,15 +2037,17 @@ class BuiltinFunctions:
         h = hashlib.new(self._get_hash_algo(algo))
         h.update(literal.encode('utf-8'))
         if binary:
-            return MOOString(self._bytes_to_binary_string(h.digest()))
+            return MOOString(h.digest().decode('latin-1'))
         return MOOString(h.hexdigest().upper())
 
     def string_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Compute HMAC of string data."""
-        h = hmac.new(str(key).encode('utf-8'), str(data).encode('utf-8'),
+        key_str = str(key)
+        self._validate_binary_escapes(key_str)  # Validate key for binary escapes
+        h = hmac.new(key_str.encode('utf-8'), str(data).encode('utf-8'),
                      self._get_hash_algo(algo))
         if binary:
-            return MOOString(self._bytes_to_binary_string(h.digest()))
+            return MOOString(h.digest().decode('latin-1'))
         return MOOString(h.hexdigest().upper())
 
     def binary_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
@@ -2033,16 +2055,18 @@ class BuiltinFunctions:
         h = hmac.new(self._unwrap_bytes(key), self._unwrap_bytes(data),
                      self._get_hash_algo(algo))
         if binary:
-            return MOOString(self._bytes_to_binary_string(h.digest()))
+            return MOOString(h.digest().decode('latin-1'))
         return MOOString(h.hexdigest().upper())
 
     def value_hmac(self, val, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
         """Compute HMAC of any MOO value."""
+        key_str = str(key)
+        self._validate_binary_escapes(key_str)  # Validate key for binary escapes
         literal = str(self.toliteral(val))
-        h = hmac.new(str(key).encode('utf-8'), literal.encode('utf-8'),
+        h = hmac.new(key_str.encode('utf-8'), literal.encode('utf-8'),
                      self._get_hash_algo(algo))
         if binary:
-            return MOOString(self._bytes_to_binary_string(h.digest()))
+            return MOOString(h.digest().decode('latin-1'))
         return MOOString(h.hexdigest().upper())
 
     # =========================================================================
