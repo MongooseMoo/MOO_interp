@@ -1201,7 +1201,11 @@ class ToAst(Transformer):
         return Identifier(s.value)
 
     def ESCAPED_STRING(self, s):
-        return StringLiteral(s[1:-1])
+        # Strip quotes and unescape the content
+        raw_content = s[1:-1]
+        # Python's decode handles standard escape sequences: \n, \t, \", \\, etc.
+        unescaped = raw_content.encode('utf-8').decode('unicode_escape')
+        return StringLiteral(unescaped)
 
     def NUMBER(self, n):
         return NumberLiteral(int(n))
