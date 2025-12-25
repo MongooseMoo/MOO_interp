@@ -9,29 +9,30 @@ def moo_compare(a, b):
     """MOO value comparison function.
 
     Comparison rules:
-    1. If types are different, compare type IDs (int < obj < str < err < float < ...)
+    1. If types are different, compare type IDs (int < obj < float < str < err < ...)
     2. If types are the same, compare values:
        - int, obj, err: numeric comparison
        - str: lexicographic (case-insensitive for maps)
        - float: numeric comparison
     """
-    # Get type priorities for MOO (matching toaststunt's TYPE_* enum order)
+    # Get type priorities for MOO map key sorting
+    # Order: INT < OBJ < FLOAT < STR < ERR < LIST < MAP < BOOL
     def type_priority(val):
-        """Return type priority for sorting (int=0, obj=1, str=2, err=3, float=4, ...)."""
+        """Return type priority for sorting."""
         # Check ObjNum before int (ObjNum inherits from int)
         if type(val).__name__ == 'ObjNum':
             return 1  # TYPE_OBJ
         if isinstance(val, bool):
-            return 6  # TYPE_BOOL (after float)
+            return 7  # TYPE_BOOL
         if isinstance(val, int):
             # Check if it's a MOOError (IntEnum)
             if type(val).__name__ == 'MOOError':
-                return 3  # TYPE_ERR
+                return 4  # TYPE_ERR
             return 0  # TYPE_INT
-        if isinstance(val, str) or type(val).__name__ == 'MOOString':
-            return 2  # TYPE_STR
         if isinstance(val, float):
-            return 4  # TYPE_FLOAT
+            return 2  # TYPE_FLOAT (before STR)
+        if isinstance(val, str) or type(val).__name__ == 'MOOString':
+            return 3  # TYPE_STR
         # Lists and maps
         if hasattr(val, '_list'):
             return 5  # TYPE_LIST
@@ -87,6 +88,39 @@ class MOOMap(MutableMapping):
 
     def __len__(self):
         return len(self._map)
+
+    def __eq__(self, other):
+        """Compare maps with case-insensitive string comparison."""
+        if not isinstance(other, MOOMap):
+            return NotImplemented
+        if len(self._map) != len(other._map):
+            return False
+        # Compare each key-value pair case-insensitively for strings
+        for key in self._map:
+            # Find matching key in other (case-insensitive for strings)
+            other_key = None
+            if isinstance(key, str):
+                key_lower = key.lower()
+                for k in other._map:
+                    if isinstance(k, str) and k.lower() == key_lower:
+                        other_key = k
+                        break
+            else:
+                if key in other._map:
+                    other_key = key
+
+            if other_key is None:
+                return False
+
+            # Compare values case-insensitively for strings
+            val1 = self._map[key]
+            val2 = other._map[other_key]
+            if isinstance(val1, str) and isinstance(val2, str):
+                if val1.lower() != val2.lower():
+                    return False
+            elif val1 != val2:
+                return False
+        return True
 
     def __repr__(self):
         return f"MOOMap({self._map})"
