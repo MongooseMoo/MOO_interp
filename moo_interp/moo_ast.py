@@ -900,7 +900,10 @@ class ForStatement(_Statement):
         return result
 
     def to_moo(self) -> str:
-        return f"{self.condition.to_moo()}\n{self.body.to_moo()}\nendfor\n"
+        # Indent body statements
+        body_lines = self.body.to_moo().split("\n")
+        indented_body = "\n".join("  " + line for line in body_lines if line)
+        return f"{self.condition.to_moo()}\n{indented_body}\nendfor"
 
 
 @dataclass
