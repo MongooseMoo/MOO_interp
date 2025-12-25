@@ -1124,6 +1124,303 @@ class BuiltinFunctions:
         open_file = os.fdopen(fd)
         return open_file.tell()
 
+
+    def file_exists(self, path):
+        """Check if a file exists.
+
+        file_exists(path) => 1 if exists, 0 otherwise
+
+        Requires wizard permissions.
+        """
+        # Type check
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_exists() requires a string argument")
+
+        # Convert to Python string
+        path_str = str(path) if isinstance(path, MOOString) else path
+        return 1 if os.path.exists(path_str) else 0
+
+    def file_read(self, handle: int, bytes_to_read: int):
+        """Read bytes from an open file handle.
+
+        file_read(handle, bytes) => string data read
+        """
+        try:
+            open_file = os.fdopen(handle)
+            data = open_file.read(bytes_to_read)
+            return MOOString(data)
+        except (OSError, ValueError) as e:
+            raise MOOException(MOOError.E_INVARG, f"file_read failed: {e}")
+
+    def file_write(self, handle: int, data):
+        """Write data to an open file handle.
+
+        file_write(handle, data) => bytes written
+        """
+        try:
+            open_file = os.fdopen(handle)
+            data_str = str(data) if isinstance(data, MOOString) else str(data)
+            bytes_written = open_file.write(data_str)
+            return bytes_written if bytes_written is not None else len(data_str)
+        except (OSError, ValueError) as e:
+            raise MOOException(MOOError.E_INVARG, f"file_write failed: {e}")
+
+    def file_eof(self, handle: int):
+        """Check if file handle is at end of file.
+
+        file_eof(handle) => 1 if at EOF, 0 otherwise
+        """
+        try:
+            open_file = os.fdopen(handle)
+            current_pos = open_file.tell()
+            open_file.seek(0, os.SEEK_END)
+            end_pos = open_file.tell()
+            open_file.seek(current_pos)
+            return 1 if current_pos >= end_pos else 0
+        except (OSError, ValueError) as e:
+            raise MOOException(MOOError.E_INVARG, f"file_eof failed: {e}")
+
+    def file_stat(self, path):
+        """Get file statistics.
+
+        file_stat(path) => list [size, type, mode, owner, group, atime, mtime, ctime]
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_stat() requires a string argument")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        try:
+            st = os.stat(path_str)
+            import stat as stat_module
+
+            # Determine file type
+            if stat_module.S_ISREG(st.st_mode):
+                file_type = "reg"
+            elif stat_module.S_ISDIR(st.st_mode):
+                file_type = "dir"
+            elif stat_module.S_ISCHR(st.st_mode):
+                file_type = "chr"
+            elif stat_module.S_ISBLK(st.st_mode):
+                file_type = "block"
+            elif stat_module.S_ISFIFO(st.st_mode):
+                file_type = "fifo"
+            elif stat_module.S_ISSOCK(st.st_mode):
+                file_type = "socket"
+            else:
+                file_type = "unknown"
+
+            mode_octal = oct(st.st_mode & 0o777)[2:]
+
+            return MOOList([
+                st.st_size,
+                MOOString(file_type),
+                MOOString(mode_octal),
+                MOOString(""),
+                MOOString(""),
+                int(st.st_atime),
+                int(st.st_mtime),
+                int(st.st_ctime)
+            ])
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_stat failed: {e}")
+
+    def file_type(self, path):
+        """Get file type.
+
+        file_type(path) => string ("reg", "dir", "chr", etc)
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_type() requires a string argument")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        try:
+            st = os.stat(path_str)
+            import stat as stat_module
+
+            if stat_module.S_ISREG(st.st_mode):
+                return MOOString("reg")
+            elif stat_module.S_ISDIR(st.st_mode):
+                return MOOString("dir")
+            elif stat_module.S_ISCHR(st.st_mode):
+                return MOOString("chr")
+            elif stat_module.S_ISBLK(st.st_mode):
+                return MOOString("block")
+            elif stat_module.S_ISFIFO(st.st_mode):
+                return MOOString("fifo")
+            elif stat_module.S_ISSOCK(st.st_mode):
+                return MOOString("socket")
+            else:
+                return MOOString("unknown")
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_type failed: {e}")
+
+    def file_list(self, path, detailed: int = 0):
+        """List directory contents.
+
+        file_list(path [, detailed]) => list of filenames or detailed info
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_list() requires a string argument")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        try:
+            entries = os.listdir(path_str)
+            result = []
+
+            for entry in entries:
+                if entry in ['.', '..']:
+                    continue
+
+                if detailed:
+                    full_path = os.path.join(path_str, entry)
+                    st = os.stat(full_path)
+                    import stat as stat_module
+
+                    if stat_module.S_ISREG(st.st_mode):
+                        file_type = "reg"
+                    elif stat_module.S_ISDIR(st.st_mode):
+                        file_type = "dir"
+                    elif stat_module.S_ISCHR(st.st_mode):
+                        file_type = "chr"
+                    elif stat_module.S_ISBLK(st.st_mode):
+                        file_type = "block"
+                    elif stat_module.S_ISFIFO(st.st_mode):
+                        file_type = "fifo"
+                    elif stat_module.S_ISSOCK(st.st_mode):
+                        file_type = "socket"
+                    else:
+                        file_type = "unknown"
+
+                    mode_octal = oct(st.st_mode & 0o777)[2:]
+
+                    result.append(MOOList([
+                        MOOString(entry),
+                        MOOString(file_type),
+                        MOOString(mode_octal),
+                        st.st_size
+                    ]))
+                else:
+                    result.append(MOOString(entry))
+
+            return MOOList(result)
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_list failed: {e}")
+
+    def file_mkdir(self, path, mode: int = 0o777):
+        """Create a directory.
+
+        file_mkdir(path [, mode]) => 0 on success
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_mkdir() requires a string argument")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        try:
+            os.mkdir(path_str, mode)
+            return 0
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_mkdir failed: {e}")
+
+    def file_rmdir(self, path):
+        """Remove a directory.
+
+        file_rmdir(path) => 0 on success
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_rmdir() requires a string argument")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        try:
+            os.rmdir(path_str)
+            return 0
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_rmdir failed: {e}")
+
+    def file_remove(self, path):
+        """Remove a file.
+
+        file_remove(path) => 0 on success
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_remove() requires a string argument")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        try:
+            os.remove(path_str)
+            return 0
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_remove failed: {e}")
+
+    def file_rename(self, old_path, new_path):
+        """Rename a file or directory.
+
+        file_rename(old, new) => 0 on success
+        """
+        if not isinstance(old_path, (str, MOOString)) or not isinstance(new_path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_rename() requires string arguments")
+
+        old_str = str(old_path) if isinstance(old_path, MOOString) else old_path
+        new_str = str(new_path) if isinstance(new_path, MOOString) else new_path
+
+        try:
+            os.rename(old_str, new_str)
+            return 0
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_rename failed: {e}")
+
+    def file_copy(self, src, dst):
+        """Copy a file.
+
+        file_copy(src, dst) => 0 on success
+        """
+        import shutil
+
+        if not isinstance(src, (str, MOOString)) or not isinstance(dst, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_copy() requires string arguments")
+
+        src_str = str(src) if isinstance(src, MOOString) else src
+        dst_str = str(dst) if isinstance(dst, MOOString) else dst
+
+        try:
+            shutil.copy2(src_str, dst_str)
+            return 0
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_copy failed: {e}")
+
+    def file_chmod(self, path, mode):
+        """Change file permissions.
+
+        file_chmod(path, mode) => 0 on success
+        """
+        if not isinstance(path, (str, MOOString)):
+            raise MOOException(MOOError.E_TYPE, "file_chmod() requires path as string")
+
+        path_str = str(path) if isinstance(path, MOOString) else path
+
+        # Convert mode to integer
+        if isinstance(mode, (str, MOOString)):
+            mode_str = str(mode) if isinstance(mode, MOOString) else mode
+            try:
+                mode_int = int(mode_str, 8)
+            except ValueError:
+                raise MOOException(MOOError.E_INVARG, f"Invalid mode string: {mode_str}")
+        elif isinstance(mode, int):
+            mode_int = mode
+        else:
+            raise MOOException(MOOError.E_TYPE, "file_chmod() mode must be string or integer")
+
+        try:
+            os.chmod(path_str, mode_int)
+            return 0
+        except OSError as e:
+            raise MOOException(MOOError.E_INVARG, f"file_chmod failed: {e}")
+
     # property functions
 
     # Miscellaneous functions
@@ -2024,3 +2321,522 @@ class BuiltinFunctions:
     def set_connection_option(self, connection: int, option: MOOString, value) -> int:
         """Set connection option value."""
         return 0  # Stub
+    # =========================================================================
+    # SQLite builtins - based on toaststunt/src/sqlite.cc
+    # =========================================================================
+
+    def _valid_sqlite_handle(self, handle: int) -> bool:
+        """Check if a SQLite handle is valid and active."""
+        return isinstance(handle, int) and handle in self._sqlite_handles
+
+    def _sanitize_sqlite_string(self, s: str) -> str:
+        """Replace newlines with tabs for MOO compatibility."""
+        return s.replace('\n', '\t') if s else s
+
+    def _sqlite_type_to_moo(self, value, parse_types: bool = True, parse_objects: bool = True):
+        """Convert SQLite value to MOO type.
+
+        Args:
+            value: Raw value from SQLite (str, int, float, bytes, or None)
+            parse_types: If True, try to parse as int/float/obj
+            parse_objects: If True, parse strings like "#123" as ObjNum
+        """
+        if value is None:
+            return MOOString("NULL")
+
+        if not parse_types:
+            # Everything becomes string
+            return MOOString(self._sanitize_sqlite_string(str(value)))
+
+        # Try to parse as specific types
+        s = str(value)
+
+        # Check for object reference like "#123"
+        if parse_objects and s.startswith('#'):
+            try:
+                num = int(s[1:])
+                return ObjNum(num)
+            except ValueError:
+                pass
+
+        # Try integer
+        try:
+            return int(s)
+        except ValueError:
+            pass
+
+        # Try float
+        try:
+            return float(s)
+        except ValueError:
+            pass
+
+        # Default to string
+        return MOOString(self._sanitize_sqlite_string(s))
+
+    def sqlite_open(self, filename, options: int = 0x3):
+        """Open an SQLite database and return a handle.
+
+        Args:
+            filename: Path to database file, ":memory:", or "" for memory DB
+            options: Bitmask - 0x1=parse_types, 0x2=parse_objects, 0x4=sanitize_strings
+
+        Returns:
+            Integer handle for use with other sqlite_* functions
+
+        Raises:
+            E_PERM if caller is not wizard
+            E_QUOTA if too many connections open (max 10)
+            E_INVARG if filename is invalid or already open
+        """
+        import sqlite3
+
+        # TODO: Permission check - requires wizard
+        # For now we'll allow it
+
+        # Check connection limit
+        if len(self._sqlite_handles) >= 10:
+            raise MOOException(MOOError.E_QUOTA, "Too many database connections open")
+
+        filename = str(filename) if isinstance(filename, MOOString) else filename
+
+        # Check if database already open (except :memory: which can have multiple)
+        for handle, conn_data in self._sqlite_handles.items():
+            if conn_data['path'] == filename and filename not in (":memory:", ""):
+                raise MOOException(MOOError.E_INVARG,
+                    f"Database already open with handle: {handle}")
+
+        try:
+            conn = sqlite3.connect(filename)
+            conn.row_factory = None  # We'll handle rows manually
+
+            handle = self._next_sqlite_handle
+            self._next_sqlite_handle += 1
+
+            self._sqlite_handles[handle] = {
+                'connection': conn,
+                'path': filename,
+                'options': options,
+                'locks': 0
+            }
+
+            return handle
+
+        except sqlite3.Error as e:
+            raise MOOException(MOOError.E_NONE, str(e))
+
+    def sqlite_close(self, handle: int):
+        """Close an SQLite database connection.
+
+        Args:
+            handle: Database handle from sqlite_open
+
+        Raises:
+            E_PERM if caller is not wizard
+            E_INVARG if handle is invalid
+            E_PERM if handle has active operations
+        """
+        # TODO: Permission check
+
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+
+        if conn_data['locks'] > 0:
+            raise MOOException(MOOError.E_PERM,
+                "Handle can't be closed until all operations are finished")
+
+        conn_data['connection'].close()
+        del self._sqlite_handles[handle]
+
+        # Reset handle counter if all connections closed
+        if not self._sqlite_handles:
+            self._next_sqlite_handle = 1
+
+        return None  # no_var_pack equivalent
+
+    def sqlite_execute(self, handle: int, sql, args: MOOList = None):
+        """Execute SQL with optional parameters and return rows.
+
+        This is the prepared statement version that binds parameters.
+
+        Args:
+            handle: Database handle
+            sql: SQL query string with ? placeholders
+            args: List of values to bind to ? placeholders
+
+        Returns:
+            List of rows (each row is a list of values) for SELECT queries
+            Empty list for non-SELECT queries
+
+        Raises:
+            E_PERM if caller is not wizard
+            E_INVARG if handle is invalid
+            Returns error string if SQL fails
+        """
+        import sqlite3
+
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn = conn_data['connection']
+        options = conn_data['options']
+
+        sql = str(sql) if isinstance(sql, MOOString) else sql
+
+        # Prepare bind parameters
+        bind_params = []
+        if args:
+            for arg in args:
+                if isinstance(arg, ObjNum):
+                    bind_params.append(f"#{int(arg)}")
+                elif isinstance(arg, MOOString):
+                    bind_params.append(str(arg))
+                elif isinstance(arg, (int, float)):
+                    bind_params.append(arg)
+                else:
+                    bind_params.append(str(arg))
+
+        try:
+            conn_data['locks'] += 1
+            cursor = conn.cursor()
+
+            if bind_params:
+                cursor.execute(sql, bind_params)
+            else:
+                cursor.execute(sql)
+
+            # Fetch all rows if any
+            result = MOOList([])
+            for row in cursor.fetchall():
+                moo_row = MOOList([
+                    self._sqlite_type_to_moo(
+                        val,
+                        parse_types=bool(options & 0x1),
+                        parse_objects=bool(options & 0x2)
+                    ) for val in row
+                ])
+                result.append(moo_row)
+
+            conn.commit()
+            conn_data['locks'] -= 1
+
+            return result
+
+        except sqlite3.Error as e:
+            conn_data['locks'] -= 1
+            return MOOString(str(e))  # Return error as string
+
+    def sqlite_query(self, handle: int, sql, include_headers: int = 0):
+        """Execute SQL query using sqlite3_exec callback style.
+
+        Args:
+            handle: Database handle
+            sql: SQL query string (no parameter binding)
+            include_headers: If true, each row element is [column_name, value]
+
+        Returns:
+            List of rows
+
+        Raises:
+            E_PERM if caller is not wizard
+            E_INVARG if handle is invalid
+            Returns error string if SQL fails
+        """
+        import sqlite3
+
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn = conn_data['connection']
+        options = conn_data['options']
+
+        sql = str(sql) if isinstance(sql, MOOString) else sql
+
+        try:
+            conn_data['locks'] += 1
+            cursor = conn.cursor()
+            cursor.execute(sql)
+
+            result = MOOList([])
+            col_names = [desc[0] for desc in cursor.description] if cursor.description else []
+
+            for row in cursor.fetchall():
+                if include_headers and col_names:
+                    # Each element is [column_name, value]
+                    moo_row = MOOList([
+                        MOOList([
+                            MOOString(col_names[i]),
+                            self._sqlite_type_to_moo(
+                                val,
+                                parse_types=bool(options & 0x1),
+                                parse_objects=bool(options & 0x2)
+                            )
+                        ]) for i, val in enumerate(row)
+                    ])
+                else:
+                    # Just the values
+                    moo_row = MOOList([
+                        self._sqlite_type_to_moo(
+                            val,
+                            parse_types=bool(options & 0x1),
+                            parse_objects=bool(options & 0x2)
+                        ) for val in row
+                    ])
+                result.append(moo_row)
+
+            conn.commit()
+            conn_data['locks'] -= 1
+
+            return result
+
+        except sqlite3.Error as e:
+            conn_data['locks'] -= 1
+            return MOOString(str(e))
+
+    def sqlite_last_insert_row_id(self, handle: int) -> int:
+        """Get the row ID of the last INSERT.
+
+        Args:
+            handle: Database handle
+
+        Returns:
+            Integer row ID
+
+        Raises:
+            E_PERM if caller is not wizard
+            E_INVARG if handle is invalid
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn = conn_data['connection']
+
+        return conn.lastrowid if hasattr(conn, 'lastrowid') else 0
+
+    def sqlite_handles(self) -> MOOList:
+        """Return a list of all open SQLite database handles.
+
+        Returns:
+            List of integer handles
+
+        Raises:
+            E_PERM if caller is not wizard
+        """
+        # TODO: Permission check
+        return MOOList(list(self._sqlite_handles.keys()))
+
+    def sqlite_info(self, handle: int) -> MOOMap:
+        """Get information about a database handle.
+
+        Args:
+            handle: Database handle
+
+        Returns:
+            Map with keys: path, parse_types, parse_objects, sanitize_strings, locks
+
+        Raises:
+            E_PERM if caller is not wizard
+            E_INVARG if handle is invalid
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        options = conn_data['options']
+
+        return MOOMap({
+            MOOString('path'): MOOString(conn_data['path']),
+            MOOString('parse_types'): 1 if options & 0x1 else 0,
+            MOOString('parse_objects'): 1 if options & 0x2 else 0,
+            MOOString('sanitize_strings'): 1 if options & 0x4 else 0,
+            MOOString('locks'): conn_data['locks']
+        })
+
+    # Extension functions not in toaststunt but useful:
+
+    def sqlite_last_insert_id(self, handle: int) -> int:
+        """Alias for sqlite_last_insert_row_id (shorter name)."""
+        return self.sqlite_last_insert_row_id(handle)
+
+    def sqlite_query_maps(self, handle: int, sql, args: MOOList = None):
+        """Execute SQL and return results as list of maps (column->value).
+
+        Args:
+            handle: Database handle
+            sql: SQL query
+            args: Optional bind parameters
+
+        Returns:
+            List of maps, where each map has column names as keys
+        """
+        import sqlite3
+
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn = conn_data['connection']
+        options = conn_data['options']
+
+        sql = str(sql) if isinstance(sql, MOOString) else sql
+
+        # Prepare bind parameters
+        bind_params = []
+        if args:
+            for arg in args:
+                if isinstance(arg, ObjNum):
+                    bind_params.append(f"#{int(arg)}")
+                elif isinstance(arg, MOOString):
+                    bind_params.append(str(arg))
+                elif isinstance(arg, (int, float)):
+                    bind_params.append(arg)
+                else:
+                    bind_params.append(str(arg))
+
+        try:
+            conn_data['locks'] += 1
+            cursor = conn.cursor()
+
+            if bind_params:
+                cursor.execute(sql, bind_params)
+            else:
+                cursor.execute(sql)
+
+            col_names = [desc[0] for desc in cursor.description] if cursor.description else []
+
+            result = MOOList([])
+            for row in cursor.fetchall():
+                row_map = MOOMap({})
+                for i, val in enumerate(row):
+                    moo_val = self._sqlite_type_to_moo(
+                        val,
+                        parse_types=bool(options & 0x1),
+                        parse_objects=bool(options & 0x2)
+                    )
+                    row_map[MOOString(col_names[i])] = moo_val
+                result.append(row_map)
+
+            conn.commit()
+            conn_data['locks'] -= 1
+
+            return result
+
+        except sqlite3.Error as e:
+            conn_data['locks'] -= 1
+            return MOOString(str(e))
+
+    def sqlite_changes(self, handle: int) -> int:
+        """Get number of rows affected by last INSERT/UPDATE/DELETE.
+
+        Args:
+            handle: Database handle
+
+        Returns:
+            Number of rows changed
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        return conn_data['connection'].total_changes
+
+    def sqlite_begin(self, handle: int):
+        """Begin a transaction.
+
+        Args:
+            handle: Database handle
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn_data['connection'].execute("BEGIN")
+        return None
+
+    def sqlite_commit(self, handle: int):
+        """Commit the current transaction.
+
+        Args:
+            handle: Database handle
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn_data['connection'].commit()
+        return None
+
+    def sqlite_rollback(self, handle: int):
+        """Rollback the current transaction.
+
+        Args:
+            handle: Database handle
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        conn_data['connection'].rollback()
+        return None
+
+    def sqlite_tables(self, handle: int) -> MOOList:
+        """List all tables in the database.
+
+        Args:
+            handle: Database handle
+
+        Returns:
+            List of table names
+        """
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        conn_data = self._sqlite_handles[handle]
+        cursor = conn_data['connection'].cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+
+        return MOOList([MOOString(row[0]) for row in cursor.fetchall()])
+
+    def sqlite_columns(self, handle: int, table) -> MOOList:
+        """Get column information for a table.
+
+        Args:
+            handle: Database handle
+            table: Table name
+
+        Returns:
+            List of column info maps with keys: name, type, notnull, dflt_value, pk
+        """
+        import sqlite3
+
+        if not self._valid_sqlite_handle(handle):
+            raise MOOException(MOOError.E_INVARG, f"Invalid database handle: {handle}")
+
+        table = str(table) if isinstance(table, MOOString) else table
+        conn_data = self._sqlite_handles[handle]
+        cursor = conn_data['connection'].cursor()
+
+        try:
+            cursor.execute(f"PRAGMA table_info({table})")
+
+            result = MOOList([])
+            for row in cursor.fetchall():
+                # PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+                col_map = MOOMap({
+                    MOOString('name'): MOOString(row[1]),
+                    MOOString('type'): MOOString(row[2]),
+                    MOOString('notnull'): row[3],
+                    MOOString('dflt_value'): MOOString(str(row[4])) if row[4] is not None else MOOString("NULL"),
+                    MOOString('pk'): row[5]
+                })
+                result.append(col_map)
+
+            return result
+
+        except sqlite3.Error as e:
+            return MOOString(str(e))
