@@ -32,7 +32,8 @@ class MOOString(UserString):
             index -= 1
         # make a copy of the data
         data = list(self.data)
-        data[index] = value
+        # Ensure value is a plain string for joining
+        data[index] = str(value) if not isinstance(value, str) else value
         self.data = "".join(data)
 
     def __delitem__(self, index):
