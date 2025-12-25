@@ -119,8 +119,8 @@ def operator(opcode):
                 if param.annotation in {inspect._empty, Any}:
                     continue
                 if not isinstance(arg, param.annotation):
-                    raise VMError(
-                        f"Expected {param.annotation} for parameter {param.name}, got {type(arg)}")
+                    # Raise E_TYPE for type mismatches so it's recognized as a MOO error
+                    raise MOOException(MOOError.E_TYPE)
 
         @wraps(func)
         def wrapper(self, *args):
