@@ -19,7 +19,8 @@ class MOOMap(MutableMapping):
         del self._map[key]
 
     def __iter__(self):
-        return iter(self._map)
+        # MOO maps are ordered by sorted keys (like C++ std::map / red-black tree)
+        return iter(sorted(self._map.keys()))
 
     def __len__(self):
         return len(self._map)
