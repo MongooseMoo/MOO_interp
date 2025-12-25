@@ -2321,35 +2321,123 @@ class BuiltinFunctions:
     # Password hashing (crypt) - Cross-platform, toaststunt-compatible
     # =========================================================================
 
-    def salt(self, method: MOOString = "SHA512", prefix: MOOString = "") -> MOOString:
+    # Standard crypt itoa64 alphabet: ./0-9A-Za-z
+    _ITOA64 = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    # bcrypt alphabet: ./A-Za-z0-9
+    _BCRYPT64 = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+    def _encode_b64(self, data: bytes, alphabet: str, output_len: int) -> str:
+        """Encode bytes to base64-like string using given alphabet."""
+        result = []
+        value = 0
+        bits = 0
+        for byte in data:
+            value |= byte << bits
+            bits += 8
+            while bits >= 6:
+                result.append(alphabet[value & 0x3f])
+                value >>= 6
+                bits -= 6
+        if bits > 0:
+            result.append(alphabet[value & 0x3f])
+        # Pad or truncate to output_len
+        while len(result) < output_len:
+            result.append(alphabet[0])
+        return ''.join(result[:output_len])
+
+    def salt(self, prefix: MOOString, random_data: MOOString) -> MOOString:
         """Generate a salt for use with crypt().
 
-        Cross-platform, toaststunt-compatible using passlib.
-        Methods: DES, MD5, SHA256, SHA512, BLOWFISH/BCRYPT
+        Args:
+            prefix: Algorithm prefix ("" for DES, "$1$" for MD5, "$5$" for SHA256,
+                   "$6$" for SHA512, "$2a$" or "$2a$NN$" for bcrypt)
+            random_data: Random bytes (may use ~XX binary escapes)
+
+        Returns:
+            Complete salt string ready for crypt()
         """
-        from passlib.hash import sha512_crypt, sha256_crypt, md5_crypt, des_crypt, bcrypt
-        method = str(method).upper()
+        import re
+        prefix = str(prefix)
+        random_str = str(random_data)
 
-        handlers = {
-            'SHA512': sha512_crypt,
-            'SHA256': sha256_crypt,
-            'MD5': md5_crypt,
-            'DES': des_crypt,
-            'BLOWFISH': bcrypt,
-            'BCRYPT': bcrypt,
-        }
-        handler = handlers.get(method, sha512_crypt)
+        # Parse random data as binary
+        try:
+            random_bytes = self._parse_binary_escapes(random_str)
+        except MOOException:
+            raise  # Re-raise binary parsing errors
 
-        # Generate proper salt using handler's genconfig
-        if hasattr(handler, 'genconfig'):
-            return MOOString(handler.genconfig())
+        # Parse prefix to determine format
+        if prefix == "":
+            # DES: requires 2 bytes, produces 2-char salt
+            if len(random_bytes) < 2:
+                raise MOOException(MOOError.E_INVARG, "DES salt requires at least 2 bytes of random data")
+            return MOOString(self._encode_b64(random_bytes[:2], self._ITOA64, 2))
+
+        elif prefix == "$1$":
+            # MD5: requires 3+ bytes, produces $1$ + 8 chars
+            if len(random_bytes) < 3:
+                raise MOOException(MOOError.E_INVARG, "MD5 salt requires at least 3 bytes of random data")
+            salt_chars = self._encode_b64(random_bytes, self._ITOA64, 8)
+            return MOOString(f"$1${salt_chars}")
+
+        elif prefix.startswith("$5$") or prefix.startswith("$6$"):
+            # SHA256/SHA512: requires 3+ bytes, produces prefix + 16 chars
+            algo = "5" if prefix.startswith("$5$") else "6"
+
+            # Check for rounds specification
+            rounds_match = re.match(r'^\$[56]\$rounds=(\d+)\$$', prefix)
+            if rounds_match:
+                rounds = int(rounds_match.group(1))
+                if rounds < 1000 or rounds > 999999999:
+                    raise MOOException(MOOError.E_INVARG, f"Rounds must be between 1000 and 999999999")
+                prefix_out = f"${algo}$rounds={rounds}$"
+            elif prefix == f"${algo}$":
+                prefix_out = f"${algo}$"
+            else:
+                # Invalid prefix format
+                raise MOOException(MOOError.E_INVARG, f"Invalid SHA prefix: {prefix}")
+
+            if len(random_bytes) < 3:
+                raise MOOException(MOOError.E_INVARG, "SHA salt requires at least 3 bytes of random data")
+            salt_chars = self._encode_b64(random_bytes, self._ITOA64, 16)
+            return MOOString(f"{prefix_out}{salt_chars}")
+
+        elif prefix.startswith("$2a$") or prefix.startswith("$2b$"):
+            # bcrypt: requires 16 bytes, produces prefix + cost + 22 chars
+            variant = prefix[1:3]  # "2a" or "2b"
+
+            # Parse cost factor if present
+            cost_match = re.match(r'^\$2[ab]\$(\d{2})\$$', prefix)
+            if cost_match:
+                cost = int(cost_match.group(1))
+            elif prefix == f"${variant}$":
+                cost = 5  # Default cost
+            else:
+                raise MOOException(MOOError.E_INVARG, f"Invalid bcrypt prefix: {prefix}")
+
+            if cost < 4 or cost > 31:
+                raise MOOException(MOOError.E_INVARG, f"bcrypt cost must be between 4 and 31")
+
+            if len(random_bytes) < 16:
+                raise MOOException(MOOError.E_INVARG, "bcrypt salt requires 16 bytes of random data")
+
+            salt_chars = self._encode_b64(random_bytes[:16], self._BCRYPT64, 22)
+            return MOOString(f"${variant}${cost:02d}${salt_chars}")
+
         else:
-            # Fallback: generate hash and extract salt portion
-            dummy = handler.hash("")
-            if method == 'DES':
-                return MOOString(dummy[:2])
-            parts = dummy.rsplit('$', 1)
-            return MOOString(parts[0] + '$')
+            raise MOOException(MOOError.E_INVARG, f"Invalid salt prefix: {prefix}")
+
+    def _is_wizard(self) -> bool:
+        """Check if current caller has wizard permissions."""
+        # caller_perms() returns the object whose permissions apply
+        # Object #2 is typically the wizard in MOO databases
+        try:
+            perms = self.caller_perms()
+            if hasattr(perms, 'value'):
+                perms = perms.value
+            return perms == 2  # #2 is wizard
+        except Exception:
+            return False
 
     def crypt(self, password: MOOString, salt_str: MOOString = None) -> MOOString:
         """Hash a password using Unix crypt-style hashing.
@@ -2357,49 +2445,90 @@ class BuiltinFunctions:
         Cross-platform, toaststunt-compatible. When called with an existing
         hash as salt, produces the same hash if password matches - this is
         how password verification works in MOO.
+
+        Permission requirements (matching toaststunt):
+        - SHA256/SHA512 with rounds=N: requires wizard
+        - bcrypt with cost != 5: requires wizard
         """
+        import re
         from passlib.hash import sha512_crypt, sha256_crypt, md5_crypt, des_crypt, bcrypt
         password = str(password)
 
         if salt_str is None:
-            # Default: generate new SHA512 hash
-            return MOOString(sha512_crypt.hash(password))
+            # Default: DES with random 2-char salt (toaststunt compatible)
+            salt_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
+            import random
+            random_salt = random.choice(salt_chars) + random.choice(salt_chars)
+            return MOOString(des_crypt.hash(password, salt=random_salt))
 
         salt_str = str(salt_str)
 
-        # Identify hash type from prefix and use appropriate handler
-        # The handler.hash(password, salt=existing_hash) re-hashes with same salt
+        # SHA512 ($6$)
         if salt_str.startswith('$6$'):
-            handler = sha512_crypt
-        elif salt_str.startswith('$5$'):
-            handler = sha256_crypt
-        elif salt_str.startswith('$1$'):
-            handler = md5_crypt
-        elif salt_str.startswith('$2'):
-            handler = bcrypt
-        else:
-            # DES or unknown - use des_crypt with 2-char salt
-            handler = des_crypt
-            salt_str = salt_str[:2]
-
-        # Use .using(salt=...) to configure, then hash
-        # For verification: this produces same hash if password matches
-        try:
-            # Parse the existing hash to extract settings, then re-hash
-            parsed = handler.from_string(salt_str)
-            result = handler.using(
-                salt=parsed.salt,
-                rounds=getattr(parsed, 'rounds', None)
-            ).hash(password) if hasattr(parsed, 'rounds') else handler.using(
-                salt=parsed.salt
-            ).hash(password)
-            return MOOString(result)
-        except Exception:
-            # Fallback: just hash with whatever salt we got
+            # Check for rounds - requires wizard
+            if 'rounds=' in salt_str and not self._is_wizard():
+                raise MOOException(MOOError.E_PERM, "Custom rounds requires wizard")
             try:
-                return MOOString(handler.hash(password))
+                return MOOString(sha512_crypt.using(salt=salt_str.split('$')[-1] if salt_str.count('$') >= 3 else None).hash(password))
             except Exception:
                 return MOOString(sha512_crypt.hash(password))
+
+        # SHA256 ($5$)
+        elif salt_str.startswith('$5$'):
+            # Check for rounds - requires wizard
+            if 'rounds=' in salt_str and not self._is_wizard():
+                raise MOOException(MOOError.E_PERM, "Custom rounds requires wizard")
+            try:
+                return MOOString(sha256_crypt.using(salt=salt_str.split('$')[-1] if salt_str.count('$') >= 3 else None).hash(password))
+            except Exception:
+                return MOOString(sha256_crypt.hash(password))
+
+        # MD5 ($1$)
+        elif salt_str.startswith('$1$'):
+            try:
+                return MOOString(md5_crypt.using(salt=salt_str.split('$')[2] if salt_str.count('$') >= 2 else None).hash(password))
+            except Exception:
+                return MOOString(md5_crypt.hash(password))
+
+        # bcrypt ($2a$ or $2b$)
+        elif salt_str.startswith('$2a$') or salt_str.startswith('$2b$'):
+            # Parse cost factor
+            cost_match = re.match(r'^\$2[ab]\$(\d{2})\$(.*)$', salt_str)
+            if not cost_match:
+                raise MOOException(MOOError.E_INVARG, f"Invalid bcrypt salt format: {salt_str}")
+
+            cost = int(cost_match.group(1))
+            salt_chars = cost_match.group(2)
+
+            # Validate cost
+            if cost < 4 or cost > 31:
+                raise MOOException(MOOError.E_INVARG, f"bcrypt cost must be between 4 and 31")
+
+            # Cost != 5 requires wizard
+            if cost != 5 and not self._is_wizard():
+                raise MOOException(MOOError.E_PERM, "Non-default bcrypt cost requires wizard")
+
+            # Validate salt length (22 chars in bcrypt base64)
+            if len(salt_chars) < 16:
+                raise MOOException(MOOError.E_INVARG, "bcrypt salt requires at least 16 characters")
+
+            try:
+                # Use passlib's bcrypt with the provided salt
+                return MOOString(bcrypt.using(rounds=cost, salt=salt_chars[:22]).hash(password))
+            except Exception as e:
+                raise MOOException(MOOError.E_INVARG, f"bcrypt error: {e}")
+
+        # Check for invalid prefix
+        elif salt_str.startswith('$') and len(salt_str) > 1:
+            raise MOOException(MOOError.E_INVARG, f"Invalid salt prefix: {salt_str}")
+
+        # DES (2-char salt or fallback)
+        else:
+            if len(salt_str) < 2:
+                salt_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
+                import random
+                salt_str = random.choice(salt_chars) + random.choice(salt_chars)
+            return MOOString(des_crypt.hash(password, salt=salt_str[:2]))
 
     # =========================================================================
     # ToastStunt networking builtins
