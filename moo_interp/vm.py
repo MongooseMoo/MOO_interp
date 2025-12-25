@@ -1706,11 +1706,6 @@ class VM:
         if moo_object is None:
             raise VMError(f"E_INVIND: Object #{obj} not found")
 
-        # Check if object is recycled (bit 4 = 0x10)
-        recycled_flags = getattr(moo_object, 'flags', 0)
-        if recycled_flags & 0x10:
-            raise VMError(f"E_INVIND: Object #{obj} is recycled")
-
         prop_name = str(prop)
 
         # Handle special pseudo-properties from object flags
