@@ -1724,6 +1724,18 @@ class VM:
         elif prop_name == 'f':
             return 1 if (flags & 32) else 0  # fertile
 
+        # Handle special object attributes (not regular properties)
+        from lambdamoo_db.database import ObjNum
+        if prop_name == 'owner':
+            return ObjNum(getattr(moo_object, 'owner', -1))
+        elif prop_name == 'location':
+            return ObjNum(getattr(moo_object, 'location', -1))
+        elif prop_name == 'contents':
+            contents = getattr(moo_object, 'contents', [])
+            return MOOList([ObjNum(c) for c in contents] if contents else [])
+        elif prop_name == 'name':
+            return MOOString(getattr(moo_object, 'name', ''))
+
         # Search for property by name (with inheritance)
         current_obj = moo_object
         visited = set()
