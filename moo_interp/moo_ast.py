@@ -492,6 +492,10 @@ class _Assign(_Expression):
                 # Other base types - just evaluate normally
                 result += base.to_bytecode(state, program)
 
+            # Set indexed_object for ^ and $ operators to work correctly on maps
+            old_indexed = state.indexed_object
+            state.indexed_object = base
+
             # For each index except the last, push index and PUSH_REF
             for idx in indices[:-1]:
                 result += idx.to_bytecode(state, program)
@@ -499,6 +503,9 @@ class _Assign(_Expression):
 
             # Push final index (no PUSH_REF for the last one)
             result += indices[-1].to_bytecode(state, program)
+
+            # Restore indexed_object
+            state.indexed_object = old_indexed
 
             # Step 2: Push value
             result += value_bc
