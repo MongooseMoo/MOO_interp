@@ -695,7 +695,15 @@ class VM:
             raise VMError("Expected list")
 
     @operator(Opcode.OP_REF)
-    def exec_ref(self, lst: Container, index: int) -> MOOAny:
+    def exec_ref(self, lst: Container, index: Any) -> MOOAny:
+        # For lists and strings: index must be int (1-based)
+        # For maps: index can be any type (used as key)
+        if isinstance(lst, MOOMap):
+            # Map indexing: use key directly, raise KeyError if not found
+            try:
+                return lst[index]
+            except KeyError:
+                raise VMError(f"Key not found in map: {index}")
         # MOOString and MOOList already handle 1-based indexing in __getitem__
         # Plain Python lists (e.g., from database properties) need conversion
         if isinstance(lst, list) and not isinstance(lst, MOOList):
@@ -703,7 +711,7 @@ class VM:
         return lst[index]
 
     @operator(Opcode.OP_PUSH_REF)
-    def exec_push_ref(self, lst: Container, index: int) -> MOOAny:
+    def exec_push_ref(self, lst: Container, index: Any) -> MOOAny:
         """Push a reference from a nested container with copy-on-write.
 
         This is used for nested assignments like x[1][1] = value.
