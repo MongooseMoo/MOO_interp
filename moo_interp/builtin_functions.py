@@ -2431,8 +2431,10 @@ class BuiltinFunctions:
         """Check if current caller has wizard permissions."""
         # caller_perms() returns the object whose permissions apply
         # Object #2 is typically the wizard in MOO databases
+        # Note: Use the registered function if available (may be overridden by transport)
         try:
-            perms = self.caller_perms()
+            caller_perms_fn = self.functions.get('caller_perms', self.caller_perms)
+            perms = caller_perms_fn()
             if hasattr(perms, 'value'):
                 perms = perms.value
             return perms == 2  # #2 is wizard
