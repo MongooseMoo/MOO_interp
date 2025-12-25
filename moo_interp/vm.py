@@ -1378,8 +1378,31 @@ class VM:
             for k, v in value.items():
                 result[k] = v
             return result
+        elif isinstance(base, (str, MOOString)):
+            # String range set
+            if not isinstance(start, int) or not isinstance(end, int):
+                raise MOOException(MOOError.E_TYPE, "string range indices must be integers")
+            if not isinstance(value, (str, MOOString)):
+                raise MOOException(MOOError.E_TYPE, "string range set requires string value")
+
+            base_str = str(base)
+            value_str = str(value)
+            base_len = len(base_str)
+
+            # Range bounds checking (like toaststunt)
+            if start > base_len + 1 or end < 0:
+                raise MOOException(MOOError.E_RANGE, "string range out of bounds")
+
+            # Build result: left + value + right
+            # lenleft = from > 1 ? from - 1 : 0
+            # lenright = base_len > to ? base_len - to : 0
+            lenleft = start - 1 if start > 1 else 0
+            lenright = base_len - end if base_len > end else 0
+
+            result = base_str[:lenleft] + value_str + base_str[base_len - lenright:]
+            return MOOString(result)
         else:
-            raise MOOException(MOOError.E_TYPE, f"rangeset requires list or map, got {type(base)}")
+            raise MOOException(MOOError.E_TYPE, f"rangeset requires list, map, or string, got {type(base)}")
 
     @operator(Extended_Opcode.EOP_COMPLEMENT)
     def exec_complement(self, value: int) -> int:
