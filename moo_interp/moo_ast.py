@@ -576,14 +576,14 @@ class _Assign(_Expression):
                     # Push current value at that index (for EOP_RANGESET)
                     result += [Instruction(opcode=Opcode.OP_PUSH, operand=MOOString(outer_base.value))]
                     result += base.index.to_bytecode(state, program)
-                    result += [Instruction(opcode=Opcode.OP_INDEX)]
+                    result += [Instruction(opcode=Opcode.OP_REF)]
                 else:
                     # Non-variable outer base - just evaluate
                     result += outer_base.to_bytecode(state, program)
                     result += base.index.to_bytecode(state, program)
                     result += outer_base.to_bytecode(state, program)
                     result += base.index.to_bytecode(state, program)
-                    result += [Instruction(opcode=Opcode.OP_INDEX)]
+                    result += [Instruction(opcode=Opcode.OP_REF)]
 
                 # Set indexed_object for ^ and $ operators
                 old_indexed = state.indexed_object
