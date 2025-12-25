@@ -745,17 +745,30 @@ class VM:
         # MOO uses 1-based indexing, Python uses 0-based
         # MOO x[2..4] means elements 2, 3, 4 (inclusive)
         # Python slice [1:4] means indices 1, 2, 3 (exclusive end)
+        #
+        # Special case: x[n..n] returns the single element, not a sublist/substring
+        # This is toaststunt/MOO behavior
         py_start = start - 1
         py_end = end  # end stays same because Python is exclusive
 
         if isinstance(lst, MOOString):
+            # Single element range returns the character itself
+            if start == end:
+                return MOOString(str(lst)[py_start])
             return MOOString(str(lst)[py_start:py_end])
         elif isinstance(lst, MOOList):
+            # Single element range returns the element itself
+            if start == end:
+                return lst._list[py_start]
             return MOOList(lst._list[py_start:py_end])
         else:
             # the keys in our maps are ordered - convert slice back to dict for MOOMap
             # Note: attrs uses 'map' as init param for the '_map' field
-            return MOOMap(map=dict(list(lst.items())[py_start:py_end]))
+            items = list(lst.items())[py_start:py_end]
+            # Single element range returns the value itself
+            if start == end and items:
+                return items[0][1]
+            return MOOMap(map=dict(items))
 
     # Map operations
 
