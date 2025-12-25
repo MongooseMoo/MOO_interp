@@ -500,13 +500,13 @@ class BuiltinFunctions:
         }
 
         if algo not in algo_map:
-            raise MOOException('E_INVARG', f"Invalid hash algorithm: {algo}")
+            raise MOOException(MOOError.E_INVARG, f"Invalid hash algorithm: {algo}")
 
         try:
             hash_object = hashlib.new(algo_map[algo])
         except ValueError:
             # Some algorithms may not be available on all platforms
-            raise MOOException('E_INVARG', f"Hash algorithm not available: {algo}")
+            raise MOOException(MOOError.E_INVARG, f"Hash algorithm not available: {algo}")
 
         hash_object.update(string.encode('utf-8'))
         if binary:
@@ -978,7 +978,7 @@ class BuiltinFunctions:
 
         # Check for binary escapes (~XX) in input - not allowed
         if '~' in text:
-            raise MOOException('E_INVARG', "Binary escapes not allowed in base64 input")
+            raise MOOException(MOOError.E_INVARG, "Binary escapes not allowed in base64 input")
 
         try:
             if safe:
@@ -993,7 +993,7 @@ class BuiltinFunctions:
             # Convert to MOO binary string format
             return MOOString(self._bytes_to_binary_string(decoded))
         except Exception as e:
-            raise MOOException('E_INVARG', str(e))
+            raise MOOException(MOOError.E_INVARG, str(e))
 
     def _moo_to_python(self, value, mode="common-subset"):
         """Convert MOO types to native Python for JSON serialization.
@@ -2517,15 +2517,16 @@ class BuiltinFunctions:
 
     def _is_wizard(self) -> bool:
         """Check if current caller has wizard permissions."""
-        # caller_perms() returns the object whose permissions apply
-        # Object #2 is typically the wizard in MOO databases
-        # Note: Use the registered function if available (may be overridden by transport)
+        # Use the registered is_wizard function if available
+        # This checks the wizard flag on the caller's object
         try:
-            caller_perms_fn = self.functions.get('caller_perms', self.caller_perms)
-            perms = caller_perms_fn()
-            if hasattr(perms, 'value'):
-                perms = perms.value
-            return perms == 2  # #2 is wizard
+            is_wizard_fn = self.functions.get('is_wizard')
+            if is_wizard_fn:
+                result = is_wizard_fn()
+                return bool(result)
+            # Fallback: check if caller_perms returns an object with wizard flag
+            # This won't work without database access, so return False
+            return False
         except Exception:
             return False
 
