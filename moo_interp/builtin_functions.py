@@ -72,8 +72,8 @@ class BuiltinFunctions:
             # Both names now point to the same function, so get_id_by_name will return the same ID
 
     def __call__(self, fn):
-        if self.current_id > 255:
-            raise Exception("Cannot register more than 256 functions.")
+        if self.current_id > 511:
+            raise Exception("Cannot register more than 512 functions.")
         function_id = self.current_id
         self.current_id += 1
         self.functions[fn.__name__] = fn
@@ -115,9 +115,9 @@ class BuiltinFunctions:
             name: The name to register the function under
             func: A callable that will be registered as a builtin
         """
-        if self.current_id > 255:
-            raise Exception("Cannot register more than 256 functions.")
-        
+        if self.current_id > 511:
+            raise Exception("Cannot register more than 512 functions.")
+
         # Create a wrapper to ensure the function has the right __name__
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
