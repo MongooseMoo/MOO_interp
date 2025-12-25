@@ -985,9 +985,14 @@ class BuiltinFunctions:
             value: The MOO value to convert
             mode: "common-subset" (default) or "embedded-types"
         """
-        # Handle MOOString - UserString stores string in .data attribute
+        # Handle MOOString - parse binary escapes (~XX) to actual characters
         if isinstance(value, MOOString):
-            return value.data
+            # Parse binary escapes and decode to string
+            try:
+                return self._parse_binary_escapes(value.data).decode('latin-1')
+            except MOOException:
+                # If invalid escape, just return raw data
+                return value.data
 
         # Handle MOOList - iterate and convert elements
         elif isinstance(value, MOOList):
@@ -1038,15 +1043,10 @@ class BuiltinFunctions:
         else:
             mode_str = str(mode)
 
-        import sys
-        print(f"DEBUG generate_json x={x!r}, type={type(x)}, mode_str={mode_str!r}", file=sys.stderr)
         native = self._moo_to_python(x, mode_str)
-        print(f"DEBUG native={native!r}, type={type(native)}", file=sys.stderr)
-        result_json = json.dumps(native)
-        print(f"DEBUG json.dumps result={result_json!r}", file=sys.stderr)
-        result = MOOString(result_json)
-        print(f"DEBUG final MOOString={result!r}", file=sys.stderr)
-        return result
+        # Use compact separators (no spaces) to match MOO format
+        result_json = json.dumps(native, separators=(',', ':'))
+        return MOOString(result_json)
 
     def _python_to_moo(self, value, mode="common-subset"):
         """Convert Python value from JSON to MOO types.
