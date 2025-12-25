@@ -796,15 +796,21 @@ class BuiltinFunctions:
             raise (TypeError, "Unknown type: " + str(type(x)))
 
     def mapkeys(self, x):
-        return MOOList(list(x.keys()))
+        # x.__iter__() returns keys in sorted order
+        return MOOList(list(x))
 
     def mapvalues(self, x):
-        return MOOList(list(x.values()))
+        # Return values in the same order as sorted keys
+        return MOOList([x[k] for k in x])
 
     def mapdelete(self, x, y):
-        """Delete key y from map x."""
-        del x[y]
-        return x
+        """Delete key y from map x. Returns E_RANGE if key not found."""
+        if y not in x:
+            return MOOError.E_RANGE
+        # Create a shallow copy for copy-on-write
+        result = x.shallow_copy()
+        del result[y]
+        return result
 
     def mapinsert(self, x, y, z):
         x[y] = z
@@ -1763,8 +1769,23 @@ class BuiltinFunctions:
         key_lower = str(key).lower()
         return 1 if any(str(k).lower() == key_lower for k in m.keys()) else 0
 
-    def is_member(self, val, lst: MOOList, case_matters: int = 1) -> int:
-        """Return 1-based index of val in lst, or 0 if not found."""
+    def is_member(self, val, lst, case_matters: int = 1) -> int:
+        """Return 1-based index of val in lst/map, or 0 if not found.
+
+        For maps: checks if val is a key in the map, returns sorted position (always case-sensitive).
+        For lists: returns 1-based index of val in list.
+        """
+        # For maps: check if val is in keys (always case-sensitive for keys)
+        if isinstance(lst, MOOMap):
+            # Maps check keys, not values
+            # Return 1-based position in sorted key list
+            try:
+                sorted_keys = list(lst)  # __iter__ returns sorted keys
+                return sorted_keys.index(val) + 1
+            except ValueError:
+                return 0
+
+        # For lists: original behavior
         if case_matters or not isinstance(val, (str, MOOString)):
             try:
                 return lst._list.index(val) + 1  # MOO uses 1-based indexing

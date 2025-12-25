@@ -699,11 +699,11 @@ class VM:
         # For lists and strings: index must be int (1-based)
         # For maps: index can be any type (used as key)
         if isinstance(lst, MOOMap):
-            # Map indexing: use key directly, raise KeyError if not found
+            # Map indexing: use key directly, return E_RANGE if not found
             try:
                 return lst[index]
             except KeyError:
-                raise VMError(f"Key not found in map: {index}")
+                return MOOError.E_RANGE
         # MOOString and MOOList already handle 1-based indexing in __getitem__
         # Plain Python lists (e.g., from database properties) need conversion
         if isinstance(lst, list) and not isinstance(lst, MOOList):
