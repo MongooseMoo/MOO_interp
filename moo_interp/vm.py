@@ -1795,13 +1795,37 @@ class VM:
         # bit 4=read, bit 5=write, bit 7=fertile, bit 8=anonymous
         if not hasattr(moo_object, 'flags'):
             moo_object.flags = 0
+
+        # Anonymous objects cannot have wizard/programmer/player flags set
+        is_anon = getattr(moo_object, 'anon', False)
+        if is_anon and prop_name in ('wizard', 'programmer', 'player'):
+            raise VMError(f"E_INVARG: Cannot set {prop_name} flag on anonymous object")
+
+        # Helper to check if caller is a wizard
+        def caller_is_wizard():
+            frame = self.current_frame
+            player_id = getattr(frame, 'player', -1)
+            if hasattr(player_id, '__int__'):
+                player_id = int(player_id)
+            player_obj = self.db.objects.get(player_id)
+            if player_obj:
+                player_flags = getattr(player_obj, 'flags', 0)
+                return bool(player_flags & 0x04)
+            return False
+
         if prop_name == 'wizard':
+            # Only wizards can set wizard flag
+            if not caller_is_wizard():
+                raise VMError("E_PERM: Only wizards can set wizard flag")
             if bool_val:
                 moo_object.flags |= 0x04
             else:
                 moo_object.flags &= ~0x04
             return value
         elif prop_name == 'programmer':
+            # Only wizards can set programmer flag
+            if not caller_is_wizard():
+                raise VMError("E_PERM: Only wizards can set programmer flag")
             if bool_val:
                 moo_object.flags |= 0x02
             else:
@@ -1843,7 +1867,9 @@ class VM:
             moo_object.name = str(value) if value is not None else ''
             return value
         elif prop_name == 'owner':
-            # Note: permission checks should be done by the caller
+            # Only wizards can change object ownership
+            if not caller_is_wizard():
+                raise VMError("E_PERM: Only wizards can change object ownership")
             moo_object.owner = int(value) if hasattr(value, '__int__') else value
             return value
         elif prop_name == 'location':
