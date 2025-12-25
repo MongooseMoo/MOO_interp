@@ -537,14 +537,14 @@ class VM:
             else:
                 return op1 / op2  # Float division
         except ZeroDivisionError:
-            raise VMError("Division by zero")
+            raise MOOException(MOOError.E_DIV, "Division by zero")
 
     @operator(Opcode.OP_MOD)
     def exec_mod(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
         try:
             return op1 % op2
         except ZeroDivisionError:
-            raise VMError("Division by zero")
+            raise MOOException(MOOError.E_DIV, "Division by zero")
 
     @operator(Opcode.OP_EQ)
     def exec_eq(self, op1: MOOAny, op2: MOOAny) -> bool:
@@ -691,14 +691,14 @@ class VM:
     @operator(Opcode.OP_LIST_ADD_TAIL)
     def exec_list_add_tail(self, lst: MOOList, tail: MOOAny) -> MOOList:
         if not isinstance(lst, MOOList):
-            raise VMError("Expected list")
+            raise MOOException(MOOError.E_TYPE, "Expected list")
         lst.append(tail)
         return lst
 
     @operator(Opcode.OP_LIST_APPEND)  # extend in Python
     def exec_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
         if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
-            raise VMError("Expected list")
+            raise MOOException(MOOError.E_TYPE, "Expected list")
         return lst1 + lst2
 
     @operator(Opcode.OP_MAKE_SINGLETON_LIST)
@@ -712,7 +712,7 @@ class VM:
     @operator(Opcode.OP_CHECK_LIST_FOR_SPLICE)
     def exec_check_list_for_splice(self):
         if not isinstance(self.peek(), MOOList):
-            raise VMError("Expected list")
+            raise MOOException(MOOError.E_TYPE, "Expected list")
 
     @operator(Opcode.OP_REF)
     def exec_ref(self, lst: Container, index: Any) -> MOOAny:
@@ -851,7 +851,7 @@ class VM:
     @operator(Opcode.OP_MAP_INSERT)
     def exec_map_insert(self, mapping: MOOMap, value: Any, key: MapKey) -> MOOMap:
         if not isinstance(mapping, MOOMap):
-            raise VMError("Expected map")
+            raise MOOException(MOOError.E_TYPE, "Expected map")
         mapping[key] = value
         return mapping
 
@@ -952,7 +952,7 @@ class VM:
         # Find verb on object or its parents (inheritance chain)
         verb = self._find_verb(obj_id, str(verb_name))
         if not verb:
-            raise VMError(f"OP_CALL_VERB: verb '{verb_name}' not found on object #{obj_id}")
+            raise MOOException(MOOError.E_VERBNF, f"verb '{verb_name}' not found on object #{obj_id}")
 
         # Check if verb.code is already compiled bytecode (Instructions) or source strings
         # For tests: verb.code may be [Instruction, ...]
