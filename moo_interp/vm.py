@@ -810,6 +810,14 @@ class VM:
             # Map range: start and end are KEY values, not positions
             sorted_keys = list(lst)  # __iter__ returns sorted keys
 
+            # Check if this is an inverted range using MOO comparison
+            # Inverted ranges always return empty map (no key existence check)
+            from .map import moo_compare
+            rel = moo_compare(start, end)
+            if rel > 0:
+                # Inverted range: start > end in MOO sort order
+                return MOOMap()
+
             # Find positions of start and end keys
             start_pos = None
             end_pos = None
@@ -818,11 +826,6 @@ class VM:
                     start_pos = i
                 if key == end:
                     end_pos = i
-
-            # Check for inverted range (start > end in sort order)
-            if start_pos is not None and end_pos is not None and start_pos > end_pos:
-                # Inverted range returns empty map
-                return MOOMap()
 
             # For non-inverted ranges, if either key not found, E_RANGE
             if start_pos is None or end_pos is None:
