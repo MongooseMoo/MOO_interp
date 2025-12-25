@@ -1577,8 +1577,36 @@ class BuiltinFunctions:
 
     # Miscellaneous functions
 
-    def random(self, x: int):
-        return random.randint(0, x)
+    def random(self, *args):
+        """Return a random integer.
+
+        random() -> random int from 1 to MAXINT
+        random(max) -> random int from 1 to max
+        random(min, max) -> random int from min to max
+
+        Raises E_INVARG if max < min or if invalid arguments.
+        """
+        import sys
+        MAXINT = sys.maxsize  # 64-bit max int
+
+        if len(args) == 0:
+            return random.randint(1, MAXINT)
+        elif len(args) == 1:
+            max_val = args[0]
+            if not isinstance(max_val, int):
+                raise MOOException(MOOError.E_TYPE, "random() requires integer argument")
+            if max_val < 1:
+                raise MOOException(MOOError.E_INVARG, "random() requires positive argument")
+            return random.randint(1, max_val)
+        elif len(args) == 2:
+            min_val, max_val = args
+            if not isinstance(min_val, int) or not isinstance(max_val, int):
+                raise MOOException(MOOError.E_TYPE, "random() requires integer arguments")
+            if max_val < min_val:
+                raise MOOException(MOOError.E_INVARG, "random() min must be <= max")
+            return random.randint(min_val, max_val)
+        else:
+            raise MOOException(MOOError.E_ARGS, "random() takes 0-2 arguments")
 
     def frandom(self) -> float:
         return random.random()
@@ -1623,8 +1651,17 @@ class BuiltinFunctions:
         return math.atanh(self.tofloat(x))
 
     def random_bytes(self, n: int) -> MOOString:
-        """Generate n cryptographically secure random bytes as hex string."""
-        return MOOString(os.urandom(n).hex())
+        """Generate n cryptographically secure random bytes.
+
+        Returns raw binary bytes as a MOOString.
+        Raises E_INVARG if n < 0 or n > 10000.
+        """
+        if not isinstance(n, int):
+            raise MOOException(MOOError.E_TYPE, "random_bytes() requires integer argument")
+        if n < 0 or n > 10000:
+            raise MOOException(MOOError.E_INVARG, "random_bytes() count must be 0-10000")
+        # Return raw bytes as a string (MOO uses binary strings)
+        return MOOString(os.urandom(n).decode('latin-1'))
 
     def reseed_random(self):
         """Reseed the random number generator."""
