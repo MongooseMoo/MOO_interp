@@ -947,7 +947,7 @@ class VM:
 
         # Find the object
         if obj_id not in self.db.objects:
-            raise VMError(f"E_INVIND: Invalid object #{obj_id}")
+            raise MOOException(MOOError.E_INVIND, f"Invalid object #{obj_id}")
 
         # Find verb on object or its parents (inheritance chain)
         verb = self._find_verb(obj_id, str(verb_name))
@@ -1311,24 +1311,24 @@ class VM:
         elif isinstance(value, (str, MOOString)):
             return len(value)
         else:
-            raise VMError(f"E_TYPE: length() requires list, string, or map, got {type(value)}")
+            raise MOOException(MOOError.E_TYPE, f"length() requires list, string, or map, got {type(value)}")
 
     @operator(Extended_Opcode.EOP_FIRST)
     def exec_first(self, lst: MOOList) -> MOOAny:
         """Return first element of list."""
         if not isinstance(lst, MOOList):
-            raise VMError(f"E_TYPE: first() requires list, got {type(lst)}")
+            raise MOOException(MOOError.E_TYPE, f"first() requires list, got {type(lst)}")
         if len(lst) == 0:
-            raise VMError("E_RANGE: first() on empty list")
+            raise MOOException(MOOError.E_RANGE, "first() on empty list")
         return lst[1]  # MOO is 1-indexed
 
     @operator(Extended_Opcode.EOP_LAST)
     def exec_last(self, lst: MOOList) -> MOOAny:
         """Return last element of list."""
         if not isinstance(lst, MOOList):
-            raise VMError(f"E_TYPE: last() requires list, got {type(lst)}")
+            raise MOOException(MOOError.E_TYPE, f"last() requires list, got {type(lst)}")
         if len(lst) == 0:
-            raise VMError("E_RANGE: last() on empty list")
+            raise MOOException(MOOError.E_RANGE, "last() on empty list")
         return lst[len(lst)]  # MOO is 1-indexed
 
     @operator(Extended_Opcode.EOP_FIRST_INDEX)
@@ -1349,7 +1349,7 @@ class VM:
             # Return first key
             return next(iter(container.keys()))
         else:
-            raise VMError(f"E_TYPE: first index requires list, string, or map, got {type(container)}")
+            raise MOOException(MOOError.E_TYPE, f"first index requires list, string, or map, got {type(container)}")
 
     @operator(Extended_Opcode.EOP_LAST_INDEX)
     def exec_last_index(self, container: MOOAny) -> MOOAny:
@@ -1370,7 +1370,7 @@ class VM:
             # Maps maintain insertion order in Python 3.7+
             return list(container.keys())[-1]
         else:
-            raise VMError(f"E_TYPE: last index requires list, string, or map, got {type(container)}")
+            raise MOOException(MOOError.E_TYPE, f"last index requires list, string, or map, got {type(container)}")
 
     @operator(Extended_Opcode.EOP_RANGESET)
     def exec_rangeset(self, base, start, end, value):
@@ -1477,7 +1477,7 @@ class VM:
     def exec_complement(self, value: int) -> int:
         """Bitwise complement (~value)."""
         if not isinstance(value, int):
-            raise VMError(f"E_TYPE: complement requires integer, got {type(value)}")
+            raise MOOException(MOOError.E_TYPE, f"complement requires integer, got {type(value)}")
         return ~value
 
     @operator(Extended_Opcode.EOP_SCATTER)
@@ -1545,7 +1545,7 @@ class VM:
                     frame.rt_env[var_index] = 0  # MOO default for optional
             else:
                 # Required but not enough elements - error
-                raise VMError(f"E_ARGS: Not enough elements in list for scatter")
+                raise MOOException(MOOError.E_ARGS, "Not enough elements in list for scatter")
 
         return source_list
 
@@ -1581,7 +1581,7 @@ class VM:
             container[index] = value
             return container
         else:
-            raise VMError(f"E_TYPE: indexset requires list, map, or string, got {type(container)}")
+            raise MOOException(MOOError.E_TYPE, f"indexset requires list, map, or string, got {type(container)}")
 
     @operator(Opcode.OP_G_PUSH)
     def exec_g_push(self) -> MOOAny:
@@ -1632,7 +1632,7 @@ class VM:
 
         obj = self.db.objects.get(obj_id)
         if obj is None:
-            raise VMError(f"E_INVIND: Invalid object #{obj_id}")
+            raise MOOException(MOOError.E_INVIND, f"Invalid object #{obj_id}")
 
         # Search properties list for matching property name (with inheritance)
         prop_name_str = str(prop_name)
@@ -1668,7 +1668,7 @@ class VM:
                 break
             current_obj = self.db.objects.get(parent_id)
 
-        raise VMError(f"E_PROPNF: Property {prop_name} not found on #{obj_id}")
+        raise MOOException(MOOError.E_PROPNF, f"Property {prop_name} not found on #{obj_id}")
 
     @operator(Opcode.OP_BI_FUNC_CALL)
     def exec_bi_func_call(self, args: MOOList) -> MOOAny:
@@ -1704,7 +1704,7 @@ class VM:
         """
         moo_object = self.db.objects.get(obj)
         if moo_object is None:
-            raise VMError(f"E_INVIND: Object #{obj} not found")
+            raise MOOException(MOOError.E_INVIND, f"Object #{obj} not found")
 
         prop_name = str(prop)
 
@@ -1791,7 +1791,7 @@ class VM:
                         if parent_obj:
                             to_check.append(parent_obj)
 
-        raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
+        raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on #{obj}")
 
     @operator(Opcode.OP_PUT_PROP)
     def exec_put_prop(self, obj: MOOAny, prop: MOOString, value: MOOAny):
@@ -1804,7 +1804,7 @@ class VM:
         """
         moo_object = self.db.objects.get(obj)
         if moo_object is None:
-            raise VMError(f"E_INVIND: Object #{obj} not found")
+            raise MOOException(MOOError.E_INVIND, f"Object #{obj} not found")
 
         prop_name = str(prop)
         # Convert value to boolean for flag properties
@@ -1833,10 +1833,10 @@ class VM:
         if prop_name == 'wizard':
             # Only wizards can set wizard flag (check permission first)
             if not caller_is_wizard():
-                raise VMError("E_PERM: Only wizards can set wizard flag")
+                raise MOOException(MOOError.E_PERM, "Only wizards can set wizard flag")
             # Anonymous objects cannot have wizard flag (check after permission)
             if is_anon:
-                raise VMError("E_INVARG: Cannot set wizard flag on anonymous object")
+                raise MOOException(MOOError.E_INVARG, "Cannot set wizard flag on anonymous object")
             if bool_val:
                 moo_object.flags |= 0x04
             else:
@@ -1845,10 +1845,10 @@ class VM:
         elif prop_name == 'programmer':
             # Only wizards can set programmer flag (check permission first)
             if not caller_is_wizard():
-                raise VMError("E_PERM: Only wizards can set programmer flag")
+                raise MOOException(MOOError.E_PERM, "Only wizards can set programmer flag")
             # Anonymous objects cannot have programmer flag (check after permission)
             if is_anon:
-                raise VMError("E_INVARG: Cannot set programmer flag on anonymous object")
+                raise MOOException(MOOError.E_INVARG, "Cannot set programmer flag on anonymous object")
             if bool_val:
                 moo_object.flags |= 0x02
             else:
@@ -1857,7 +1857,7 @@ class VM:
         elif prop_name == 'player':
             # Anonymous objects cannot be players
             if is_anon:
-                raise VMError("E_INVARG: Cannot set player flag on anonymous object")
+                raise MOOException(MOOError.E_INVARG, "Cannot set player flag on anonymous object")
             if bool_val:
                 moo_object.flags |= 0x01
             else:
@@ -1895,7 +1895,7 @@ class VM:
         elif prop_name == 'owner':
             # Only wizards can change object ownership
             if not caller_is_wizard():
-                raise VMError("E_PERM: Only wizards can change object ownership")
+                raise MOOException(MOOError.E_PERM, "Only wizards can change object ownership")
             moo_object.owner = int(value) if hasattr(value, '__int__') else value
             return value
         elif prop_name == 'location':
@@ -1949,7 +1949,7 @@ class VM:
                             to_check.append(parent_obj)
 
         if inherited_prop is None:
-            raise VMError(f"E_PROPNF: Property '{prop_name}' not found on #{obj}")
+            raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on #{obj}")
 
         # Create a local copy of the inherited property with the new value
         from lambdamoo_db.database import Property
