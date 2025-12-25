@@ -947,7 +947,7 @@ class VM:
 
         # Find the object
         if obj_id not in self.db.objects:
-            raise VMError(f"OP_CALL_VERB: object #{obj_id} not found")
+            raise VMError(f"E_INVIND: Invalid object #{obj_id}")
 
         # Find verb on object or its parents (inheritance chain)
         verb = self._find_verb(obj_id, str(verb_name))
