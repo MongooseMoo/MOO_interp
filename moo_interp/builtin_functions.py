@@ -193,7 +193,7 @@ class BuiltinFunctions:
 
     def to_string(self, value):
         if isinstance(value, ObjNum):
-            return "#" + str(value)
+            return str(value)  # ObjNum.__str__ already includes #
         elif isinstance(value, int):
             return str(value)
         elif isinstance(value, MOOList):
@@ -776,9 +776,9 @@ class BuiltinFunctions:
     def toliteral(self, x):
         # Check ObjNum FIRST (before int/float) since it inherits from int
         if isinstance(x, ObjNum):
-            return MOOString("#" + str(x))
+            return MOOString(str(x))  # ObjNum.__str__ already includes #
         elif isinstance(x, MooObject):
-            return MOOString("#" + str(x))
+            return MOOString(f"#{x.id}")
         elif isinstance(x, bool):
             return MOOString(str(x).lower())
         elif isinstance(x, MOOString):
