@@ -532,6 +532,66 @@ class _Assign(_Expression):
             result += [Instruction(opcode=Opcode.OP_PUSH_TEMP)]
 
             return result
+        elif isinstance(self.target, _Range):
+            # Range assignment: obj[start..end] = value
+            # Stack layout for EOP_RANGESET: [base, start, end, value]
+            #
+            # For simple case: x[1..2] = value
+            # 1. Push base variable value
+            # 2. Push start
+            # 3. Push end
+            # 4. Push value
+            # 5. PUT_TEMP to save value
+            # 6. EOP_RANGESET (consumes 4, pushes result)
+            # 7. Store modified container back to base
+            # 8. Pop result, push original value
+
+            base = self.target.object
+            result = []
+
+            # Step 1: Push base
+            if isinstance(base, Identifier):
+                result += [Instruction(opcode=Opcode.OP_PUSH, operand=MOOString(base.value))]
+            elif isinstance(base, _Property):
+                result += base.object.to_bytecode(state, program)
+                result += base.name.to_bytecode(state, program)
+                result += [Instruction(opcode=Opcode.OP_PUSH_GET_PROP)]
+            else:
+                result += base.to_bytecode(state, program)
+
+            # Set indexed_object for ^ and $ operators
+            old_indexed = state.indexed_object
+            state.indexed_object = base
+
+            # Step 2 & 3: Push start and end
+            result += self.target.start.to_bytecode(state, program)
+            result += self.target.end.to_bytecode(state, program)
+
+            # Restore indexed_object
+            state.indexed_object = old_indexed
+
+            # Step 4: Push value
+            result += value_bc
+
+            # Step 5: Save value to temp
+            result += [Instruction(opcode=Opcode.OP_PUT_TEMP)]
+
+            # Step 6: EOP_RANGESET
+            result += [Instruction(opcode=Opcode.OP_EXTENDED,
+                                   operand=Extended_Opcode.EOP_RANGESET.value)]
+
+            # Step 7: Store modified container back to base
+            if isinstance(base, Identifier):
+                state.add_var(base.value)
+                result += [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(base.value))]
+            elif isinstance(base, _Property):
+                result += [Instruction(opcode=Opcode.OP_PUT_PROP)]
+
+            # Step 8: Pop result, push original value for expression result
+            result += [Instruction(opcode=Opcode.OP_POP, operand=1)]
+            result += [Instruction(opcode=Opcode.OP_PUSH_TEMP)]
+
+            return result
         elif isinstance(self.target, _List):
             # Destructuring assignment: {a, b, c} = list
             # Build scatter pattern from list items
