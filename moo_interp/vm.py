@@ -1008,8 +1008,13 @@ class VM:
             raise VMError(f"OP_CALL_VERB: args must be MOOList, got {type(args)}")
         if not isinstance(verb_name, MOOString):
             raise VMError(f"OP_CALL_VERB: verb_name must be MOOString, got {type(verb_name).__name__}={repr(verb_name)}")
-        if not isinstance(obj_id, int):
-            raise VMError(f"OP_CALL_VERB: obj_id must be int, got {type(obj_id)}")
+
+        # Check for primitive values - calling verbs on primitives requires a prototype
+        # Without prototype support, raise E_TYPE for all primitive verb calls
+        from lambdamoo_db.database import ObjNum
+        if not isinstance(obj_id, ObjNum):
+            # Plain int, float, string, error, list, map, etc. - no prototype support yet
+            raise MOOException(MOOError.E_TYPE, f"Cannot call verb on primitive value")
 
         # Find the object
         if obj_id not in self.db.objects:
