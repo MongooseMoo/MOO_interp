@@ -939,6 +939,13 @@ class BuiltinFunctions:
             vm = VM(db=db, bi_funcs=bi_funcs)
             vm.call_stack = [compiled]
 
+            # Debug: print bytecode
+            import sys
+            print(f"DEBUG eval: code='{code}'", file=sys.stderr)
+            print(f"DEBUG eval: compiled.stack has {len(compiled.stack)} instructions", file=sys.stderr)
+            for i, instr in enumerate(compiled.stack[:20]):
+                print(f"DEBUG eval: [{i}] {instr}", file=sys.stderr)
+
             # Run to completion
             for _ in vm.run():
                 pass
