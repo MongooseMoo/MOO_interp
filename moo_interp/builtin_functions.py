@@ -2483,54 +2483,73 @@ class BuiltinFunctions:
         - bcrypt with cost != 5: requires wizard
         """
         import re
-        from passlib.hash import sha512_crypt, sha256_crypt, md5_crypt, des_crypt, bcrypt
-        password = str(password)
+        import bcrypt as bcrypt_lib
+        from passlib.hash import sha512_crypt, sha256_crypt, md5_crypt, des_crypt
+        password_str = str(password)
 
         if salt_str is None:
             # Default: DES with random 2-char salt (toaststunt compatible)
             salt_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
             import random
             random_salt = random.choice(salt_chars) + random.choice(salt_chars)
-            return MOOString(des_crypt.hash(password, salt=random_salt))
+            return MOOString(des_crypt.hash(password_str, salt=random_salt))
 
         salt_str = str(salt_str)
 
-        # SHA512 ($6$)
+        # SHA512 ($6$) with optional rounds
         if salt_str.startswith('$6$'):
-            # Check for rounds - requires wizard
-            if 'rounds=' in salt_str and not self._is_wizard():
-                raise MOOException(MOOError.E_PERM, "Custom rounds requires wizard")
-            try:
-                return MOOString(sha512_crypt.using(salt=salt_str.split('$')[-1] if salt_str.count('$') >= 3 else None).hash(password))
-            except Exception:
-                return MOOString(sha512_crypt.hash(password))
+            rounds_match = re.match(r'^\$6\$rounds=(\d+)\$([^$]+)', salt_str)
+            if rounds_match:
+                # Has explicit rounds - requires wizard
+                if not self._is_wizard():
+                    raise MOOException(MOOError.E_PERM, "Custom rounds requires wizard")
+                rounds = int(rounds_match.group(1))
+                salt = rounds_match.group(2)
+                return MOOString(sha512_crypt.using(rounds=rounds, salt=salt).hash(password_str))
+            else:
+                # No rounds, just extract salt after $6$
+                parts = salt_str.split('$')
+                if len(parts) >= 3:
+                    salt = parts[2]
+                    return MOOString(sha512_crypt.using(salt=salt).hash(password_str))
+                return MOOString(sha512_crypt.hash(password_str))
 
-        # SHA256 ($5$)
+        # SHA256 ($5$) with optional rounds
         elif salt_str.startswith('$5$'):
-            # Check for rounds - requires wizard
-            if 'rounds=' in salt_str and not self._is_wizard():
-                raise MOOException(MOOError.E_PERM, "Custom rounds requires wizard")
-            try:
-                return MOOString(sha256_crypt.using(salt=salt_str.split('$')[-1] if salt_str.count('$') >= 3 else None).hash(password))
-            except Exception:
-                return MOOString(sha256_crypt.hash(password))
+            rounds_match = re.match(r'^\$5\$rounds=(\d+)\$([^$]+)', salt_str)
+            if rounds_match:
+                # Has explicit rounds - requires wizard
+                if not self._is_wizard():
+                    raise MOOException(MOOError.E_PERM, "Custom rounds requires wizard")
+                rounds = int(rounds_match.group(1))
+                salt = rounds_match.group(2)
+                return MOOString(sha256_crypt.using(rounds=rounds, salt=salt).hash(password_str))
+            else:
+                # No rounds, just extract salt after $5$
+                parts = salt_str.split('$')
+                if len(parts) >= 3:
+                    salt = parts[2]
+                    return MOOString(sha256_crypt.using(salt=salt).hash(password_str))
+                return MOOString(sha256_crypt.hash(password_str))
 
         # MD5 ($1$)
         elif salt_str.startswith('$1$'):
-            try:
-                return MOOString(md5_crypt.using(salt=salt_str.split('$')[2] if salt_str.count('$') >= 2 else None).hash(password))
-            except Exception:
-                return MOOString(md5_crypt.hash(password))
+            parts = salt_str.split('$')
+            if len(parts) >= 3:
+                salt = parts[2]
+                return MOOString(md5_crypt.using(salt=salt).hash(password_str))
+            return MOOString(md5_crypt.hash(password_str))
 
-        # bcrypt ($2a$ or $2b$)
+        # bcrypt ($2a$ or $2b$) - use bcrypt library directly
         elif salt_str.startswith('$2a$') or salt_str.startswith('$2b$'):
             # Parse cost factor
-            cost_match = re.match(r'^\$2[ab]\$(\d{2})\$(.*)$', salt_str)
+            cost_match = re.match(r'^\$2([ab])\$(\d{2})\$(.*)$', salt_str)
             if not cost_match:
                 raise MOOException(MOOError.E_INVARG, f"Invalid bcrypt salt format: {salt_str}")
 
-            cost = int(cost_match.group(1))
-            salt_chars = cost_match.group(2)
+            variant = cost_match.group(1)  # 'a' or 'b'
+            cost = int(cost_match.group(2))
+            salt_chars = cost_match.group(3)
 
             # Validate cost
             if cost < 4 or cost > 31:
@@ -2540,13 +2559,25 @@ class BuiltinFunctions:
             if cost != 5 and not self._is_wizard():
                 raise MOOException(MOOError.E_PERM, "Non-default bcrypt cost requires wizard")
 
-            # Validate salt length (22 chars in bcrypt base64)
-            if len(salt_chars) < 16:
+            # Handle salt encoding:
+            # - If >= 22 chars: already bcrypt-encoded, use directly
+            # - If == 16 chars: raw bytes, need to bcrypt-encode to 22 chars
+            # - If < 16 chars: invalid
+            if len(salt_chars) >= 22:
+                encoded_salt = salt_chars[:22]
+            elif len(salt_chars) == 16:
+                # Encode 16 raw bytes to 22-char bcrypt base64
+                encoded_salt = self._encode_bcrypt64(salt_chars.encode('latin-1'))
+            else:
                 raise MOOException(MOOError.E_INVARG, "bcrypt salt requires at least 16 characters")
 
+            # Build the full salt string for bcrypt library
+            # Format: $2a$NN$ or $2b$NN$ followed by 22-char salt
+            full_salt = f"$2{variant}${cost:02d}${encoded_salt}"
+
             try:
-                # Use passlib's bcrypt with the provided salt
-                return MOOString(bcrypt.using(rounds=cost, salt=salt_chars[:22]).hash(password))
+                result = bcrypt_lib.hashpw(password_str.encode('utf-8'), full_salt.encode('utf-8'))
+                return MOOString(result.decode('utf-8'))
             except Exception as e:
                 raise MOOException(MOOError.E_INVARG, f"bcrypt error: {e}")
 
@@ -2560,7 +2591,7 @@ class BuiltinFunctions:
                 salt_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./"
                 import random
                 salt_str = random.choice(salt_chars) + random.choice(salt_chars)
-            return MOOString(des_crypt.hash(password, salt=salt_str[:2]))
+            return MOOString(des_crypt.hash(password_str, salt=salt_str[:2]))
 
     # =========================================================================
     # ToastStunt networking builtins
