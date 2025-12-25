@@ -1718,11 +1718,13 @@ class VM:
         elif prop_name == 'player':
             return 1 if (flags & 1) else 0
         elif prop_name == 'r':
-            return 1 if (flags & 8) else 0  # readable
+            return 1 if (flags & 0x10) else 0  # readable (FLAG_READ = bit 4)
         elif prop_name == 'w':
-            return 1 if (flags & 16) else 0  # writable
+            return 1 if (flags & 0x20) else 0  # writable (FLAG_WRITE = bit 5)
         elif prop_name == 'f':
-            return 1 if (flags & 32) else 0  # fertile
+            return 1 if (flags & 0x80) else 0  # fertile (FLAG_FERTILE = bit 7)
+        elif prop_name == 'a':
+            return 1 if (flags & 0x100) else 0  # anonymous (FLAG_ANONYMOUS = bit 8)
 
         # Handle special object attributes (not regular properties)
         from lambdamoo_db.database import ObjNum
@@ -1775,15 +1777,66 @@ class VM:
     def exec_put_prop(self, obj: MOOAny, prop: MOOString, value: MOOAny):
         """Set the value of a property on an object.
 
-        Handles inherited properties with copy-on-write semantics:
-        1. If property exists on object (even with Clear value), update it
-        2. If property is inherited from parent, create local copy with new value
+        Handles:
+        1. Pseudo-properties for object flags (wizard, programmer, player, r, w, f, a)
+        2. Special attributes (owner, name, location)
+        3. Inherited properties with copy-on-write semantics
         """
         moo_object = self.db.objects.get(obj)
         if moo_object is None:
             raise VMError(f"E_INVIND: Object #{obj} not found")
 
         prop_name = str(prop)
+        # Convert value to boolean for flag properties
+        bool_val = bool(value) if not isinstance(value, int) else (value != 0)
+
+        # Handle pseudo-properties for object flags
+        # MOO flags: bit 0=player, bit 1=programmer, bit 2=wizard
+        # bit 4=read, bit 5=write, bit 7=fertile, bit 8=anonymous
+        if not hasattr(moo_object, 'flags'):
+            moo_object.flags = 0
+        if prop_name == 'wizard':
+            if bool_val:
+                moo_object.flags |= 0x04
+            else:
+                moo_object.flags &= ~0x04
+            return value
+        elif prop_name == 'programmer':
+            if bool_val:
+                moo_object.flags |= 0x02
+            else:
+                moo_object.flags &= ~0x02
+            return value
+        elif prop_name == 'player':
+            if bool_val:
+                moo_object.flags |= 0x01
+            else:
+                moo_object.flags &= ~0x01
+            return value
+        elif prop_name == 'r':
+            if bool_val:
+                moo_object.flags |= 0x10
+            else:
+                moo_object.flags &= ~0x10
+            return value
+        elif prop_name == 'w':
+            if bool_val:
+                moo_object.flags |= 0x20
+            else:
+                moo_object.flags &= ~0x20
+            return value
+        elif prop_name == 'f':
+            if bool_val:
+                moo_object.flags |= 0x80
+            else:
+                moo_object.flags &= ~0x80
+            return value
+        elif prop_name == 'a':
+            if bool_val:
+                moo_object.flags |= 0x100
+            else:
+                moo_object.flags &= ~0x100
+            return value
 
         # First, check if property exists on this object directly
         for p in getattr(moo_object, 'properties', []):
