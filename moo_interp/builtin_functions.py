@@ -54,6 +54,10 @@ class BuiltinFunctions:
         self.current_id = 0
         self._vm = None  # VM context, set by VM before execution
 
+        # SQLite support
+        self._sqlite_handles = {}  # SQLite connection handles
+        self._next_sqlite_handle = 1
+
         # automatically register functions
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
@@ -707,6 +711,60 @@ class BuiltinFunctions:
         else:
             return 1
 
+    def capitalize(self, s):
+        """Capitalize first character of string."""
+        s = self._unwrap(s)
+        if not s:
+            return MOOString("")
+        return MOOString(s[0].upper() + s[1:])
+
+    def upcase(self, s):
+        """Convert string to uppercase."""
+        return MOOString(self._unwrap(s).upper())
+
+    def downcase(self, s):
+        """Convert string to lowercase."""
+        return MOOString(self._unwrap(s).lower())
+
+    def ltrim(self, s, chars=None):
+        """Strip leading whitespace (or specified chars)."""
+        s = self._unwrap(s)
+        if chars is not None:
+            chars = self._unwrap(chars)
+            return MOOString(s.lstrip(chars))
+        return MOOString(s.lstrip())
+
+    def rtrim(self, s, chars=None):
+        """Strip trailing whitespace (or specified chars)."""
+        s = self._unwrap(s)
+        if chars is not None:
+            chars = self._unwrap(chars)
+            return MOOString(s.rstrip(chars))
+        return MOOString(s.rstrip())
+
+    def trim(self, s, chars=None):
+        """Strip leading and trailing whitespace (or specified chars)."""
+        s = self._unwrap(s)
+        if chars is not None:
+            chars = self._unwrap(chars)
+            return MOOString(s.strip(chars))
+        return MOOString(s.strip())
+
+    def implode(self, lst, sep=" "):
+        """Join list elements into string with separator."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "implode requires a list")
+        sep = self._unwrap(sep)
+        parts = [self._unwrap(x) if isinstance(x, MOOString) else str(x) for x in lst]
+        return MOOString(sep.join(parts))
+
+    def ord(self, s):
+        """Return ASCII value of first character."""
+        s = self._unwrap(s)
+        if not s:
+            raise MOOException(MOOError.E_INVARG, "ord requires non-empty string")
+        return ord(s[0])
+
     _abs = abs
 
     def abs(self, x):
@@ -751,6 +809,26 @@ class BuiltinFunctions:
     def mapinsert(self, x, y, z):
         x[y] = z
         return x
+
+    def mapmerge(self, m1, m2):
+        """Merge two maps. m2 values override m1."""
+        if not isinstance(m1, MOOMap) or not isinstance(m2, MOOMap):
+            raise MOOException(MOOError.E_TYPE, "mapmerge requires two maps")
+        result = MOOMap(dict(m1))
+        result.update(m2)
+        return result
+
+    def mapslice(self, m, keys):
+        """Extract a subset of map by keys."""
+        if not isinstance(m, MOOMap):
+            raise MOOException(MOOError.E_TYPE, "mapslice requires a map")
+        if not isinstance(keys, MOOList):
+            raise MOOException(MOOError.E_TYPE, "mapslice requires a list of keys")
+        result = MOOMap()
+        for k in keys:
+            if k in m:
+                result[k] = m[k]
+        return result
 
     def eval(self, *args):
         """\
@@ -1105,7 +1183,7 @@ class BuiltinFunctions:
         return 0
     def shift(self, n, count):
         """Shift n by count bits. Positive count=left shift, negative=right shift.
-        
+
         shift(1, 3) => 8 (1 << 3)
         shift(8, -3) => 1 (8 >> 3)
         """
@@ -1114,6 +1192,102 @@ class BuiltinFunctions:
         else:
             return n >> (-count)
 
+    def bitand(self, a, b):
+        """Bitwise AND of two integers."""
+        return int(a) & int(b)
+
+    def bitor(self, a, b):
+        """Bitwise OR of two integers."""
+        return int(a) | int(b)
+
+    def bitxor(self, a, b):
+        """Bitwise XOR of two integers."""
+        return int(a) ^ int(b)
+
+    def bitnot(self, a):
+        """Bitwise NOT of an integer."""
+        return ~int(a)
+
+    def bitshl(self, n, count):
+        """Bitwise left shift."""
+        return int(n) << int(count)
+
+    def bitshr(self, n, count):
+        """Bitwise right shift."""
+        return int(n) >> int(count)
+
+    # Additional math builtins
+    def log2(self, x):
+        """Return base-2 logarithm."""
+        return math.log2(self.tofloat(x))
+
+    def fmod(self, x, y):
+        """Return floating-point remainder."""
+        return math.fmod(self.tofloat(x), self.tofloat(y))
+
+    def hypot(self, x, y):
+        """Return Euclidean distance sqrt(x*x + y*y)."""
+        return math.hypot(self.tofloat(x), self.tofloat(y))
+
+    def copysign(self, x, y):
+        """Return x with sign of y."""
+        return math.copysign(self.tofloat(x), self.tofloat(y))
+
+    def frexp(self, x):
+        """Return (mantissa, exponent) tuple."""
+        m, e = math.frexp(self.tofloat(x))
+        return MOOList([m, e])
+
+    def ldexp(self, x, i):
+        """Return x * (2 ** i)."""
+        return math.ldexp(self.tofloat(x), int(i))
+
+    def modf(self, x):
+        """Return (fractional, integer) parts."""
+        f, i = math.modf(self.tofloat(x))
+        return MOOList([f, i])
+
+    def remainder(self, x, y):
+        """Return IEEE 754 remainder."""
+        return math.remainder(self.tofloat(x), self.tofloat(y))
+
+    def isfinite(self, x):
+        """Return 1 if x is finite, 0 otherwise."""
+        return 1 if math.isfinite(self.tofloat(x)) else 0
+
+    def isinf(self, x):
+        """Return 1 if x is infinite, 0 otherwise."""
+        return 1 if math.isinf(self.tofloat(x)) else 0
+
+    def isnan(self, x):
+        """Return 1 if x is NaN, 0 otherwise."""
+        return 1 if math.isnan(self.tofloat(x)) else 0
+
+    # Aggregation functions for lists
+    _sum = sum  # Save builtin
+
+    def sum(self, lst):
+        """Return sum of numeric list elements."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "sum requires a list")
+        return self._sum(lst)
+
+    def avg(self, lst):
+        """Return average of numeric list elements."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "avg requires a list")
+        if not lst:
+            raise MOOException(MOOError.E_INVARG, "avg requires non-empty list")
+        return self._sum(lst) / len(lst)
+
+    def product(self, lst):
+        """Return product of numeric list elements."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "product requires a list")
+        result = 1
+        for x in lst:
+            result *= x
+        return result
 
     def relative_heading(self, p1: MOOList, p2: MOOList) -> float:
         """Calculate heading from p1 to p2 in degrees (0-360, north=0)."""
@@ -1159,6 +1333,72 @@ class BuiltinFunctions:
             return self.TYPE_ERR
         else:
             return self.TYPE_INT  # fallback
+
+    # Type name mapping
+    TYPE_NAMES = {0: "INT", 1: "OBJ", 2: "STR", 3: "ERR", 4: "LIST", 9: "FLOAT", 10: "MAP", 14: "BOOL"}
+
+    def typename(self, x):
+        """Return the type name as a string."""
+        type_code = self.typeof(x)
+        return MOOString(self.TYPE_NAMES.get(type_code, "UNKNOWN"))
+
+    def is_type(self, x, type_code):
+        """Check if x is of the given type code."""
+        return 1 if self.typeof(x) == type_code else 0
+
+    def tonum(self, x):
+        """Alias for toint."""
+        return self.toint(x)
+
+    def toerr(self, x):
+        """Convert value to error code."""
+        if isinstance(x, MOOError):
+            return x
+        elif isinstance(x, int):
+            # Map integer to error code
+            error_map = {0: MOOError.E_NONE, 1: MOOError.E_TYPE, 2: MOOError.E_DIV,
+                         3: MOOError.E_PERM, 4: MOOError.E_PROPNF, 5: MOOError.E_VERBNF,
+                         6: MOOError.E_VARNF, 7: MOOError.E_INVIND, 8: MOOError.E_RECMOVE,
+                         9: MOOError.E_MAXREC, 10: MOOError.E_RANGE, 11: MOOError.E_ARGS,
+                         12: MOOError.E_NACC, 13: MOOError.E_INVARG, 14: MOOError.E_QUOTA,
+                         15: MOOError.E_FLOAT}
+            return error_map.get(x, MOOError.E_NONE)
+        elif isinstance(x, (str, MOOString)):
+            # Parse error name like "E_TYPE"
+            name = str(x).upper()
+            if hasattr(MOOError, name):
+                return getattr(MOOError, name)
+            return MOOError.E_NONE
+        return MOOError.E_NONE
+
+    # Encoding builtins
+    def encode_base64(self, s):
+        """Encode string to base64."""
+        import base64
+        data = self._unwrap_bytes(s)
+        return MOOString(base64.b64encode(data).decode('ascii'))
+
+    def decode_base64(self, s):
+        """Decode base64 string."""
+        import base64
+        try:
+            data = base64.b64decode(self._unwrap(s))
+            return MOOString(data.decode('latin-1'))
+        except Exception:
+            raise MOOException(MOOError.E_INVARG, "Invalid base64")
+
+    def encode_hex(self, s):
+        """Encode string to hex."""
+        data = self._unwrap_bytes(s)
+        return MOOString(data.hex())
+
+    def decode_hex(self, s):
+        """Decode hex string."""
+        try:
+            data = bytes.fromhex(self._unwrap(s))
+            return MOOString(data.decode('latin-1'))
+        except Exception:
+            raise MOOException(MOOError.E_INVARG, "Invalid hex")
 
     def raise_error(self, code, message=None, value=None):
         """Raise an error that can be caught by try/except.
@@ -1247,6 +1487,123 @@ class BuiltinFunctions:
         except ValueError:
             pass  # Not found, return unchanged
         return MOOList(result)
+
+    def assoc(self, key, alist, idx=1):
+        """Search alist for element where alist[n][idx] == key. Returns element or 0."""
+        if not isinstance(alist, MOOList):
+            raise MOOException(MOOError.E_TYPE, "assoc requires a list")
+        for item in alist:
+            if isinstance(item, MOOList) and len(item) >= idx:
+                if item[idx] == key:
+                    return item
+        return 0
+
+    def rassoc(self, key, alist, idx=1):
+        """Like assoc but searches from end."""
+        if not isinstance(alist, MOOList):
+            raise MOOException(MOOError.E_TYPE, "rassoc requires a list")
+        for item in reversed(list(alist)):
+            if isinstance(item, MOOList) and len(item) >= idx:
+                if item[idx] == key:
+                    return item
+        return 0
+
+    def iassoc(self, key, alist, idx=1):
+        """Like assoc but returns 1-based index instead of element."""
+        if not isinstance(alist, MOOList):
+            raise MOOException(MOOError.E_TYPE, "iassoc requires a list")
+        for i, item in enumerate(alist):
+            if isinstance(item, MOOList) and len(item) >= idx:
+                if item[idx] == key:
+                    return i + 1  # 1-based
+        return 0
+
+    def count(self, lst, val):
+        """Count occurrences of val in lst."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "count requires a list")
+        return sum(1 for x in lst if x == val)
+
+    def diff(self, lst1, lst2):
+        """Return elements in lst1 not in lst2."""
+        if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
+            raise MOOException(MOOError.E_TYPE, "diff requires two lists")
+        lst2_set = set(lst2)
+        return MOOList([x for x in lst1 if x not in lst2_set])
+
+    def intersection(self, lst1, lst2):
+        """Return elements common to both lists."""
+        if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
+            raise MOOException(MOOError.E_TYPE, "intersection requires two lists")
+        lst2_set = set(lst2)
+        return MOOList([x for x in lst1 if x in lst2_set])
+
+    def union(self, lst1, lst2):
+        """Return combined unique elements from both lists."""
+        if not isinstance(lst1, MOOList) or not isinstance(lst2, MOOList):
+            raise MOOException(MOOError.E_TYPE, "union requires two lists")
+        seen = set()
+        result = []
+        for x in list(lst1) + list(lst2):
+            if x not in seen:
+                seen.add(x)
+                result.append(x)
+        return MOOList(result)
+
+    def unique(self, lst):
+        """Remove duplicate elements, preserving order."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "unique requires a list")
+        seen = set()
+        result = []
+        for x in lst:
+            if x not in seen:
+                seen.add(x)
+                result.append(x)
+        return MOOList(result)
+
+    def flatten(self, lst, depth=-1):
+        """Flatten nested lists. depth=-1 means fully flatten."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "flatten requires a list")
+        def _flatten(items, d):
+            result = []
+            for item in items:
+                if isinstance(item, MOOList) and d != 0:
+                    result.extend(_flatten(item, d - 1))
+                else:
+                    result.append(item)
+            return result
+        return MOOList(_flatten(lst, depth))
+
+    def rotate(self, lst, n=1):
+        """Rotate list elements by n positions."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "rotate requires a list")
+        if not lst:
+            return MOOList([])
+        items = list(lst)
+        n = n % len(items)
+        return MOOList(items[n:] + items[:n])
+
+    def make_list(self, count, val=0):
+        """Create list with count copies of val."""
+        if count < 0:
+            raise MOOException(MOOError.E_INVARG, "count must be non-negative")
+        return MOOList([val] * count)
+
+    def indexc(self, lst, val, start=1):
+        """Case-insensitive search in list of strings."""
+        if not isinstance(lst, MOOList):
+            raise MOOException(MOOError.E_TYPE, "indexc requires a list")
+        val_lower = self._unwrap(val).lower() if isinstance(val, MOOString) else str(val).lower()
+        for i, item in enumerate(lst, 1):
+            if i < start:
+                continue
+            item_str = self._unwrap(item).lower() if isinstance(item, MOOString) else str(item).lower()
+            if item_str == val_lower:
+                return i
+        return 0
 
     _slice = slice  # Save builtin
 
