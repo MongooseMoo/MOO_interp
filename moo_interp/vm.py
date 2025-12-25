@@ -1249,11 +1249,14 @@ class VM:
     @operator(Extended_Opcode.EOP_FIRST_INDEX)
     def exec_first_index(self, container: MOOAny) -> MOOAny:
         """Get the first index/key appropriate for the container type.
-        
+
         - For lists/strings: returns 1 (first position)
         - For maps: returns the first key
+        Raises E_RANGE for empty containers.
         """
         if isinstance(container, (MOOList, MOOString, str)):
+            if len(container) == 0:
+                raise MOOException(MOOError.E_RANGE)
             return 1
         elif isinstance(container, MOOMap):
             if len(container) == 0:
@@ -1266,11 +1269,14 @@ class VM:
     @operator(Extended_Opcode.EOP_LAST_INDEX)
     def exec_last_index(self, container: MOOAny) -> MOOAny:
         """Get the last index/key appropriate for the container type.
-        
+
         - For lists/strings: returns length (last position)
         - For maps: returns the last key
+        Raises E_RANGE for empty containers.
         """
         if isinstance(container, (MOOList, MOOString, str)):
+            if len(container) == 0:
+                raise MOOException(MOOError.E_RANGE)
             return len(container)
         elif isinstance(container, MOOMap):
             if len(container) == 0:
