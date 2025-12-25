@@ -130,6 +130,30 @@ class MOOMap(MutableMapping):
     def __repr__(self):
         return f"MOOMap({self._map})"
 
+    def equal_case_sensitive(self, other) -> bool:
+        """Compare maps with case-sensitive string comparison.
+
+        Used by the equal() builtin. Unlike __eq__ which is case-insensitive
+        for the == operator, this performs strict case-sensitive comparison.
+        """
+        if not isinstance(other, MOOMap):
+            return False
+        if len(self._map) != len(other._map):
+            return False
+        # Compare each key-value pair case-sensitively
+        for key in self._map:
+            if key not in other._map:
+                return False
+            val1 = self._map[key]
+            val2 = other._map[key]
+            # Recurse for nested maps
+            if isinstance(val1, MOOMap) and isinstance(val2, MOOMap):
+                if not val1.equal_case_sensitive(val2):
+                    return False
+            elif val1 != val2:
+                return False
+        return True
+
     def refcount(self):
         """Return the reference count of this MOOMap."""
         return sys.getrefcount(self) - 1  # -1 to account for the call itself

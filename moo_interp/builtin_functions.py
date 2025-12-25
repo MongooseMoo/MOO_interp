@@ -564,6 +564,9 @@ class BuiltinFunctions:
         return MOOList(list(lst)[::-1])
 
     def equal(self, x, y):
+        # For maps, use case-sensitive comparison (unlike == which is case-insensitive)
+        if isinstance(x, MOOMap) and isinstance(y, MOOMap):
+            return x.equal_case_sensitive(y)
         return x == y
 
     def strcmp(self, str1: MOOString, str2: MOOString):
