@@ -76,6 +76,32 @@ class BuiltinFunctions:
         self.function_to_id[fn] = function_id
         return fn
 
+    def _unwrap(self, value):
+        """Unwrap MOO types to Python primitives.
+
+        MOOString -> str
+        MOOList -> list (recursively)
+        MOOMap -> dict (recursively)
+        Other types pass through unchanged.
+        """
+        if isinstance(value, MOOString):
+            return str(value)
+        elif isinstance(value, MOOList):
+            return [self._unwrap(v) for v in value]
+        elif isinstance(value, MOOMap):
+            return {self._unwrap(k): self._unwrap(v) for k, v in value.items()}
+        return value
+
+    def _unwrap_bytes(self, value):
+        """Unwrap MOO string to bytes for binary operations."""
+        if isinstance(value, MOOString):
+            return str(value).encode('latin-1')
+        elif isinstance(value, str):
+            return value.encode('latin-1')
+        elif isinstance(value, bytes):
+            return value
+        raise TypeError(f"Expected string or bytes, got {type(value).__name__}")
+
 
     def register(self, name: str, func):
         """Register an external function with a custom name.
@@ -414,14 +440,15 @@ class BuiltinFunctions:
         return MOOString(format(x, f".{precision}f"))
 
     def string_hash(self, string, algo='SHA256'):
-        algo = algo.upper()
+        string = self._unwrap(string)
+        algo = self._unwrap(algo).upper()
 
         if algo not in ['MD5', 'SHA1', 'SHA256']:
             raise ValueError(
                 "Unsupported hash algorithm. Please choose either 'MD5', 'SHA1', or 'SHA256'.")
 
         hash_object = hashlib.new(algo)
-        hash_object.update(string.encode())
+        hash_object.update(string.encode('utf-8'))
 
         return hash_object.hexdigest()
 
@@ -753,16 +780,18 @@ class BuiltinFunctions:
         return MOOList([True, result.result])
 
     def encode_base64(self, x, safe=False):
+        x = self._unwrap_bytes(x)
         if safe:
-            return base64.urlsafe_b64encode(x)
+            return base64.urlsafe_b64encode(x).decode('ascii')
         else:
-            return base64.b64encode(x)
+            return base64.b64encode(x).decode('ascii')
 
     def decode_base64(self, x, safe=False):
+        x = self._unwrap_bytes(x)
         if safe:
-            return base64.urlsafe_b64decode(x)
+            return base64.urlsafe_b64decode(x).decode('latin-1')
         else:
-            return base64.b64decode(x)
+            return base64.b64decode(x).decode('latin-1')
 
     def _moo_to_python(self, value, mode="common-subset"):
         """Convert MOO types to native Python for JSON serialization.
