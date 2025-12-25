@@ -1838,6 +1838,18 @@ class VM:
                 moo_object.flags &= ~0x100
             return value
 
+        # Handle special object attributes (not regular properties)
+        if prop_name == 'name':
+            moo_object.name = str(value) if value is not None else ''
+            return value
+        elif prop_name == 'owner':
+            # Note: permission checks should be done by the caller
+            moo_object.owner = int(value) if hasattr(value, '__int__') else value
+            return value
+        elif prop_name == 'location':
+            moo_object.location = int(value) if hasattr(value, '__int__') else value
+            return value
+
         # First, check if property exists on this object directly
         for p in getattr(moo_object, 'properties', []):
             if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
