@@ -1211,13 +1211,13 @@ class VM:
 
     @operator(Extended_Opcode.EOP_LENGTH)
     def exec_length(self, value: MOOAny) -> int:
-        """Return length of list or string."""
-        if isinstance(value, MOOList):
+        """Return length of list, string, or map."""
+        if isinstance(value, MOOList, MOOMap):
             return len(value)
         elif isinstance(value, (str, MOOString)):
             return len(value)
         else:
-            raise VMError(f"E_TYPE: length() requires list or string, got {type(value)}")
+            raise VMError(f"E_TYPE: length() requires list, string, or map, got {type(value)}")
 
     @operator(Extended_Opcode.EOP_FIRST)
     def exec_first(self, lst: MOOList) -> MOOAny:
