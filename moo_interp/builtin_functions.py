@@ -997,21 +997,40 @@ class BuiltinFunctions:
         if isinstance(value, str):
             # Check for embedded type annotations in string
             if mode == "embedded-types":
-                # Handle "#N|obj" -> ObjNum(N)
-                if value.startswith("#") and "|obj" in value:
+                # Handle type suffixes: "value|type"
+                if "|" in value:
                     try:
-                        num_str = value[1:value.index("|obj")]
-                        return ObjNum(int(num_str))
-                    except (ValueError, IndexError):
-                        pass
+                        prefix, suffix = value.rsplit("|", 1)
 
-                # Handle "E_XXX|err" -> MOOError
-                if "|err" in value:
-                    try:
-                        error_name = value[:value.index("|err")]
-                        if hasattr(MOOError, error_name):
-                            return getattr(MOOError, error_name)
+                        # Handle "|int" - convert prefix to int or 0 if empty
+                        if suffix == "int":
+                            return int(prefix) if prefix else 0
+
+                        # Handle "|float" - convert prefix to float or 0.0 if empty
+                        elif suffix == "float":
+                            return float(prefix) if prefix else 0.0
+
+                        # Handle "|str" - return prefix as MOOString
+                        elif suffix == "str":
+                            return MOOString(prefix)
+
+                        # Handle "#N|obj" or "|obj" -> ObjNum(N) or ObjNum(0)
+                        elif suffix == "obj":
+                            if prefix.startswith("#"):
+                                prefix = prefix[1:]
+                            return ObjNum(int(prefix) if prefix else 0)
+
+                        # Handle "E_XXX|err" or "|err" -> MOOError
+                        elif suffix == "err":
+                            if prefix:
+                                # Try to get error by name
+                                if hasattr(MOOError, prefix):
+                                    return getattr(MOOError, prefix)
+                            else:
+                                # Bare "|err" returns E_NONE
+                                return MOOError.E_NONE
                     except (ValueError, AttributeError):
+                        # Fall through to return as string
                         pass
 
             # Check if string looks like an object/error in common-subset mode (should fail)
