@@ -683,6 +683,18 @@ class _Assign(_Expression):
                 scatter_pattern=scatter_pattern
             ))
             return result
+        elif isinstance(self.target, DollarProperty):
+            # $prop = value means #0.prop = value
+            # OP_PUT_PROP expects stack: [obj, propname, value] with value on top
+            obj_bc = [Instruction(opcode=Opcode.OP_IMM, operand=0)]
+            if isinstance(self.target.name, Identifier):
+                prop_name = MOOString(self.target.name.value)
+            else:
+                prop_name = MOOString(str(self.target.name.value))
+            name_bc = [Instruction(opcode=Opcode.OP_IMM, operand=prop_name)]
+            return obj_bc + name_bc + value_bc + [
+                Instruction(opcode=Opcode.OP_PUT_PROP)
+            ]
         else:
             # Unknown target type - return empty (will cause error)
             return []
