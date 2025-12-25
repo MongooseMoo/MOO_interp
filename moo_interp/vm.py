@@ -10,7 +10,7 @@ from attr import define, field
 from lambdamoo_db.database import MooDatabase
 
 from .builtin_functions import BuiltinFunctions
-from .errors import ERROR_CODES, MOOException
+from .errors import ERROR_CODES, MOOError, MOOException
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
@@ -629,11 +629,34 @@ class VM:
 
     @operator(Extended_Opcode.EOP_BITSHL)
     def exec_bitshl(self, op1: int, op2: int) -> int:
-        return op1 << op2
+        # MOO uses 64-bit integers
+        if op2 < 0 or op2 > 64:
+            raise MOOException(MOOError.E_INVARG)
+        if op2 == 64:
+            return 0
+        if op2 == 0:
+            return op1
+        # Mask to 64-bit signed range
+        result = op1 << op2
+        # Wrap to signed 64-bit
+        result = result & 0xFFFFFFFFFFFFFFFF
+        if result >= 0x8000000000000000:
+            result -= 0x10000000000000000
+        return result
 
     @operator(Extended_Opcode.EOP_BITSHR)
     def exec_bitshr(self, op1: int, op2: int) -> int:
-        return op1 >> op2
+        # MOO uses 64-bit integers with logical (unsigned) right shift
+        if op2 < 0 or op2 > 64:
+            raise MOOException(MOOError.E_INVARG)
+        if op2 == 64:
+            return 0
+        if op2 == 0:
+            return op1
+        # Convert to unsigned 64-bit, shift, then back to signed
+        unsigned = op1 & 0xFFFFFFFFFFFFFFFF
+        result = unsigned >> op2
+        return result
 
     @operator(Extended_Opcode.EOP_EXP)
     def exec_exp(self, lhs: MOONumber,   rhs: MOONumber):
