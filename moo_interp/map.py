@@ -67,6 +67,11 @@ def moo_compare(a, b):
     return 0
 
 
+def _is_string_like(val):
+    """Check if val is a string or MOOString."""
+    return isinstance(val, str) or type(val).__name__ == 'MOOString'
+
+
 @define(repr=False)
 class MOOMap(MutableMapping):
     _map = field(factory=dict)
@@ -99,10 +104,10 @@ class MOOMap(MutableMapping):
         for key in self._map:
             # Find matching key in other (case-insensitive for strings)
             other_key = None
-            if isinstance(key, str):
-                key_lower = key.lower()
+            if _is_string_like(key):
+                key_lower = str(key).lower()
                 for k in other._map:
-                    if isinstance(k, str) and k.lower() == key_lower:
+                    if _is_string_like(k) and str(k).lower() == key_lower:
                         other_key = k
                         break
             else:
@@ -115,8 +120,8 @@ class MOOMap(MutableMapping):
             # Compare values case-insensitively for strings
             val1 = self._map[key]
             val2 = other._map[other_key]
-            if isinstance(val1, str) and isinstance(val2, str):
-                if val1.lower() != val2.lower():
+            if _is_string_like(val1) and _is_string_like(val2):
+                if str(val1).lower() != str(val2).lower():
                     return False
             elif val1 != val2:
                 return False
