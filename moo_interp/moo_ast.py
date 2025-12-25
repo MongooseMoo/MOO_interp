@@ -62,11 +62,19 @@ binary_opcodes = {
     '&&': Opcode.OP_AND,
     '||': Opcode.OP_OR,
     '^': Extended_Opcode.EOP_EXP,
+    # Bitwise operators (ToastStunt syntax with .)
+    '|.': Extended_Opcode.EOP_BITOR,
+    '&.': Extended_Opcode.EOP_BITAND,
+    '^.': Extended_Opcode.EOP_BITXOR,
+    # Shift operators
+    '<<': Extended_Opcode.EOP_BITSHL,
+    '>>': Extended_Opcode.EOP_BITSHR,
 }
 
 unary_opcodes = {
     '-': Opcode.OP_UNARY_MINUS,
     '!': Opcode.OP_NOT,
+    '~': Extended_Opcode.EOP_COMPLEMENT,
 }
 
 # utility functions
@@ -1327,6 +1335,13 @@ class ToAst(Transformer):
         op = str(args[0])
         operand = args[1]
         return _UnaryExpression(operator=op, operand=operand)
+
+    def binary_expression(self, args):
+        # args = [left, operator_token, right]
+        left = args[0]
+        op = str(args[1])
+        right = args[2]
+        return BinaryExpression(left=left, operator=op, right=right)
 
     def single_statement(self, args):
         # Empty statement (just ';') has no children
