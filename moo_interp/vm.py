@@ -1098,8 +1098,7 @@ class VM:
 
             # Type check: must be string, list, or map
             if not isinstance(base_collection, (MOOString, str, MOOList, MOOMap)):
-                self._skip_to_end_of_for_loop(frame)
-                return None
+                raise MOOException(MOOError.E_TYPE)
 
             # Check for empty collection
             if len(base_collection) == 0:
@@ -1704,8 +1703,7 @@ class VM:
 
             # Type check: must be string, list, or map
             if not isinstance(base_collection, (MOOString, str, MOOList, MOOMap)):
-                self._skip_to_end_of_for_loop(frame)
-                return None
+                raise MOOException(MOOError.E_TYPE)
 
             # Check for empty collection
             if len(base_collection) == 0:
