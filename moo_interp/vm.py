@@ -753,8 +753,8 @@ class VM:
         elif isinstance(lst, MOOList):
             return MOOList(lst._list[py_start:py_end])
         else:
-            # the keys in our maps are ordered
-            return MOOMap(list(lst.items())[py_start:py_end])
+            # the keys in our maps are ordered - convert slice back to dict for MOOMap
+            return MOOMap(_map=dict(list(lst.items())[py_start:py_end]))
 
     # Map operations
 
