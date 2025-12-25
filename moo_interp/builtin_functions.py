@@ -450,7 +450,7 @@ class BuiltinFunctions:
         hash_object = hashlib.new(algo)
         hash_object.update(string.encode('utf-8'))
 
-        return hash_object.hexdigest()
+        return MOOString(hash_object.hexdigest())
 
     def exp(self, x):
         return math.exp(self.tofloat(x))
@@ -782,16 +782,16 @@ class BuiltinFunctions:
     def encode_base64(self, x, safe=False):
         x = self._unwrap_bytes(x)
         if safe:
-            return base64.urlsafe_b64encode(x).decode('ascii')
+            return MOOString(base64.urlsafe_b64encode(x).decode('ascii'))
         else:
-            return base64.b64encode(x).decode('ascii')
+            return MOOString(base64.b64encode(x).decode('ascii'))
 
     def decode_base64(self, x, safe=False):
         x = self._unwrap_bytes(x)
         if safe:
-            return base64.urlsafe_b64decode(x).decode('latin-1')
+            return MOOString(base64.urlsafe_b64decode(x).decode('latin-1'))
         else:
-            return base64.b64decode(x).decode('latin-1')
+            return MOOString(base64.b64decode(x).decode('latin-1'))
 
     def _moo_to_python(self, value, mode="common-subset"):
         """Convert MOO types to native Python for JSON serialization.
