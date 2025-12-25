@@ -697,13 +697,16 @@ class VM:
     @operator(Opcode.OP_REF)
     def exec_ref(self, lst: Container, index: Any) -> MOOAny:
         # For lists and strings: index must be int (1-based)
-        # For maps: index can be any type (used as key)
+        # For maps: index can be any type (used as key) EXCEPT collections
         if isinstance(lst, MOOMap):
+            # Collections (lists, maps) cannot be used as map keys
+            if isinstance(index, (MOOList, MOOMap)):
+                raise MOOException(MOOError.E_TYPE)
             # Map indexing: use key directly, return E_RANGE if not found
             try:
                 return lst[index]
             except KeyError:
-                return MOOError.E_RANGE
+                raise MOOException(MOOError.E_RANGE)
         # MOOString and MOOList already handle 1-based indexing in __getitem__
         # Plain Python lists (e.g., from database properties) need conversion
         if isinstance(lst, list) and not isinstance(lst, MOOList):
@@ -1399,6 +1402,9 @@ class VM:
             container[index] = value
             return container
         elif isinstance(container, MOOMap):
+            # Collections (lists, maps) cannot be used as map keys
+            if isinstance(index, (MOOList, MOOMap)):
+                raise MOOException(MOOError.E_TYPE)
             # Copy-on-write: if refcount > 1, make shallow copy before modifying
             if container.refcount() > 1:
                 container = container.shallow_copy()
