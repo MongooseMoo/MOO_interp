@@ -788,7 +788,10 @@ class VM:
             lst_len = len(lst._list)
             if start <= end and (start <= 0 or start > lst_len or end <= 0 or end > lst_len):
                 raise MOOException(MOOError.E_RANGE, "list range out of bounds")
-        # Maps don't have numeric range bounds - they use key ranges
+        elif isinstance(lst, MOOMap):
+            # Maps can't use collections as range keys
+            if isinstance(start, (MOOList, MOOMap)) or isinstance(end, (MOOList, MOOMap)):
+                raise MOOException(MOOError.E_TYPE, "map range keys cannot be collections")
 
         py_start = start - 1
         py_end = end  # end stays same because Python is exclusive
@@ -1367,6 +1370,9 @@ class VM:
             # Map range set - start and end are keys
             if not isinstance(value, MOOMap):
                 raise MOOException(MOOError.E_TYPE, "map range set requires map value")
+            # Maps can't use collections as range keys
+            if isinstance(start, (MOOList, MOOMap)) or isinstance(end, (MOOList, MOOMap)):
+                raise MOOException(MOOError.E_TYPE, "map range keys cannot be collections")
 
             # Get sorted keys
             sorted_keys = list(base)  # __iter__ returns sorted keys
