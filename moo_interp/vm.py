@@ -1356,9 +1356,9 @@ class VM:
             if not isinstance(value, MOOList):
                 raise MOOException(MOOError.E_TYPE, "list range set requires list value")
             # Range validation (like toaststunt)
-            # For non-inverted ranges: check all bounds
+            # Always check: start > len + 1 (can't start past end+1) and end < 0 (negative end)
             base_len = len(base._list)
-            if start <= end and (start <= 0 or start > base_len + 1 or end < 0):
+            if start > base_len + 1 or end < 0:
                 raise MOOException(MOOError.E_RANGE, "list range out of bounds")
             # Convert to 0-indexed for internal list operations
             result = MOOList(*base._list[:start-1], *value._list, *base._list[end:])
