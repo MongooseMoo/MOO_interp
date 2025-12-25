@@ -241,6 +241,11 @@ class _Literal(_AstNode):
 class StringLiteral(_Literal, _Expression):
     value: str
 
+    def to_moo(self) -> str:
+        # Escape backslashes first, then quotes
+        escaped = self.value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+
 
 @dataclass
 class BooleanLiteral(_Literal, _Expression):
@@ -1153,7 +1158,7 @@ class _Range(_Expression):
         return result
 
     def to_moo(self) -> str:
-        return f"{self.object.to_moo()}[{self.start.to_moo()}..{self.end.to_moo()}]"
+        return f"{self.object.to_moo()}[{self.start.to_moo()} .. {self.end.to_moo()}]"
 
 
 @dataclass
