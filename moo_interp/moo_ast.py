@@ -126,6 +126,9 @@ class VerbCode(_AstNode):
     def to_bytecode(self, state: CompilerState, program: Program):
         result = []
         for node in self.children:
+            # Skip non-AST nodes (e.g., empty Tree from parser)
+            if not hasattr(node, 'to_bytecode'):
+                continue
             result += node.to_bytecode(state, program)
         return result
 

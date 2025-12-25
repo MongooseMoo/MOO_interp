@@ -992,7 +992,7 @@ class VM:
     # Verb Call Operations
 
     @operator(Opcode.OP_CALL_VERB)
-    def exec_call_verb(self, obj_id: int, verb_name: MOOString, args: MOOList):
+    def exec_call_verb(self, obj_id: Any, verb_name: MOOString, args: MOOList):
         """Call a verb on an object
 
         Stack layout (bottom to top, popped in reverse):
@@ -1018,7 +1018,7 @@ class VM:
             # Look up the corresponding prototype on #0
             proto_obj = self._get_primitive_prototype(obj_id)
             if proto_obj is None:
-                raise MOOException(MOOError.E_TYPE, f"Cannot call verb on primitive value")
+                raise MOOException(MOOError.E_TYPE, f"Cannot call verb on primitive value type={type(obj_id).__name__}")
             # Store the primitive for use as 'this', call verb on prototype
             primitive_this = obj_id
             obj_id = proto_obj
@@ -1129,11 +1129,18 @@ class VM:
 
         # Map Python types to MOO prototype property names
         # Based on ToastStunt's MATCH_TYPE macro in execute.cc
+        # Order matters: check subclasses before parent classes (MOOError before int)
         proto_name = None
         if isinstance(value, bool):
             # Booleans are ints in MOO, use int_proto
             proto_name = "int_proto"
-        elif isinstance(value, int) and not isinstance(value, ObjNum):
+        elif isinstance(value, MOOError):
+            # Check MOOError before int since MOOError is an IntEnum
+            proto_name = "err_proto"
+        elif isinstance(value, ObjNum):
+            # ObjNum that's not in db - use obj_proto
+            proto_name = "obj_proto"
+        elif isinstance(value, int):
             proto_name = "int_proto"
         elif isinstance(value, float):
             proto_name = "float_proto"
@@ -1141,15 +1148,10 @@ class VM:
             proto_name = "str_proto"
         elif isinstance(value, str):
             proto_name = "str_proto"
-        elif isinstance(value, MOOError):
-            proto_name = "err_proto"
         elif isinstance(value, MOOList):
             proto_name = "list_proto"
         elif isinstance(value, MOOMap):
             proto_name = "map_proto"
-        elif isinstance(value, ObjNum):
-            # ObjNum that's not in db - use obj_proto
-            proto_name = "obj_proto"
 
         if proto_name is None:
             return None
