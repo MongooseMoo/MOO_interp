@@ -1016,8 +1016,27 @@ class BuiltinFunctions:
             return [self._moo_to_python(v, mode) for v in value]
 
         # Handle MOOMap - convert keys and values
+        # In embedded-types mode, non-string keys get type annotations
         elif isinstance(value, MOOMap):
-            return {self._moo_to_python(k, mode): self._moo_to_python(v, mode) for k, v in value.items()}
+            result = {}
+            for k, v in value.items():
+                # Convert key with type annotation for embedded-types mode
+                if mode == "embedded-types":
+                    # Check specific types before int since ObjNum/MOOError are int subclasses
+                    if isinstance(k, ObjNum):
+                        key = f"#{int(k)}|obj"
+                    elif isinstance(k, MOOError):
+                        key = f"{k.name}|err"
+                    elif isinstance(k, int) and not isinstance(k, bool):
+                        key = f"{k}|int"
+                    elif isinstance(k, float):
+                        key = f"{k}|float"
+                    else:
+                        key = self._moo_to_python(k, mode)
+                else:
+                    key = self._moo_to_python(k, mode)
+                result[key] = self._moo_to_python(v, mode)
+            return result
 
         # Handle ObjNum - convert to string format "#N" or "#N|obj"
         elif isinstance(value, ObjNum):
@@ -1054,6 +1073,7 @@ class BuiltinFunctions:
 
         Raises:
             MOOException: E_TYPE if mode is not a string
+            MOOException: E_INVARG if mode is an invalid mode string
         """
         # Type check: mode must be a string if provided
         if mode is not None and not isinstance(mode, (str, MOOString)):
@@ -1066,6 +1086,11 @@ class BuiltinFunctions:
             mode_str = mode.data
         else:
             mode_str = str(mode)
+
+        # Validate mode string
+        valid_modes = {"common-subset", "embedded-types"}
+        if mode_str not in valid_modes:
+            raise MOOException(MOOError.E_INVARG, f"Invalid mode: {mode_str}")
 
         native = self._moo_to_python(x, mode_str)
         # Use compact separators (no spaces) to match MOO format
@@ -1121,11 +1146,8 @@ class BuiltinFunctions:
                         # Fall through to return as string
                         pass
 
-            # Check if string looks like an object/error in common-subset mode (should fail)
-            if mode == "common-subset":
-                if value.startswith("#") or (value.startswith("E_") and value.isupper()):
-                    raise MOOException(MOOError.E_INVARG, "Object/error types not allowed in common-subset mode")
-
+            # In common-subset mode, strings like "#13" or "E_PERM" stay as strings
+            # (no conversion to objects or errors)
             return MOOString(value)
 
         elif isinstance(value, list):
@@ -1151,6 +1173,8 @@ class BuiltinFunctions:
             MOOException: E_TYPE for non-string argument
             MOOException: E_INVARG for invalid JSON
         """
+        import re
+
         # Type check: x must be a string
         if not isinstance(x, (str, MOOString)):
             raise MOOException(MOOError.E_TYPE, "parse_json() requires a string argument")
@@ -1170,7 +1194,23 @@ class BuiltinFunctions:
         try:
             parsed = json.loads(x)
         except (json.JSONDecodeError, TypeError) as e:
-            raise MOOException(MOOError.E_INVARG, f"Invalid JSON: {e}")
+            # Handle numbers with trailing non-numeric garbage (like "12abc")
+            # This is a quirk of the original MOO implementation
+            # But malformed numbers like "1..2" should still fail
+            number_match = re.match(r'^(-?\d+(?:\.\d+)?)', x)
+            if number_match:
+                num_str = number_match.group(1)
+                remaining = x[len(num_str):]
+                # Only accept if trailing garbage doesn't start with a digit or period
+                # (which would indicate a malformed number like "1..2" or "1.2.3")
+                if remaining and (remaining[0].isdigit() or remaining[0] == '.'):
+                    raise MOOException(MOOError.E_INVARG, f"Invalid JSON: {e}")
+                if '.' in num_str:
+                    parsed = float(num_str)
+                else:
+                    parsed = int(num_str)
+            else:
+                raise MOOException(MOOError.E_INVARG, f"Invalid JSON: {e}")
 
         return self._python_to_moo(parsed, mode_str)
 
