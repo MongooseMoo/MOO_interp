@@ -3,6 +3,7 @@ from typing import Union
 from moo_interp.list import MOOList
 from moo_interp.map import MOOMap
 
+from .errors import MOOError
 from .string import MOOString
 
 MOONumber = Union[int, float]
@@ -11,7 +12,8 @@ Subtractable = Union[MOONumber, MOOList]
 Container = Union[MOOList, MOOMap, MOOString]
 Comparable = Union[MOONumber, MOOString]
 MapKey = Union[MOONumber, MOOString]
-MOOAny = Union[MOONumber, MOOString, Container, bool]
+# Complete type for any MOO value (includes plain Python str/list/dict for compatibility)
+MOOAny = Union[MOONumber, MOOString, Container, MOOError, bool, None, str, list, dict]
 
 
 def to_moo(py_obj: Union[str, int, float, bool, list, dict]) -> MOOAny:

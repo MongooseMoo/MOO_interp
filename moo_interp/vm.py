@@ -4,7 +4,7 @@ import warnings
 from enum import Enum
 from functools import wraps
 from logging import basicConfig, getLogger
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Tuple, Union, cast, overload
 
 from attr import define, field
 from lambdamoo_db.database import Anon, MooDatabase, ObjNum
@@ -25,6 +25,18 @@ MOOPrimitive = Union[int, float, str, MOOString, MOOError, MOOList, MOOMap]
 # Type alias for all values that can be verb call targets
 # Objects (ObjNum, Anon) call verbs directly; primitives use prototype lookup
 MOOValue = Union[ObjNum, Anon, MOOPrimitive]
+
+
+class OpcodeHandler(Protocol):
+    """Protocol for opcode handler functions decorated with @operator.
+
+    The @operator decorator adds these attributes at runtime.
+    """
+    opcode: Opcode | None
+    eopcode: Extended_Opcode | None
+    num_args: int
+
+    def __call__(self, *args: Any) -> Any: ...
 
 # basicConfig(level="DEBUG")
 logger = getLogger(__name__)
@@ -91,7 +103,7 @@ class StackFrame:
     rt_env: List[Any] = field(factory=list)
     bf_ip: int = field(default=0)
     temp: Optional[int] = field(default=0)
-    this: int = field(default=0)
+    this: Any = field(default=0)  # int for object calls, primitive value for prototype calls
     player: int = field(default=0)
     verb: str = field(default="")
     verb_name: str = field(default="")
@@ -147,11 +159,10 @@ def operator(opcode):
             return func(self, *args)
 
         # Store the opcode and number of arguments on the function itself
-        if isinstance(opcode, Opcode):
-            wrapper.opcode = opcode
-        elif isinstance(opcode, Extended_Opcode):
-            wrapper.eopcode = opcode
-        wrapper.num_args = num_args
+        # Always set both attributes (Protocol requires them both to exist)
+        wrapper.opcode = opcode if isinstance(opcode, Opcode) else None  # type: ignore[attr-defined]
+        wrapper.eopcode = opcode if isinstance(opcode, Extended_Opcode) else None  # type: ignore[attr-defined]
+        wrapper.num_args = num_args  # type: ignore[attr-defined]
 
         return wrapper
     return decorator
@@ -165,10 +176,10 @@ class VM:
     call_stack: List[StackFrame] = field(factory=list)
     result: MOOAny = field(default=0)
     state: Union[VMOutcome, None] = field(default=None)
-    opcode_handlers: Dict[Union[Opcode, Extended_Opcode],
-                          Callable] = field(factory=dict, repr=False)
+    # int is included for OPTIM_NUM opcodes (optimized immediate numbers)
+    opcode_handlers: Dict[Opcode | Extended_Opcode | int, OpcodeHandler] = field(factory=dict, repr=False)
     db: Optional[MooDatabase] = field(default=None)
-    bi_funcs: Dict[int, Callable] = field(factory=dict, repr=False)
+    bi_funcs: BuiltinFunctions = field(factory=BuiltinFunctions, repr=False)
 
     def __init__(self, db=None, bi_funcs=None):
         super().__init__()
@@ -186,11 +197,12 @@ class VM:
             if not name.startswith('exec'):
                 continue
             method = getattr(self, name, None)
-            if hasattr(method, 'opcode') or hasattr(method, 'eopcode'):
-                opcode = method.opcode if hasattr(
-                    method, 'opcode') else method.eopcode
-                self.opcode_handlers[opcode] = method
-                handled_opcodes.add(opcode)
+            if method is not None and (hasattr(method, 'opcode') or hasattr(method, 'eopcode')):
+                handler = cast(OpcodeHandler, method)
+                opcode = handler.opcode if handler.opcode is not None else handler.eopcode
+                if opcode is not None:
+                    self.opcode_handlers[opcode] = handler
+                    handled_opcodes.add(opcode)
 
         # Opcodes that don't need implementation (retired, sentinels, handled specially)
         ignored_opcodes = {
@@ -239,6 +251,16 @@ class VM:
             return self.stack[-1]
         except IndexError:
             raise VMError("Stack underflow")
+
+    def _require_db(self) -> MooDatabase:
+        """Get the database, raising an error if not available.
+
+        Use this instead of self.db when you need to access .objects
+        to satisfy pyright's type narrowing.
+        """
+        if self.db is None:
+            raise VMError("Database not available")
+        return self.db
 
     def run(self):
         """Run the program"""
@@ -525,11 +547,13 @@ class VM:
         return value
 
     @operator(Opcode.OP_ADD)
-    def exec_add(self, op1: Addable, op2: Addable):
+    def exec_add(self, op1: Any, op2: Any) -> Any:
+        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
         return op1 + op2
 
     @operator(Opcode.OP_MINUS)
-    def exec_subtract(self, op1: Subtractable, op2: Subtractable) -> Subtractable:
+    def exec_subtract(self, op1: Any, op2: Any) -> Any:
+        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
         return op1 - op2
 
     @operator(Opcode.OP_MULT)
@@ -571,9 +595,9 @@ class VM:
 
         # Same type: compare values
         if lhs_type == rhs_type:
-            if isinstance(lhs, MOOList):
+            if isinstance(lhs, MOOList) and isinstance(rhs, MOOList):
                 return self._list_equal(lhs, rhs)
-            if isinstance(lhs, MOOMap):
+            if isinstance(lhs, MOOMap) and isinstance(rhs, MOOMap):
                 return self._map_equal(lhs, rhs)
             # String comparison is case-insensitive in MOO
             if isinstance(lhs, (str, MOOString)):
@@ -676,27 +700,33 @@ class VM:
         return op1 != op2
 
     @operator(Opcode.OP_LT)
-    def exec_lt(self, op1: Comparable, op2: Comparable) -> bool:
+    def exec_lt(self, op1: Any, op2: Any) -> bool:
+        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
         return op1 < op2
 
     @operator(Opcode.OP_LE)
-    def exec_le(self, op1: Comparable, op2: Comparable) -> bool:
+    def exec_le(self, op1: Any, op2: Any) -> bool:
+        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
         return op1 <= op2
 
     @operator(Opcode.OP_GT)
-    def exec_gt(self, op1: Comparable, op2: Comparable) -> bool:
+    def exec_gt(self, op1: Any, op2: Any) -> bool:
+        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
         return op1 > op2
 
     @operator(Opcode.OP_GE)
-    def exec_ge(self, op1: Comparable, op2: Comparable) -> bool:
+    def exec_ge(self, op1: Any, op2: Any) -> bool:
+        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
         return op1 >= op2
 
     @operator(Opcode.OP_AND)
-    def exec_and(self, op1: MOOAny, op2: MOOAny) -> bool:
+    def exec_and(self, op1: Any, op2: Any) -> Any:
+        # MOO `and` returns last truthy/falsy value (short-circuit), not boolean
         return op1 and op2
 
     @operator(Opcode.OP_OR)
-    def exec_or(self, op1: MOOAny, op2: MOOAny) -> bool:
+    def exec_or(self, op1: Any, op2: Any) -> Any:
+        # MOO `or` returns first truthy value or last falsy (short-circuit)
         return op1 or op2
 
     @operator(Opcode.OP_NOT)
@@ -959,7 +989,7 @@ class VM:
             return None  # Don't push since we're done
 
     @operator(Opcode.OP_RETURN0)
-    def exec_return0(self) -> int:
+    def exec_return0(self) -> int | None:
         # Get stack_base before popping frame
         frame = self.current_frame
         stack_base = frame.stack_base
@@ -1020,8 +1050,11 @@ class VM:
         # Handle primitive values - calling verbs on primitives uses prototype objects
         primitive_this: MOOValue | None = None  # Will hold the primitive value if calling on prototype
 
-        if not isinstance(obj_id, (ObjNum, Anon)):
-            # Primitive value (int, float, string, error, list, map)
+        # Check if obj_id is a MOO object reference (int/ObjNum/Anon) or a primitive value
+        # ObjNum inherits from int, so both are ints. Plain ints are object refs in tests.
+        # Real primitives are: float, str, MOOString, MOOError, MOOList, MOOMap
+        if not isinstance(obj_id, int) and not isinstance(obj_id, Anon):
+            # Primitive value (float, string, error, list, map)
             # Look up the corresponding prototype on #0
             proto_obj = self._get_primitive_prototype(obj_id)
             if proto_obj is None:
@@ -1031,7 +1064,7 @@ class VM:
             obj_id = proto_obj
 
         # Find the object
-        if obj_id not in self.db.objects:
+        if obj_id not in self._require_db().objects:
             raise MOOException(MOOError.E_INVIND, f"Invalid object #{obj_id}")
 
         # Find verb on object or its parents (inheritance chain)
@@ -1058,6 +1091,8 @@ class VM:
             ]
 
             try:
+                if verb.code is None:
+                    raise VMError(f"OP_CALL_VERB: verb '{verb_name}' has no code")
                 code_str = "\n".join(verb.code)
                 ast = parse(code_str)
                 # Use the VM's bi_funcs instance for consistent builtin IDs
@@ -1129,7 +1164,7 @@ class VM:
         Returns:
             Object ID of the prototype, or None if no prototype exists
         """
-        if not self.db or 0 not in self.db.objects:
+        if self.db is None or 0 not in self.db.objects:
             return None
 
         # Map Python types to MOO prototype property names
@@ -1159,15 +1194,15 @@ class VM:
             return None
 
         # Look up the prototype property on #0
-        system_obj = self.db.objects[0]
+        system_obj = self._require_db().objects[0]
         for prop in getattr(system_obj, 'properties', []):
             prop_name = getattr(prop, 'propertyName', getattr(prop, 'name', ''))
             if prop_name == proto_name:
                 prop_value = getattr(prop, 'value', None)
                 # Must be a valid object
-                if isinstance(prop_value, ObjNum) and int(prop_value) in self.db.objects:
+                if isinstance(prop_value, ObjNum) and int(prop_value) in self._require_db().objects:
                     return prop_value
-                elif isinstance(prop_value, int) and prop_value in self.db.objects:
+                elif isinstance(prop_value, int) and prop_value in self._require_db().objects:
                     return ObjNum(prop_value)
                 break
 
@@ -1189,11 +1224,11 @@ class VM:
         while to_check:
             current_id = to_check.pop(0)
 
-            if current_id in visited or current_id not in self.db.objects:
+            if current_id in visited or current_id not in self._require_db().objects:
                 continue
             visited.add(current_id)
 
-            obj = self.db.objects[current_id]
+            obj = self._require_db().objects[current_id]
 
             # Check verbs on this object
             # MOO verbs can have multiple aliases separated by spaces
@@ -1273,46 +1308,47 @@ class VM:
             search_ip += 1
 
     @operator(Opcode.OP_FOR_RANGE)
-    def exec_for_range(self):
+    def exec_for_range(self) -> None:
         """For-range loop: for i in [start..end]
         Loop state stored on frame.loop_stack as: ('range', ip, current, end)
         """
         frame = self.current_frame
         instr = frame.current_instruction
         loop_var = instr.loop_var
+        if loop_var is None:
+            raise VMError("FOR_RANGE requires a loop variable")
 
         # Check if we have existing loop state for this IP
-        is_first_entry = True
-        loop_index = None
+        loop_index: int | None = None
         for i, entry in enumerate(frame.loop_stack):
             if len(entry) >= 2 and entry[0] == 'range' and entry[1] == frame.ip:
-                is_first_entry = False
                 loop_index = i
                 break
 
-        if is_first_entry:
+        if loop_index is None:
+            # First entry into loop
             to = self.pop()
             from_val = self.pop()
             if not isinstance(to, int) or not isinstance(from_val, int):
                 self._skip_to_end_of_for_loop(frame)
-                return None
+                return
             if from_val > to:
                 self._skip_to_end_of_for_loop(frame)
-                return None
+                return
             self.put(loop_var, from_val)
             frame.loop_stack.append(('range', frame.ip, from_val + 1, to))
         else:
+            # Subsequent iteration
             _, _, current, to = frame.loop_stack[loop_index]
             if current > to:
                 frame.loop_stack.pop(loop_index)
                 self._skip_to_end_of_for_loop(frame)
-                return None
+                return
             self.put(loop_var, current)
             frame.loop_stack[loop_index] = ('range', frame.ip, current + 1, to)
-        return None
 
     @operator(Extended_Opcode.EOP_FOR_LIST_1)
-    def exec_for_list_1(self):
+    def exec_for_list_1(self) -> None:
         """For-list loop: for x in (list|string|map)
         Loop state stored on frame.loop_stack as: ('list', ip, collection, iter_state)
 
@@ -1323,17 +1359,18 @@ class VM:
         frame = self.current_frame
         instr = frame.current_instruction
         loop_var = instr.loop_var
+        if loop_var is None:
+            raise VMError("FOR_LIST requires a loop variable")
 
         # Check if we have existing loop state for this IP
-        is_first_entry = True
-        loop_index = None
+        loop_index: int | None = None
         for i, entry in enumerate(frame.loop_stack):
             if len(entry) >= 2 and entry[0] == 'list' and entry[1] == frame.ip:
-                is_first_entry = False
                 loop_index = i
                 break
 
-        if is_first_entry:
+        if loop_index is None:
+            # First entry into loop
             base_collection = self.pop()
 
             # Type check: must be string, list, or map
@@ -1343,7 +1380,7 @@ class VM:
             # Check for empty collection
             if len(base_collection) == 0:
                 self._skip_to_end_of_for_loop(frame)
-                return None
+                return
 
             # Get first element based on type
             if isinstance(base_collection, (MOOString, str)):
@@ -1360,6 +1397,7 @@ class VM:
                 self.put(loop_var, first_value)
                 frame.loop_stack.append(('list', frame.ip, base_collection, 1))  # 0-based for maps
         else:
+            # Subsequent iteration
             _, _, base_collection, iter_state = frame.loop_stack[loop_index]
 
             if isinstance(base_collection, (MOOString, str)):
@@ -1367,7 +1405,7 @@ class VM:
                 if iter_state >= len(base_collection):
                     frame.loop_stack.pop(loop_index)
                     self._skip_to_end_of_for_loop(frame)
-                    return None
+                    return
                 self.put(loop_var, MOOString(str(base_collection)[iter_state]))
                 frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
             elif isinstance(base_collection, MOOList):
@@ -1375,7 +1413,7 @@ class VM:
                 if iter_state > len(base_collection):
                     frame.loop_stack.pop(loop_index)
                     self._skip_to_end_of_for_loop(frame)
-                    return None
+                    return
                 self.put(loop_var, base_collection[iter_state])
                 frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
             elif isinstance(base_collection, MOOMap):
@@ -1384,10 +1422,9 @@ class VM:
                 if iter_state >= len(values_list):
                     frame.loop_stack.pop(loop_index)
                     self._skip_to_end_of_for_loop(frame)
-                    return None
+                    return
                 self.put(loop_var, values_list[iter_state])
                 frame.loop_stack[loop_index] = ('list', frame.ip, base_collection, iter_state + 1)
-        return None
 
     def _find_loop_end_jump(self, frame):
         """Find the backward JUMP that ends the current loop.
@@ -1452,7 +1489,7 @@ class VM:
     @operator(Extended_Opcode.EOP_LENGTH)
     def exec_length(self, value: MOOAny) -> int:
         """Return length of list, string, or map."""
-        if isinstance(value, MOOList, MOOMap):
+        if isinstance(value, (MOOList, MOOMap)):
             return len(value)
         elif isinstance(value, (str, MOOString)):
             return len(value)
@@ -1776,7 +1813,7 @@ class VM:
         prop_name = self.stack[-1]  # TOP - property name
         obj_id = self.stack[-2]     # NEXT_TOP - object id
 
-        obj = self.db.objects.get(obj_id)
+        obj = self._require_db().objects.get(obj_id)
         if obj is None:
             raise MOOException(MOOError.E_INVIND, f"Invalid object #{obj_id}")
 
@@ -1812,7 +1849,7 @@ class VM:
             parent_id = getattr(current_obj, 'parent', -1)
             if parent_id < 0:
                 break
-            current_obj = self.db.objects.get(parent_id)
+            current_obj = self._require_db().objects.get(parent_id)
 
         raise MOOException(MOOError.E_PROPNF, f"Property {prop_name} not found on #{obj_id}")
 
@@ -1841,14 +1878,16 @@ class VM:
         return result if result is not None else 0
 
     @operator(Opcode.OP_GET_PROP)
-    def exec_get_prop(self, obj: MOOAny, prop: MOOString) -> MOOAny:
+    def exec_get_prop(self, obj: Any, prop: MOOString) -> MOOAny:
         """Get the value of a property on an object.
 
         Handles:
         1. Special pseudo-properties (wizard, programmer, player, etc.)
         2. Regular properties with inheritance
         """
-        moo_object = self.db.objects.get(obj)
+        if not isinstance(obj, int):
+            raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
+        moo_object = self._require_db().objects.get(obj)
         if moo_object is None:
             raise MOOException(MOOError.E_INVIND, f"Object #{obj} not found")
 
@@ -1924,7 +1963,7 @@ class VM:
                 try:
                     parent_id = current_obj.parent
                     if parent_id >= 0:
-                        parent_obj = self.db.objects.get(parent_id)
+                        parent_obj = self._require_db().objects.get(parent_id)
                         if parent_obj:
                             to_check.append(parent_obj)
                 except Exception:
@@ -1933,14 +1972,14 @@ class VM:
                 # Multi-parent support
                 for parent_id in parents:
                     if parent_id >= 0:
-                        parent_obj = self.db.objects.get(parent_id)
+                        parent_obj = self._require_db().objects.get(parent_id)
                         if parent_obj:
                             to_check.append(parent_obj)
 
         raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on #{obj}")
 
     @operator(Opcode.OP_PUT_PROP)
-    def exec_put_prop(self, obj: MOOAny, prop: MOOString, value: MOOAny):
+    def exec_put_prop(self, obj: Any, prop: MOOString, value: MOOAny) -> MOOAny:
         """Set the value of a property on an object.
 
         Handles:
@@ -1948,7 +1987,9 @@ class VM:
         2. Special attributes (owner, name, location)
         3. Inherited properties with copy-on-write semantics
         """
-        moo_object = self.db.objects.get(obj)
+        if not isinstance(obj, int):
+            raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
+        moo_object = self._require_db().objects.get(obj)
         if moo_object is None:
             raise MOOException(MOOError.E_INVIND, f"Object #{obj} not found")
 
@@ -1968,7 +2009,7 @@ class VM:
             player_id = getattr(frame, 'player', -1)
             if hasattr(player_id, '__int__'):
                 player_id = int(player_id)
-            player_obj = self.db.objects.get(player_id)
+            player_obj = self._require_db().objects.get(player_id)
             if player_obj:
                 player_flags = getattr(player_obj, 'flags', 0)
                 return bool(player_flags & 0x04)
@@ -2042,10 +2083,14 @@ class VM:
             # Only wizards can change object ownership
             if not caller_is_wizard():
                 raise MOOException(MOOError.E_PERM, "Only wizards can change object ownership")
-            moo_object.owner = int(value) if hasattr(value, '__int__') else value
+            if not isinstance(value, int):
+                raise MOOException(MOOError.E_TYPE, "owner must be an object number")
+            moo_object.owner = value
             return value
         elif prop_name == 'location':
-            moo_object.location = int(value) if hasattr(value, '__int__') else value
+            if not isinstance(value, int):
+                raise MOOException(MOOError.E_TYPE, "location must be an object number")
+            moo_object.location = value
             return value
 
         # First, check if property exists on this object directly
@@ -2082,7 +2127,7 @@ class VM:
                 try:
                     parent_id = current_obj.parent
                     if parent_id >= 0:
-                        parent_obj = self.db.objects.get(parent_id)
+                        parent_obj = self._require_db().objects.get(parent_id)
                         if parent_obj:
                             to_check.append(parent_obj)
                 except Exception:
@@ -2090,7 +2135,7 @@ class VM:
             else:
                 for parent_id in parents:
                     if parent_id >= 0:
-                        parent_obj = self.db.objects.get(parent_id)
+                        parent_obj = self._require_db().objects.get(parent_id)
                         if parent_obj:
                             to_check.append(parent_obj)
 
@@ -2116,6 +2161,8 @@ class VM:
         frame = self.current_frame
         instr = frame.current_instruction
         # Store handler info: (handler_ip, error_codes, try_start_ip, error_vars)
+        if instr.handler_offset is None:
+            raise VMError("TRY_EXCEPT requires handler_offset")
         handler_ip = frame.ip + instr.handler_offset
         error_codes = instr.error_codes or ['ANY']
         error_vars = instr.error_vars or []
@@ -2174,6 +2221,8 @@ class VM:
 
         # Pop handler offset from stack (pushed by PUSH_LABEL)
         handler_offset = self.pop()
+        if not isinstance(handler_offset, int):
+            raise VMError("CATCH handler_offset must be int")
         # Pop error codes list from stack
         error_codes_from_stack = self.pop()
 
@@ -2249,7 +2298,7 @@ class VM:
             frame.ip = jump_ip
 
     @operator(Extended_Opcode.EOP_FOR_LIST_2)
-    def exec_for_list_2(self):
+    def exec_for_list_2(self) -> None:
         """For-list loop with index: for val, idx in (list|string|map)
 
         Like EOP_FOR_LIST_1 but also stores a second variable:
@@ -2260,18 +2309,19 @@ class VM:
         frame = self.current_frame
         instr = frame.current_instruction
         loop_var = instr.loop_var  # The value variable
-        loop_index = instr.loop_index  # The index/key variable
+        loop_idx_var = instr.loop_index  # The index/key variable
+        if loop_var is None or loop_idx_var is None:
+            raise VMError("FOR_LIST_2 requires both loop_var and loop_index")
 
         # Check if we have existing loop state for this IP
-        is_first_entry = True
-        loop_stack_index = None
+        loop_stack_index: int | None = None
         for i, entry in enumerate(frame.loop_stack):
             if len(entry) >= 2 and entry[0] == 'list2' and entry[1] == frame.ip:
-                is_first_entry = False
                 loop_stack_index = i
                 break
 
-        if is_first_entry:
+        if loop_stack_index is None:
+            # First entry into loop
             base_collection = self.pop()
 
             # Type check: must be string, list, or map
@@ -2281,18 +2331,18 @@ class VM:
             # Check for empty collection
             if len(base_collection) == 0:
                 self._skip_to_end_of_for_loop(frame)
-                return None
+                return
 
             # Get first element and index/key based on type
             if isinstance(base_collection, (MOOString, str)):
                 # For strings: (character, 1-based index)
                 self.put(loop_var, MOOString(str(base_collection)[0]))
-                self.put(loop_index, 1)  # 1-based index
+                self.put(loop_idx_var, 1)  # 1-based index
                 frame.loop_stack.append(('list2', frame.ip, base_collection, 1))  # 0-based for next
             elif isinstance(base_collection, MOOList):
                 # For lists: (element, 1-based index)
                 self.put(loop_var, base_collection[1])
-                self.put(loop_index, 1)  # 1-based index
+                self.put(loop_idx_var, 1)  # 1-based index
                 frame.loop_stack.append(('list2', frame.ip, base_collection, 2))
             elif isinstance(base_collection, MOOMap):
                 # For maps: (value, key) - note the order!
@@ -2300,9 +2350,10 @@ class VM:
                 first_key = keys_list[0]
                 first_value = base_collection[first_key]
                 self.put(loop_var, first_value)  # Value first
-                self.put(loop_index, first_key)  # Key second
+                self.put(loop_idx_var, first_key)  # Key second
                 frame.loop_stack.append(('list2', frame.ip, base_collection, 1))  # 0-based for next
         else:
+            # Subsequent iteration
             _, _, base_collection, iter_state = frame.loop_stack[loop_stack_index]
 
             if isinstance(base_collection, (MOOString, str)):
@@ -2310,18 +2361,18 @@ class VM:
                 if iter_state >= len(base_collection):
                     frame.loop_stack.pop(loop_stack_index)
                     self._skip_to_end_of_for_loop(frame)
-                    return None
+                    return
                 self.put(loop_var, MOOString(str(base_collection)[iter_state]))
-                self.put(loop_index, iter_state + 1)  # 1-based index
+                self.put(loop_idx_var, iter_state + 1)  # 1-based index
                 frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
             elif isinstance(base_collection, MOOList):
                 # List iteration: iter_state is 1-based index for next element
                 if iter_state > len(base_collection):
                     frame.loop_stack.pop(loop_stack_index)
                     self._skip_to_end_of_for_loop(frame)
-                    return None
+                    return
                 self.put(loop_var, base_collection[iter_state])
-                self.put(loop_index, iter_state)  # 1-based index
+                self.put(loop_idx_var, iter_state)  # 1-based index
                 frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
             elif isinstance(base_collection, MOOMap):
                 # Map iteration: iter_state is 0-based index into keys
@@ -2329,10 +2380,9 @@ class VM:
                 if iter_state >= len(keys_list):
                     frame.loop_stack.pop(loop_stack_index)
                     self._skip_to_end_of_for_loop(frame)
-                    return None
+                    return
                 key = keys_list[iter_state]
                 value = base_collection[key]
                 self.put(loop_var, value)  # Value first
-                self.put(loop_index, key)  # Key second
+                self.put(loop_idx_var, key)  # Key second
                 frame.loop_stack[loop_stack_index] = ('list2', frame.ip, base_collection, iter_state + 1)
-        return None

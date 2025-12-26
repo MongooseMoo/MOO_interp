@@ -28,12 +28,10 @@ MINIMAL_DB = DB_DIR / "minimal.db"
 def get_verbs_from_db(db_path, limit=None):
     """Extract verb code from a LambdaMOO database file."""
     if not HAS_LAMBDAMOO_DB:
-        pytest.skip("lambdamoo_db not installed")
-        return []
+        return []  # Called from fixture, tests using it will skip
 
     if not db_path.exists():
-        pytest.skip(f"Database not found: {db_path}")
-        return []
+        return []  # Called from fixture, tests using it will skip
 
     database = load(str(db_path))
     verbs = []

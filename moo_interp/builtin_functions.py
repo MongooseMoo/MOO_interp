@@ -16,7 +16,10 @@ import re
 import sys
 import urllib.parse
 from logging import getLogger
-from typing import Union
+from typing import TYPE_CHECKING, Any, Union
+
+if TYPE_CHECKING:
+    from .vm import VM
 
 from lambdamoo_db.database import MooDatabase, MooObject, ObjNum
 from .errors import MOOError, MOOException
@@ -47,12 +50,12 @@ class BuiltinFunctions:
     RANDOM_CODES = ["\033[31m", "\033[32m",
                     "\033[33m", "\033[34m", "\033[35m", "\033[36m"]
 
-    def __init__(self):
-        self.functions = {}  # Stores function_name: function pairs
-        self.id_to_function = {}  # Stores function_id: function pairs
-        self.function_to_id = {}  # Stores function: function_id pairs
-        self.current_id = 0
-        self._vm = None  # VM context, set by VM before execution
+    def __init__(self) -> None:
+        self.functions: dict[str, Any] = {}  # Stores function_name: function pairs
+        self.id_to_function: dict[int, Any] = {}  # Stores function_id: function pairs
+        self.function_to_id: dict[Any, int] = {}  # Stores function: function_id pairs
+        self.current_id: int = 0
+        self._vm: "VM | None" = None  # VM context, set by VM before execution
 
         # SQLite support
         self._sqlite_handles = {}  # SQLite connection handles
