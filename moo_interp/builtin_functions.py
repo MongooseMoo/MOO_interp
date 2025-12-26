@@ -1068,6 +1068,29 @@ class BuiltinFunctions:
         except Exception as e:
             raise MOOException(MOOError.E_INVARG, str(e))
 
+    def _decode_control_escapes_for_json(self, s: str) -> str:
+        """Decode only control character escapes (~00-~1F) for JSON output.
+
+        MOO's generate_json only converts control chars to \\uXXXX.
+        Other tilde escapes (~20+) stay as literal text.
+        """
+        result = []
+        i = 0
+        while i < len(s):
+            if s[i] == '~' and i + 2 < len(s):
+                hex_chars = s[i + 1:i + 3].upper()
+                if all(c in '0123456789ABCDEF' for c in hex_chars):
+                    byte_val = int(hex_chars, 16)
+                    if byte_val < 0x20:
+                        # Control char - decode to actual char for JSON escaping
+                        result.append(chr(byte_val))
+                        i += 3
+                        continue
+            # Not a control escape - keep as-is
+            result.append(s[i])
+            i += 1
+        return ''.join(result)
+
     def _moo_to_python(self, value, mode="common-subset"):
         """Convert MOO types to native Python for JSON serialization.
 
@@ -1075,14 +1098,11 @@ class BuiltinFunctions:
             value: The MOO value to convert
             mode: "common-subset" (default) or "embedded-types"
         """
-        # Handle MOOString - parse binary escapes (~XX) to actual characters
+        # Handle MOOString - decode only control char escapes for JSON
         if isinstance(value, MOOString):
-            # Parse binary escapes and decode to string
-            try:
-                return self._parse_binary_escapes(value.data).decode('latin-1')
-            except MOOException:
-                # If invalid escape, just return raw data
-                return value.data
+            # Only decode control chars (~00-~1F) so json.dumps escapes them
+            # Leave ~20+ as literal text
+            return self._decode_control_escapes_for_json(value.data)
 
         # Handle MOOList - iterate and convert elements
         elif isinstance(value, MOOList):
@@ -1168,7 +1188,39 @@ class BuiltinFunctions:
         native = self._moo_to_python(x, mode_str)
         # Use compact separators (no spaces) to match MOO format
         result_json = json.dumps(native, separators=(',', ':'))
+        # Convert lowercase \uxxxx escapes to uppercase \uXXXX to match MOO
+        result_json = re.sub(
+            r'\\u([0-9a-f]{4})',
+            lambda m: f'\\u{m.group(1).upper()}',
+            result_json
+        )
         return MOOString(result_json)
+
+    def _string_to_moo_binary(self, s: str) -> str:
+        """Convert a Python string to MOO binary encoding.
+
+        MOO uses ~XX encoding for:
+        - Control characters (0x00-0x1F)
+        - DEL (0x7F)
+        - High bytes (0x80-0xFF) from UTF-8 encoding
+
+        Args:
+            s: Python string (may contain Unicode)
+
+        Returns:
+            String with non-printable chars converted to ~XX format
+        """
+        result = []
+        # Encode to UTF-8 first to handle multi-byte characters
+        utf8_bytes = s.encode('utf-8')
+        for byte in utf8_bytes:
+            if byte < 0x20 or byte == 0x7F or byte >= 0x80:
+                # Non-printable or high byte - tilde encode
+                result.append(f'~{byte:02X}')
+            else:
+                # Printable ASCII - keep as-is
+                result.append(chr(byte))
+        return ''.join(result)
 
     def _python_to_moo(self, value, mode="common-subset"):
         """Convert Python value from JSON to MOO types.
@@ -1221,7 +1273,8 @@ class BuiltinFunctions:
 
             # In common-subset mode, strings like "#13" or "E_PERM" stay as strings
             # (no conversion to objects or errors)
-            return MOOString(value)
+            # Convert non-printable chars to MOO binary encoding (~XX)
+            return MOOString(self._string_to_moo_binary(value))
 
         elif isinstance(value, list):
             return MOOList([self._python_to_moo(v, mode) for v in value])
