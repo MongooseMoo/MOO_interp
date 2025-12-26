@@ -1218,6 +1218,51 @@ class WhileStatement(_Statement):
 
 
 @dataclass
+class _ForkStatement(_Statement):
+    """fork [id] (delay) body endfork"""
+    delay: _Expression  # Delay in seconds before fork executes
+    body: _Body
+    var_id: str = None  # Optional variable to store task ID (for fork id ...)
+
+    def to_bytecode(self, state: CompilerState, program: Program):
+        # Generate bytecode for the delay expression
+        delay_bc = self.delay.to_bytecode(state, program)
+
+        # Compile fork body separately - this becomes a fork vector
+        body_bc = self.body.to_bytecode(state, program)
+
+        # Add fork body to program's fork_vectors and get its index
+        f_index = len(program.fork_vectors)
+        program.fork_vectors.append(body_bc)
+
+        # Create the fork instruction
+        if self.var_id is not None:
+            # OP_FORK_WITH_ID: operand is tuple (f_index, var_id)
+            var_index = state.add_var(self.var_id)
+            fork_instr = Instruction(
+                opcode=Opcode.OP_FORK_WITH_ID,
+                operand=(f_index, var_index)
+            )
+        else:
+            # OP_FORK: operand is just f_index
+            fork_instr = Instruction(
+                opcode=Opcode.OP_FORK,
+                operand=f_index
+            )
+
+        return delay_bc + [fork_instr]
+
+    def to_moo(self) -> str:
+        if self.var_id:
+            res = f"fork {self.var_id} ({self.delay.to_moo()})\n"
+        else:
+            res = f"fork ({self.delay.to_moo()})\n"
+        res += self.body.to_moo()
+        res += "\nendfork\n"
+        return res
+
+
+@dataclass
 class _ExceptClause:
     """An except clause: except [var] (codes) body. Underscore prefix avoids ast_utils conflict."""
     codes: list  # List of error codes to catch (or 'ANY')
@@ -1450,6 +1495,57 @@ class ToAst(Transformer):
         else:
             # Shouldn't happen, but fallback
             raise ValueError(f"Unexpected for_clause args: {args}")
+
+    def fork_clause(self, args):
+        """Parse fork clause: 'fork' IDENTIFIER? '(' expression ')'
+
+        Returns (var_id, delay_expr) tuple.
+        """
+        if len(args) == 2:
+            # fork with id: [identifier, expression]
+            var_id = args[0].value if hasattr(args[0], 'value') else str(args[0])
+            delay = args[1]
+            return (var_id, delay)
+        else:
+            # fork without id: [expression]
+            delay = args[0]
+            return (None, delay)
+
+    def fork_statement(self, args):
+        """Parse fork statement: fork_clause statement* 'endfork'
+
+        Due to `?` on fork_clause in grammar:
+        - fork (expr): args = [expr, stmts...] (fork_clause is transparent)
+        - fork id (expr): args = [(var_id, delay), stmts...] (fork_clause returns tuple)
+        """
+        import lark
+        first = args[0]
+
+        # fork_clause may be a Tree if it wasn't transformed yet, or a tuple if it was
+        if isinstance(first, lark.tree.Tree) and first.data == 'fork_clause':
+            # Manually extract from the Tree
+            fc_children = first.children
+            if len(fc_children) == 2:
+                # fork id (expr): [identifier, expression]
+                var_id = fc_children[0].value if hasattr(fc_children[0], 'value') else str(fc_children[0])
+                delay = fc_children[1]
+            else:
+                # fork (expr): [expression]
+                var_id = None
+                delay = fc_children[0]
+            body_stmts = args[1:]
+        elif isinstance(first, tuple):
+            # Fork with ID: first arg is tuple from fork_clause
+            var_id, delay = first
+            body_stmts = args[1:]
+        else:
+            # Fork without ID: first arg is the delay expression
+            var_id = None
+            delay = first
+            body_stmts = args[1:]
+
+        body = _Body(*body_stmts)
+        return _ForkStatement(delay=delay, body=body, var_id=var_id)
 
     def function_call(self, call):
         name, args = call
@@ -1762,6 +1858,9 @@ def compile(tree, bi_funcs=None, context_vars=None):
     bc = []
     state = CompilerState(bi_funcs=bi_funcs)
 
+    # Create program early so fork_vectors can be populated during compilation
+    prog = Program(var_names=[])
+
     # Pre-register context variables BEFORE compiling code
     # This ensures they get stable indices (0-10 for standard MOO context)
     if context_vars:
@@ -1769,11 +1868,11 @@ def compile(tree, bi_funcs=None, context_vars=None):
             state.add_var(var_name)
 
     for node in tree.children:
-        bc += node.to_bytecode(state, None)
+        bc += node.to_bytecode(state, prog)
     bc = bc + [Instruction(opcode=Opcode.OP_DONE)]
 
-    # Create program with tracked variable names
-    prog = Program(var_names=list(state.var_names))
+    # Update program with final variable names
+    prog.var_names = list(state.var_names)
 
     # Create frame with rt_env initialized for all tracked variables
     frame = StackFrame(func_id=0, prog=prog, ip=0, stack=bc)

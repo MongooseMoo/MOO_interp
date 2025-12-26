@@ -69,6 +69,7 @@ class VMOutcome(Enum):
     OUTCOME_DONE = 0  # Task ran successfully to completion
     OUTCOME_ABORTED = 1  # Task aborted, either by kill_task or by an uncaught error
     OUTCOME_BLOCKED = 2  # Task called a blocking built-in function
+    OUTCOME_FORKED = 3  # Task executed a fork opcode, child task needs to be created
 
 
 @define
@@ -148,7 +149,8 @@ def operator(opcode):
             # Skip check for opcodes that get args from instruction operand, not stack
             operand_from_instruction = {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_PUT, Opcode.OP_POP,
                                         Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES,
-                                        Opcode.OP_G_PUSH, Opcode.OP_G_PUT, Opcode.OP_G_PUSH_CLEAR}
+                                        Opcode.OP_G_PUSH, Opcode.OP_G_PUT, Opcode.OP_G_PUSH_CLEAR,
+                                        Opcode.OP_FORK, Opcode.OP_FORK_WITH_ID}
             if isinstance(opcode, Opcode) and opcode not in operand_from_instruction:
                 if len(self.stack) < num_args:
                     raise VMError(
@@ -182,6 +184,8 @@ class VM:
     bi_funcs: BuiltinFunctions = field(factory=BuiltinFunctions, repr=False)
     # Suspend info - set when a builtin raises SuspendException
     suspend_seconds: float = field(default=0.0)
+    # Fork info - set when OP_FORK or OP_FORK_WITH_ID is executed
+    fork_info: Optional[dict] = field(default=None)
 
     def __init__(self, db=None, bi_funcs=None):
         super().__init__()
@@ -193,6 +197,7 @@ class VM:
         self.bi_funcs = bi_funcs if bi_funcs else BuiltinFunctions()
         self.db = db
         self.suspend_seconds = 0.0
+        self.fork_info = None
         handled_opcodes = set()
 
         # Register all opcode handlers
@@ -319,7 +324,7 @@ class VM:
         if result is None:
             logger.debug(f"Executing {instr.opcode} {instr.operand}")
             args = []
-            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP, Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES}:
+            if instr.opcode in {Opcode.OP_PUSH, Opcode.OP_PUT, Opcode.OP_IMM, Opcode.OP_POP, Opcode.OP_JUMP, Opcode.OP_WHILE, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_FORK, Opcode.OP_FORK_WITH_ID}:
                 args = [instr.operand]
             elif handler is not None and handler.num_args:
                 # Check for stack underflow (especially for Extended_Opcodes which skip the decorator check)
@@ -450,6 +455,55 @@ class VM:
         """
         # -1 to account for step()'s automatic ip += 1 at end
         self.current_frame.ip += offset - 1
+
+    @operator(Opcode.OP_FORK)
+    def exec_fork(self, f_index: int):
+        """Fork statement - creates a new task to execute the fork body.
+
+        Args:
+            f_index (int): Index into fork_vectors for the fork body bytecode.
+        """
+        delay = self.pop()  # Seconds to delay before fork executes
+        frame = self.current_frame
+
+        # Store fork info for TaskRunner to create child task
+        self.fork_info = {
+            'f_index': f_index,
+            'delay': float(delay),
+            'fork_vector': frame.prog.fork_vectors[f_index],
+            'rt_env': list(frame.rt_env),  # Copy of runtime environment
+            'var_names': frame.prog.var_names,
+            'this': frame.this,
+            'player': frame.player,
+        }
+        self.state = VMOutcome.OUTCOME_FORKED
+        return None
+
+    @operator(Opcode.OP_FORK_WITH_ID)
+    def exec_fork_with_id(self, operand: tuple):
+        """Fork statement with ID - creates task and stores ID in variable.
+
+        Args:
+            operand: Tuple of (f_index, var_index) where var_index is the
+                     variable to store the new task ID in.
+        """
+        f_index, var_index = operand
+        delay = self.pop()  # Seconds to delay before fork executes
+        frame = self.current_frame
+
+        # Store fork info for TaskRunner to create child task
+        self.fork_info = {
+            'f_index': f_index,
+            'delay': float(delay),
+            'fork_vector': frame.prog.fork_vectors[f_index],
+            'rt_env': list(frame.rt_env),  # Copy of runtime environment
+            'var_names': frame.prog.var_names,
+            'var_index': var_index,  # Variable to store task ID
+            'this': frame.this,
+            'player': frame.player,
+        }
+        self.state = VMOutcome.OUTCOME_FORKED
+        return None
 
     def read_bytes(self, num_bytes: int) -> int:
         """Reads the given number of bytes from the bytecode.
