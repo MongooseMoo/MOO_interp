@@ -343,6 +343,9 @@ class VM:
                 # Blocking builtin (suspend, read, etc.) - save state and block
                 self.suspend_seconds = e.seconds
                 self.state = VMOutcome.OUTCOME_BLOCKED
+                # Advance IP so we resume AFTER the suspend() call
+                # The resume value pushed onto stack will be the return value
+                frame.ip += 1
                 return  # Stop execution, task scheduler will resume later
             except (VMError, Exception) as e:
                 # Check for exception handlers
