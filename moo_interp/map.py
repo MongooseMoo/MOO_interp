@@ -74,7 +74,7 @@ def _is_string_like(val):
 
 @define(repr=False)
 class MOOMap(MutableMapping):
-    _map: dict = field(factory=dict)
+    _map: dict = field(factory=dict, alias="_map")
     _refcount: int = field(default=1, init=False)
 
     def __getitem__(self, key):
