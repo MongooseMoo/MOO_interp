@@ -1390,7 +1390,7 @@ class _Catch(_Expression):
         ))
 
         # 6. Handler: pop exception tuple, evaluate default
-        result.append(Instruction(opcode=Opcode.OP_POP, operand=0))
+        result.append(Instruction(opcode=Opcode.OP_POP, operand=1))
         if default_bc:
             result.extend(default_bc)
         else:
