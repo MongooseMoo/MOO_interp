@@ -441,6 +441,11 @@ class VM:
                                 var_index = frame.prog.var_names.index(var_name)
                                 frame.rt_env[var_index] = error_type
                     elif handler_type == 'catch':
+                        # Restore stack to depth when catch was set up
+                        # This removes any intermediate values from the failed expression
+                        stack_depth = handler.get('stack_depth', len(self.stack))
+                        if len(self.stack) > stack_depth:
+                            del self.stack[stack_depth:]
                         # For catch expressions, push error tuple onto stack
                         # The handler will pop this and replace with default value
                         self.push([error_type, str(exception), []])
@@ -2307,7 +2312,8 @@ class VM:
             'type': 'catch',
             'handler_ip': handler_ip,
             'error_codes': error_codes,
-            'catch_start_ip': frame.ip
+            'catch_start_ip': frame.ip,
+            'stack_depth': len(self.stack)  # Save stack depth to restore on exception
         })
 
     @operator(Extended_Opcode.EOP_END_CATCH)
