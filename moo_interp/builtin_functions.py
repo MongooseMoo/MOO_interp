@@ -926,17 +926,53 @@ class BuiltinFunctions:
             bi_funcs = self._vm.bi_funcs if self._vm else self
             db = self._vm.db if self._vm else None
 
+            # MOO context variable names - must be pre-registered for stable indices
+            context_vars = [
+                "player", "this", "caller", "verb", "args", "argstr",
+                "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
+            ]
+
             # Compile with the same bi_funcs as the parent VM
-            compiled = compile(code, bi_funcs=bi_funcs)
+            # Pass context_vars so they get pre-registered with stable indices
+            compiled = compile(code, bi_funcs=bi_funcs, context_vars=context_vars)
             compiled.debug = True
             compiled.this = -1
             compiled.verb = ""
 
-            # Get player from parent VM if available
+            # Get player and caller from parent VM if available
             player = -1
+            caller = -1
             if self._vm and self._vm.call_stack:
-                player = getattr(self._vm.call_stack[-1], 'player', -1)
+                caller_frame = self._vm.call_stack[-1]
+                player = getattr(caller_frame, 'player', -1)
+                caller = getattr(caller_frame, 'this', -1)
             compiled.player = player
+
+            # Set up runtime environment - context vars at indices 0-10
+            # Per MOO spec for eval():
+            # player    the same as in the calling verb
+            # this      #-1
+            # caller    the same as the initial value of `this' in the calling verb
+            # args      {}
+            # argstr    ""
+            # verb      ""
+            # dobjstr   ""
+            # dobj      #-1
+            # prepstr   ""
+            # iobjstr   ""
+            # iobj      #-1
+            if len(compiled.rt_env) >= 11:
+                compiled.rt_env[0] = player     # player
+                compiled.rt_env[1] = -1         # this
+                compiled.rt_env[2] = caller     # caller
+                compiled.rt_env[3] = ""         # verb
+                compiled.rt_env[4] = MOOList()  # args
+                compiled.rt_env[5] = ""         # argstr
+                compiled.rt_env[6] = -1         # dobj
+                compiled.rt_env[7] = ""         # dobjstr
+                compiled.rt_env[8] = -1         # iobj
+                compiled.rt_env[9] = ""         # iobjstr
+                compiled.rt_env[10] = ""        # prepstr
 
             # Create new VM with same db and bi_funcs
             vm = VM(db=db, bi_funcs=bi_funcs)
