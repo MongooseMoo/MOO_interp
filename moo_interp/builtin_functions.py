@@ -981,9 +981,34 @@ class BuiltinFunctions:
             # Save parent VM reference (eval may set bi_funcs._vm to the new vm)
             parent_vm = self._vm
 
-            # Run to completion
-            for _ in vm.run():
-                pass
+            # Run with suspend support - loop until done or aborted
+            from .vm import VMOutcome
+            import time
+            max_suspends = 100  # Prevent infinite loops
+            suspend_count = 0
+
+            while True:
+                for _ in vm.run():
+                    pass
+
+                # Check outcome
+                if vm.state == VMOutcome.OUTCOME_BLOCKED:
+                    # Task suspended - wait and resume
+                    suspend_count += 1
+                    if suspend_count > max_suspends:
+                        break  # Too many suspends
+
+                    # Wait for suspend time
+                    if vm.suspend_seconds > 0:
+                        time.sleep(vm.suspend_seconds)
+
+                    # Resume: push 0 as return value and reset state
+                    vm.push(0)
+                    vm.state = None
+                    # Continue loop to run again
+                else:
+                    # Done or error - break out
+                    break
 
             # Restore parent VM reference
             bi_funcs._vm = parent_vm
