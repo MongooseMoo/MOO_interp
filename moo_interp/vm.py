@@ -114,6 +114,7 @@ class StackFrame:
     exception_stack: List[Any] = field(factory=list)  # Stack for exception handlers
     stack_base: int = field(default=0)  # VM stack position when frame started
     caller_perms: Optional[int] = None  # Object ID whose permissions apply (None = use player)
+    definer: Optional[int] = None  # Object ID where verb was defined (for pass())
 
     @property
     def current_instruction(self) -> Instruction:
