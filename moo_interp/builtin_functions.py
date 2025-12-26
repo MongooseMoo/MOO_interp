@@ -947,6 +947,9 @@ class BuiltinFunctions:
                 pass
 
             return MOOList([True, vm.result])
+        except MOOException as e:
+            # MOOException includes error code - return it for proper error handling
+            return MOOList([False, MOOList([MOOString(e.error_code.name), MOOString(e.message)])])
         except Exception as e:
             return MOOList([False, MOOList([MOOString(str(e))])])
 
