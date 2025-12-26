@@ -1874,6 +1874,9 @@ class VM:
         except MOOException:
             # Let MOOException propagate to be caught by MOO try/except handlers
             raise
+        except SuspendException:
+            # Let SuspendException propagate to be caught by step() for blocking
+            raise
         except Exception as e:
             func_name = func.__name__
             tb = traceback.format_exc()
