@@ -10,7 +10,7 @@ from attr import define, field
 from lambdamoo_db.database import Anon, MooDatabase, ObjNum
 
 from .builtin_functions import BuiltinFunctions
-from .errors import ERROR_CODES, MOOError, MOOException
+from .errors import ERROR_CODES, MOOError, MOOException, SuspendException
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
@@ -180,6 +180,8 @@ class VM:
     opcode_handlers: Dict[Opcode | Extended_Opcode | int, OpcodeHandler] = field(factory=dict, repr=False)
     db: Optional[MooDatabase] = field(default=None)
     bi_funcs: BuiltinFunctions = field(factory=BuiltinFunctions, repr=False)
+    # Suspend info - set when a builtin raises SuspendException
+    suspend_seconds: float = field(default=0.0)
 
     def __init__(self, db=None, bi_funcs=None):
         super().__init__()
@@ -190,6 +192,7 @@ class VM:
         self.opcode_handlers = {}
         self.bi_funcs = bi_funcs if bi_funcs else BuiltinFunctions()
         self.db = db
+        self.suspend_seconds = 0.0
         handled_opcodes = set()
 
         # Register all opcode handlers
@@ -336,6 +339,11 @@ class VM:
                     # or for OP_POP which handles its own popping
                     if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE, Opcode.OP_POP}:
                         del self.stack[-handler.num_args:]
+            except SuspendException as e:
+                # Blocking builtin (suspend, read, etc.) - save state and block
+                self.suspend_seconds = e.seconds
+                self.state = VMOutcome.OUTCOME_BLOCKED
+                return  # Stop execution, task scheduler will resume later
             except (VMError, Exception) as e:
                 # Check for exception handlers
                 error_type = self._extract_error_type(e)

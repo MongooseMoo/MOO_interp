@@ -33,3 +33,20 @@ class MOOException(Exception):
         self.error_code = error_code
         self.message = message or error_code.value
         super().__init__(self.message)
+
+
+class SuspendException(Exception):
+    """Exception raised by builtins to signal task suspension.
+
+    This is NOT a MOO error - it's a control flow mechanism.
+    When a builtin raises this, the VM should:
+    1. Stop execution
+    2. Set state to OUTCOME_BLOCKED
+    3. Store the suspend info for the task scheduler
+
+    Attributes:
+        seconds: How long to suspend (0 = just yield to other tasks)
+    """
+    def __init__(self, seconds: float = 0):
+        self.seconds = seconds
+        super().__init__(f"Suspend for {seconds} seconds")
