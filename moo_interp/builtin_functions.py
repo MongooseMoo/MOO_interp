@@ -978,9 +978,15 @@ class BuiltinFunctions:
             vm = VM(db=db, bi_funcs=bi_funcs)
             vm.call_stack = [compiled]
 
+            # Save parent VM reference (eval may set bi_funcs._vm to the new vm)
+            parent_vm = self._vm
+
             # Run to completion
             for _ in vm.run():
                 pass
+
+            # Restore parent VM reference
+            bi_funcs._vm = parent_vm
 
             return MOOList([True, vm.result])
         except MOOException as e:
