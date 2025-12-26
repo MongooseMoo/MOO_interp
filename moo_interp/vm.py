@@ -1955,7 +1955,7 @@ class VM:
             raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
         moo_object = self._require_db().objects.get(obj)
         if moo_object is None:
-            raise MOOException(MOOError.E_INVIND, f"Object #{obj} not found")
+            raise MOOException(MOOError.E_INVIND, f"Object #{int(obj)} not found")
 
         prop_name = str(prop)
 
@@ -2057,7 +2057,7 @@ class VM:
             raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
         moo_object = self._require_db().objects.get(obj)
         if moo_object is None:
-            raise MOOException(MOOError.E_INVIND, f"Object #{obj} not found")
+            raise MOOException(MOOError.E_INVIND, f"Object #{int(obj)} not found")
 
         prop_name = str(prop)
         # Convert value to boolean for flag properties

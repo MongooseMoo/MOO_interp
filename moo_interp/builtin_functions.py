@@ -57,6 +57,9 @@ class BuiltinFunctions:
         self.current_id: int = 0
         self._vm: "VM | None" = None  # VM context, set by VM before execution
 
+        # Fork callback - set by server for eval() fork handling
+        self.fork_callback = None  # Callable[[dict], int] - takes fork_info, returns child task ID
+
         # SQLite support
         self._sqlite_handles = {}  # SQLite connection handles
         self._next_sqlite_handle = 1
@@ -1006,6 +1009,17 @@ class BuiltinFunctions:
                     vm.push(0)
                     vm.state = None
                     # Continue loop to run again
+                elif vm.state == VMOutcome.OUTCOME_FORKED:
+                    # Fork - create child task via callback
+                    if bi_funcs.fork_callback and vm.fork_info:
+                        child_task_id = bi_funcs.fork_callback(vm.fork_info)
+                        # Store child ID in parent's variable if fork-with-ID
+                        if 'var_index' in vm.fork_info:
+                            vm.current_frame.rt_env[vm.fork_info['var_index']] = child_task_id
+                    # Clear fork state, continue parent
+                    vm.fork_info = None
+                    vm.state = None
+                    # Continue loop to run parent
                 else:
                     # Done or error - break out
                     break
