@@ -962,17 +962,17 @@ class BuiltinFunctions:
             # iobjstr   ""
             # iobj      #-1
             if len(compiled.rt_env) >= 11:
-                compiled.rt_env[0] = player     # player
-                compiled.rt_env[1] = -1         # this
-                compiled.rt_env[2] = caller     # caller
-                compiled.rt_env[3] = ""         # verb
-                compiled.rt_env[4] = MOOList()  # args
-                compiled.rt_env[5] = ""         # argstr
-                compiled.rt_env[6] = -1         # dobj
-                compiled.rt_env[7] = ""         # dobjstr
-                compiled.rt_env[8] = -1         # iobj
-                compiled.rt_env[9] = ""         # iobjstr
-                compiled.rt_env[10] = ""        # prepstr
+                compiled.rt_env[0] = ObjNum(player)     # player (must be ObjNum)
+                compiled.rt_env[1] = ObjNum(-1)         # this
+                compiled.rt_env[2] = ObjNum(caller)     # caller (must be ObjNum)
+                compiled.rt_env[3] = ""                 # verb
+                compiled.rt_env[4] = MOOList()          # args
+                compiled.rt_env[5] = ""                 # argstr
+                compiled.rt_env[6] = ObjNum(-1)         # dobj
+                compiled.rt_env[7] = ""                 # dobjstr
+                compiled.rt_env[8] = ObjNum(-1)         # iobj
+                compiled.rt_env[9] = ""                 # iobjstr
+                compiled.rt_env[10] = ""                # prepstr
 
             # Create new VM with same db and bi_funcs
             vm = VM(db=db, bi_funcs=bi_funcs)
