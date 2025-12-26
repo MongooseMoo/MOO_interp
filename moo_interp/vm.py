@@ -113,6 +113,7 @@ class StackFrame:
     loop_stack: List[Any] = field(factory=list)  # Stack for loop state tracking
     exception_stack: List[Any] = field(factory=list)  # Stack for exception handlers
     stack_base: int = field(default=0)  # VM stack position when frame started
+    caller_perms: Optional[int] = None  # Object ID whose permissions apply (None = use player)
 
     @property
     def current_instruction(self) -> Instruction:
@@ -2071,13 +2072,17 @@ class VM:
         # Helper to check if caller is a wizard
         def caller_is_wizard():
             frame = self.current_frame
-            player_id = getattr(frame, 'player', -1)
-            if hasattr(player_id, '__int__'):
-                player_id = int(player_id)
-            player_obj = self._require_db().objects.get(player_id)
-            if player_obj:
-                player_flags = getattr(player_obj, 'flags', 0)
-                return bool(player_flags & 0x04)
+            # Use caller_perms if set (for server hooks like do_login_command)
+            # Otherwise fall back to player
+            perms_id = getattr(frame, 'caller_perms', None)
+            if perms_id is None:
+                perms_id = getattr(frame, 'player', -1)
+            if hasattr(perms_id, '__int__'):
+                perms_id = int(perms_id)
+            perms_obj = self._require_db().objects.get(perms_id)
+            if perms_obj:
+                perms_flags = getattr(perms_obj, 'flags', 0)
+                return bool(perms_flags & 0x04)
             return False
 
         is_anon = getattr(moo_object, 'anon', False)
