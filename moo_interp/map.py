@@ -1,7 +1,6 @@
 from collections.abc import MutableMapping
 from functools import cmp_to_key
 import sys
-from typing import Any
 
 from attr import define, field
 
@@ -77,25 +76,6 @@ def _is_string_like(val):
 class MOOMap(MutableMapping):
     _map: dict = field(factory=dict)
     _refcount: int = field(default=1, init=False)
-
-    def __init__(self, data: dict | None = None, **kwargs: Any) -> None:
-        """Create a MOOMap from a dict or keyword arguments.
-
-        Accepts:
-        - MOOMap() - empty map
-        - MOOMap(existing_dict) - from dict
-        - MOOMap(key=value, ...) - from keyword args
-        - MOOMap(_map=existing_dict) - attrs-compatible
-        """
-        if data is not None:
-            self._map = dict(data)
-        elif '_map' in kwargs:
-            self._map = kwargs.pop('_map')
-        elif kwargs:
-            self._map = dict(kwargs)
-        else:
-            self._map = {}
-        self._refcount = 1
 
     def __getitem__(self, key):
         return self._map[key]

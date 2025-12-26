@@ -944,7 +944,7 @@ class VM:
             # Single element range returns the value itself
             if start == end and result_items:
                 return result_items[0][1]
-            return MOOMap(map=dict(result_items))
+            return MOOMap(_map=dict(result_items))
 
     # Map operations
 
@@ -1050,11 +1050,8 @@ class VM:
         # Handle primitive values - calling verbs on primitives uses prototype objects
         primitive_this: MOOValue | None = None  # Will hold the primitive value if calling on prototype
 
-        # Check if obj_id is a MOO object reference (int/ObjNum/Anon) or a primitive value
-        # ObjNum inherits from int, so both are ints. Plain ints are object refs in tests.
-        # Real primitives are: float, str, MOOString, MOOError, MOOList, MOOMap
-        if not isinstance(obj_id, int) and not isinstance(obj_id, Anon):
-            # Primitive value (float, string, error, list, map)
+        if not isinstance(obj_id, (ObjNum, Anon)):
+            # Primitive value (int, float, string, error, list, map)
             # Look up the corresponding prototype on #0
             proto_obj = self._get_primitive_prototype(obj_id)
             if proto_obj is None:
