@@ -1217,6 +1217,7 @@ class VM:
             verb=str(verb_name),
             verb_name=verb.name,
             stack_base=len(self.stack) - 3,  # Position after args removed
+            caller_perms=verb.owner,  # Store verb owner for caller_perms() builtin
         )
 
         # Set up runtime environment - context vars at indices 0-10
