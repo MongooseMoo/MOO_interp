@@ -5,6 +5,7 @@ from moo_interp.map import MOOMap
 
 from .errors import MOOError
 from .string import MOOString
+from .waif import Waif
 
 MOONumber = Union[int, float]
 Addable = Union[MOONumber, MOOString, MOOList]
@@ -13,7 +14,7 @@ Container = Union[MOOList, MOOMap, MOOString]
 Comparable = Union[MOONumber, MOOString]
 MapKey = Union[MOONumber, MOOString]
 # Complete type for any MOO value (includes plain Python str/list/dict for compatibility)
-MOOAny = Union[MOONumber, MOOString, Container, MOOError, bool, None, str, list, dict]
+MOOAny = Union[MOONumber, MOOString, Container, MOOError, bool, None, str, list, dict, Waif]
 
 
 def to_moo(py_obj: Union[str, int, float, bool, list, dict]) -> MOOAny:
