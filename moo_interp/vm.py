@@ -1897,12 +1897,17 @@ class VM:
         where we need to keep obj and propname on stack for the final OP_PUT_PROP.
         """
         from lambdamoo_db.database import Clear
+        from .waif import Waif
 
         # Peek at stack without popping (C uses TOP_RT_VALUE and NEXT_TOP_RT_VALUE)
         if len(self.stack) < 2:
             raise VMError("OP_PUSH_GET_PROP: stack underflow, need obj and propname")
         prop_name = self.stack[-1]  # TOP - property name
         obj_id = self.stack[-2]     # NEXT_TOP - object id
+
+        # Handle WAIF - delegate to exec_get_prop which knows how to handle WAIFs
+        if isinstance(obj_id, Waif):
+            return self.exec_get_prop(obj_id, prop_name)
 
         obj = self._require_db().objects.get(obj_id)
         if obj is None:
@@ -1976,9 +1981,81 @@ class VM:
         """Get the value of a property on an object.
 
         Handles:
-        1. Special pseudo-properties (wizard, programmer, player, etc.)
-        2. Regular properties with inheritance
+        1. WAIF properties (owner, class, wizard, programmer, :prop)
+        2. Special pseudo-properties (wizard, programmer, player, etc.)
+        3. Regular properties with inheritance
         """
+        from .waif import Waif
+
+        # Handle WAIF property access
+        if isinstance(obj, Waif):
+            if not obj.is_valid():
+                raise MOOException(MOOError.E_INVIND, "Invalid waif")
+
+            prop_name = str(prop)
+
+            # Special waif pseudo-properties
+            if prop_name == 'owner':
+                from lambdamoo_db.database import ObjNum
+                return ObjNum(obj.get_owner())
+            elif prop_name == 'class':
+                from lambdamoo_db.database import ObjNum
+                return ObjNum(obj.get_class())
+            elif prop_name == 'wizard':
+                return 0  # WAIFs are never wizards
+            elif prop_name == 'programmer':
+                return 0  # WAIFs are never programmers
+
+            # :prop properties - check waif's propvals first, then class default
+            if prop_name.startswith(':'):
+                # First check waif's own value
+                if prop_name in obj.propvals:
+                    return obj.propvals[prop_name]
+
+                # Then check class object for default value
+                class_obj = self._require_db().objects.get(obj.get_class())
+                if class_obj is None:
+                    raise MOOException(MOOError.E_INVIND, f"Waif class object #{obj.get_class()} not found")
+
+                # Search class for property definition
+                from lambdamoo_db.database import Clear
+                to_check = [class_obj]
+                visited = set()
+
+                while to_check:
+                    current_obj = to_check.pop(0)
+                    obj_id = getattr(current_obj, 'id', None)
+                    if obj_id in visited:
+                        continue
+                    visited.add(obj_id)
+
+                    for p in getattr(current_obj, 'properties', []):
+                        if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                            value = p.value
+                            if isinstance(value, Clear):
+                                break  # Check parents
+                            if isinstance(value, str) and not isinstance(value, MOOString):
+                                value = MOOString(value)
+                            elif isinstance(value, list) and not isinstance(value, MOOList):
+                                value = MOOList(value)
+                            elif isinstance(value, dict) and not isinstance(value, MOOMap):
+                                value = MOOMap(value)
+                            return value
+
+                    # Add parents to search
+                    parents = getattr(current_obj, 'parents', None)
+                    if parents:
+                        for parent_id in parents:
+                            if parent_id >= 0:
+                                parent_obj = self._require_db().objects.get(parent_id)
+                                if parent_obj:
+                                    to_check.append(parent_obj)
+
+                raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on waif class")
+
+            # Non-:prop properties on waif don't exist
+            raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on waif")
+
         if not isinstance(obj, int):
             raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
         moo_object = self._require_db().objects.get(obj)
@@ -2077,10 +2154,73 @@ class VM:
         """Set the value of a property on an object.
 
         Handles:
-        1. Pseudo-properties for object flags (wizard, programmer, player, r, w, f, a)
-        2. Special attributes (owner, name, location)
-        3. Inherited properties with copy-on-write semantics
+        1. WAIF properties (owner, class, wizard, programmer are immutable; :prop allowed)
+        2. Pseudo-properties for object flags (wizard, programmer, player, r, w, f, a)
+        3. Special attributes (owner, name, location)
+        4. Inherited properties with copy-on-write semantics
         """
+        from .waif import Waif, refers_to_waif
+
+        # Handle WAIF property set
+        if isinstance(obj, Waif):
+            if not obj.is_valid():
+                raise MOOException(MOOError.E_INVIND, "Invalid waif")
+
+            prop_name = str(prop)
+
+            # Special waif pseudo-properties are immutable
+            if prop_name in ('owner', 'class', 'wizard', 'programmer'):
+                raise MOOException(MOOError.E_PERM, f"Cannot set waif.{prop_name}")
+
+            # :prop properties
+            if prop_name.startswith(':'):
+                # Check for self-reference (E_RECMOVE)
+                if refers_to_waif(value, obj):
+                    raise MOOException(MOOError.E_RECMOVE, "Waif cannot contain reference to itself")
+
+                # Verify property exists on class object
+                class_obj = self._require_db().objects.get(obj.get_class())
+                if class_obj is None:
+                    raise MOOException(MOOError.E_INVIND, f"Waif class object #{obj.get_class()} not found")
+
+                # Search class for property definition
+                from lambdamoo_db.database import Clear
+                to_check = [class_obj]
+                visited = set()
+                prop_found = False
+
+                while to_check and not prop_found:
+                    current_obj = to_check.pop(0)
+                    obj_id = getattr(current_obj, 'id', None)
+                    if obj_id in visited:
+                        continue
+                    visited.add(obj_id)
+
+                    for p in getattr(current_obj, 'properties', []):
+                        if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
+                            prop_found = True
+                            break
+
+                    if not prop_found:
+                        # Add parents to search
+                        parents = getattr(current_obj, 'parents', None)
+                        if parents:
+                            for parent_id in parents:
+                                if parent_id >= 0:
+                                    parent_obj = self._require_db().objects.get(parent_id)
+                                    if parent_obj:
+                                        to_check.append(parent_obj)
+
+                if not prop_found:
+                    raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not defined on waif class")
+
+                # Store value in waif's propvals
+                obj.propvals[prop_name] = value
+                return value
+
+            # Non-:prop properties on waif don't exist
+            raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on waif")
+
         if not isinstance(obj, int):
             raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
         moo_object = self._require_db().objects.get(obj)
