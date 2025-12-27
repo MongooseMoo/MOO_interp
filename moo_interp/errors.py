@@ -51,3 +51,22 @@ class SuspendException(Exception):
     def __init__(self, seconds: float = 0):
         self.seconds = seconds
         super().__init__(f"Suspend for {seconds} seconds")
+
+
+class ExecSuspendException(SuspendException):
+    """Exception raised by exec() to suspend task until subprocess completes.
+
+    The task should be suspended and the subprocess should be monitored.
+    When the subprocess completes, the task should be resumed with the result
+    as a list [exit_code, stdout, stderr].
+
+    Attributes:
+        process: The subprocess.Popen object
+        stdin_bytes: Bytes to send to stdin
+        display_cmd: Command name for queued_tasks() display
+    """
+    def __init__(self, process, stdin_bytes: bytes = b"", display_cmd: str = ""):
+        super().__init__(seconds=0)  # Suspend indefinitely until process completes
+        self.process = process
+        self.stdin_bytes = stdin_bytes
+        self.display_cmd = display_cmd

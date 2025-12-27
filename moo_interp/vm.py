@@ -10,7 +10,7 @@ from attr import define, field
 from lambdamoo_db.database import Anon, MooDatabase, ObjNum
 
 from .builtin_functions import BuiltinFunctions
-from .errors import ERROR_CODES, MOOError, MOOException, SuspendException
+from .errors import ERROR_CODES, MOOError, MOOException, SuspendException, ExecSuspendException
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
@@ -186,6 +186,9 @@ class VM:
     bi_funcs: BuiltinFunctions = field(factory=BuiltinFunctions, repr=False)
     # Suspend info - set when a builtin raises SuspendException
     suspend_seconds: float = field(default=0.0)
+    # Exec info - set when a builtin raises ExecSuspendException
+    # Contains: process (Popen), stdin_bytes, display_cmd
+    exec_info: Optional[dict] = field(default=None)
     # Fork info - set when OP_FORK or OP_FORK_WITH_ID is executed
     fork_info: Optional[dict] = field(default=None)
 
@@ -346,6 +349,22 @@ class VM:
                     # or for OP_POP which handles its own popping
                     if handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE, Opcode.OP_POP}:
                         del self.stack[-handler.num_args:]
+            except ExecSuspendException as e:
+                # exec() builtin - save process info and block
+                # Clean up args from stack (since handler didn't complete normally)
+                if handler is not None and handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE, Opcode.OP_POP}:
+                    del self.stack[-handler.num_args:]
+                self.suspend_seconds = 0
+                self.exec_info = {
+                    'process': e.process,
+                    'stdin_bytes': e.stdin_bytes,
+                    'display_cmd': e.display_cmd,
+                }
+                self.state = VMOutcome.OUTCOME_BLOCKED
+                # Advance IP so we resume AFTER the exec() call
+                # The resume value pushed onto stack will be the return value
+                frame.ip += 1
+                return  # Stop execution, task scheduler will poll process
             except SuspendException as e:
                 # Blocking builtin (suspend, read, etc.) - save state and block
                 # Clean up args from stack (since handler didn't complete normally)
