@@ -76,7 +76,9 @@ def refers_to_waif(value: Any, target_waif: "Waif") -> bool:
         return True
 
     # Check lists (MOOList or Python list)
-    if hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+    # Exclude strings - MOOString is UserString (not str) but is iterable
+    from .string import MOOString
+    if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, MOOString)):
         try:
             for item in value:
                 if refers_to_waif(item, target_waif):
