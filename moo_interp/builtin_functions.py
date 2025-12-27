@@ -238,7 +238,10 @@ class BuiltinFunctions:
         return self.get_id_by_function(fn) if fn else None
 
     def to_string(self, value):
-        if isinstance(value, ObjNum):
+        from .waif import Waif
+        if isinstance(value, Waif):
+            return str(value)  # Waif.__str__ returns [[Waif class #N]] format
+        elif isinstance(value, ObjNum):
             return str(value)  # ObjNum.__str__ already includes #
         elif isinstance(value, int):
             return str(value)
@@ -825,8 +828,12 @@ class BuiltinFunctions:
         return len(x)
 
     def toliteral(self, x):
+        from .waif import Waif
+        # Check Waif first
+        if isinstance(x, Waif):
+            return MOOString(str(x))  # Waif.__str__ returns [[Waif class #N]] format
         # Check ObjNum FIRST (before int/float) since it inherits from int
-        if isinstance(x, ObjNum):
+        elif isinstance(x, ObjNum):
             return MOOString(str(x))  # ObjNum.__str__ already includes #
         elif isinstance(x, MooObject):
             return MOOString(f"#{x.id}")
@@ -1941,8 +1948,12 @@ class BuiltinFunctions:
     def typeof(self, x) -> int:
         """Return the MOO type code for a value."""
         from lambdamoo_db.database import Anon
+        from .waif import Waif
         if isinstance(x, bool):
             return self.TYPE_BOOL
+        elif isinstance(x, Waif):
+            # Waif must be checked before other types
+            return self.TYPE_WAIF
         elif isinstance(x, Anon):
             # Anon must be checked before ObjNum since it also inherits from int
             return self.TYPE_ANON
