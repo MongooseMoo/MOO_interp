@@ -915,20 +915,29 @@ class VM:
     def exec_ref(self, lst: Container, index: Any) -> MOOAny:
         # For lists and strings: index must be int (1-based)
         # For maps: index can be any type (used as key) EXCEPT collections
+        # In non-debug mode (like toaststunt), errors return error values instead of raising
+        debug_mode = self.current_frame.debug if self.current_frame else True
+
         if isinstance(lst, MOOMap):
             # Collections (lists, maps) cannot be used as map keys
             if isinstance(index, (MOOList, MOOMap)):
-                raise MOOException(MOOError.E_TYPE)
+                if debug_mode:
+                    raise MOOException(MOOError.E_TYPE)
+                return MOOError.E_TYPE
             # Map indexing: use key directly, return E_RANGE if not found
             try:
                 return lst[index]
             except KeyError:
-                raise MOOException(MOOError.E_RANGE)
+                if debug_mode:
+                    raise MOOException(MOOError.E_RANGE)
+                return MOOError.E_RANGE
         # For lists and strings: index must be int
         if isinstance(lst, (MOOList, list, MOOString, str)):
             # Check index type - must be int (but not bool, and not ObjNum)
             if not isinstance(index, int) or isinstance(index, bool) or type(index).__name__ == 'ObjNum':
-                raise MOOException(MOOError.E_TYPE, "list/string index must be integer")
+                if debug_mode:
+                    raise MOOException(MOOError.E_TYPE, "list/string index must be integer")
+                return MOOError.E_TYPE
         # MOOString and MOOList already handle 1-based indexing in __getitem__
         # Plain Python lists (e.g., from database properties) need conversion
         try:
@@ -936,7 +945,9 @@ class VM:
                 return lst[index - 1]  # Convert 1-based to 0-based for plain lists
             return lst[index]
         except IndexError:
-            raise MOOException(MOOError.E_RANGE, "list/string index out of range")
+            if debug_mode:
+                raise MOOException(MOOError.E_RANGE, "list/string index out of range")
+            return MOOError.E_RANGE
 
     @operator(Opcode.OP_PUSH_REF)
     def exec_push_ref(self, lst: Container, index: Any) -> MOOAny:
@@ -1511,6 +1522,19 @@ class VM:
             base_collection = self.pop()
 
             # Type check: must be string, list, or map
+            # If it's an error value (from non-debug mode error), skip loop like toaststunt
+            if isinstance(base_collection, MOOError):
+                self._skip_to_end_of_for_loop(frame)
+                return
+            # Also check for error code integers that might slip through
+            if isinstance(base_collection, int) and base_collection in (
+                MOOError.E_NONE, MOOError.E_TYPE, MOOError.E_DIV, MOOError.E_PERM,
+                MOOError.E_PROPNF, MOOError.E_VERBNF, MOOError.E_VARNF, MOOError.E_INVIND,
+                MOOError.E_RECMOVE, MOOError.E_MAXREC, MOOError.E_RANGE, MOOError.E_ARGS,
+                MOOError.E_NACC, MOOError.E_INVARG, MOOError.E_QUOTA, MOOError.E_FLOAT
+            ):
+                self._skip_to_end_of_for_loop(frame)
+                return
             if not isinstance(base_collection, (MOOString, str, MOOList, MOOMap)):
                 raise MOOException(MOOError.E_TYPE)
 
