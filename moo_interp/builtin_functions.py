@@ -606,7 +606,8 @@ class BuiltinFunctions:
 
     def explode(self, string: MOOString, separator: MOOString = " ") -> MOOList:
         """Split string by separator (default: space)."""
-        return MOOList(string.split(separator))
+        # string.split() returns plain Python strings, must convert to MOOString
+        return MOOList([MOOString(s) for s in string.split(separator)])
 
     def reverse(self, lst: MOOList) -> MOOList:
         """Reverse a list or string."""
