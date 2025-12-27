@@ -42,6 +42,14 @@ class Waif:
     def __str__(self) -> str:
         return self.__repr__()
 
+    def __hash__(self) -> int:
+        """Make Waif hashable for use in WeakSet tracking."""
+        return id(self)
+
+    def __eq__(self, other) -> bool:
+        """Waifs are equal only if they are the same instance."""
+        return self is other
+
     def invalidate(self) -> None:
         """Mark this WAIF as invalid (class was recycled)."""
         self._valid = False
