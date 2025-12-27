@@ -22,7 +22,15 @@ class MOOList(MutableSequence):
         self._refcount = 1
 
     def __getitem__(self, index):
-        return self._list[index - 1]
+        result = self._list[index - 1]
+
+        # Wrap nested Python containers in MOO types
+        if isinstance(result, list):
+            return MOOList(result)
+        if isinstance(result, dict):
+            from .map import MOOMap
+            return MOOMap(result)
+        return result
 
     def __setitem__(self, index, value):
         self._list[index - 1] = value
