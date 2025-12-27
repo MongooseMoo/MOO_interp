@@ -756,15 +756,14 @@ class VM:
         """
         if isinstance(rhs, MOOList):
             # For lists, return 1-based index or 0
-            try:
-                # MOOList stores items in _list
-                idx = rhs._list.index(lhs)
-                return idx + 1  # MOO uses 1-based indexing
-            except ValueError:
-                return 0
+            # Must use MOO equality (case-insensitive for strings)
+            for idx, item in enumerate(rhs._list):
+                if self._moo_equality(lhs, item):
+                    return idx + 1  # MOO uses 1-based indexing
+            return 0
         elif isinstance(rhs, MOOString):
-            # For strings, use find
-            index = str(rhs).find(str(lhs))
+            # For strings, use case-insensitive find (MOO string comparison is case-insensitive)
+            index = str(rhs).lower().find(str(lhs).lower())
             if index == -1:
                 return 0
             return index + 1  # MOO uses 1-based indexing
@@ -1132,6 +1131,7 @@ class VM:
         - verb_name: name of verb to call (popped second)
         - args: MOOList of arguments to pass to verb (popped first)
         """
+        logger.debug(f"CALL_VERB: #{obj_id}:{verb_name}({args})")
         if not self.db:
             raise VMError("No database available for verb calls")
 
