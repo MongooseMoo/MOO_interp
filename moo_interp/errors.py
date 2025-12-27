@@ -21,6 +21,7 @@ class MOOError(IntEnum):
     E_FLOAT = 15
     E_FILE = 16
     E_EXEC = 17
+    E_INTRPT = 18
 
 
 # Dictionary mapping error name strings to MOOError enum members for runtime lookup
