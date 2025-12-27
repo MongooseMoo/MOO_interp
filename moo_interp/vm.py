@@ -900,7 +900,9 @@ class VM:
         if not isinstance(lst, MOOList):
             raise MOOException(MOOError.E_TYPE, "Expected list")
         # Create a new list to avoid mutation (MOO copy-on-write semantics)
-        new_list = MOOList(*lst._list)
+        # Use list() for shallow copy to preserve nested MOOLists
+        new_list = MOOList()
+        new_list._list = list(lst._list)
         new_list.append(tail)
         return new_list
 

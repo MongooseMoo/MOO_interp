@@ -555,7 +555,7 @@ class BuiltinFunctions:
     def tan(self, x):
         return math.tan(self.tofloat(x))
 
-    def listappend(self, list: MOOList, value, position: int = None) -> MOOList:
+    def listappend(self, lst: MOOList, value, position: int = None) -> MOOList:
         """Append value to list, optionally after a specific position.
 
         listappend(list, value [, position])
@@ -563,8 +563,9 @@ class BuiltinFunctions:
         - If position is provided, insert AFTER that position (1-based)
         - Returns a NEW list, original is unchanged (MOO copy-on-write semantics)
         """
-        # Create a copy of the list to avoid mutation
-        new_list = MOOList(*list._list)
+        # Create a shallow copy to avoid mutation (preserves nested MOOLists)
+        new_list = MOOList()
+        new_list._list = list(lst._list)
         if position is None:
             new_list.append(value)
         else:
@@ -573,17 +574,18 @@ class BuiltinFunctions:
             new_list._list.insert(position, value)
         return new_list
 
-    def listdelete(self, list: MOOList, index: int) -> MOOList:
+    def listdelete(self, lst: MOOList, index: int) -> MOOList:
         """Delete index from list.
 
         Returns a NEW list, original is unchanged (MOO copy-on-write semantics).
         """
-        # Create a copy of the list to avoid mutation
-        new_list = MOOList(*list._list)
+        # Create a shallow copy to avoid mutation (preserves nested MOOLists)
+        new_list = MOOList()
+        new_list._list = list(lst._list)
         del new_list[index]
         return new_list
 
-    def listinsert(self, list: MOOList, value, position: int = None) -> MOOList:
+    def listinsert(self, lst: MOOList, value, position: int = None) -> MOOList:
         """Insert value into list before a specific position.
 
         listinsert(list, value [, position])
@@ -592,8 +594,9 @@ class BuiltinFunctions:
         - If position is provided, insert BEFORE that position (1-based)
         - Returns a NEW list, original is unchanged (MOO copy-on-write semantics)
         """
-        # Create a copy of the list to avoid mutation
-        new_list = MOOList(*list._list)
+        # Create a shallow copy to avoid mutation (preserves nested MOOLists)
+        new_list = MOOList()
+        new_list._list = list(lst._list)
         if position is None:
             position = 1
         # Insert before the given position (MOO is 1-based)
@@ -601,7 +604,7 @@ class BuiltinFunctions:
         new_list._list.insert(position - 1, value)
         return new_list
 
-    def listset(self, list: MOOList, value, index: int) -> MOOList:
+    def listset(self, lst: MOOList, value, index: int) -> MOOList:
         """Set value at index in list.
 
         listset(list, value, index)
@@ -609,8 +612,9 @@ class BuiltinFunctions:
         - Index is 1-based
         - Returns a NEW list, original is unchanged (MOO copy-on-write semantics)
         """
-        # Create a copy of the list to avoid mutation
-        new_list = MOOList(*list._list)
+        # Create a shallow copy to avoid mutation (preserves nested MOOLists)
+        new_list = MOOList()
+        new_list._list = list(lst._list)
         new_list[index] = value
         return new_list
 
