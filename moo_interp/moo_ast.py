@@ -1443,9 +1443,9 @@ class ToAst(Transformer):
         'LIST': 4,
         'FLOAT': 9,
         'MAP': 10,
-        'BOOL': 12,
-        'WAIF': 13,
-        'ANON': 14,
+        'ANON': 12,  # _TYPE_ANON = 12, typeof() returns masked value
+        'WAIF': 13,  # _TYPE_WAIF = 13, typeof() returns masked value
+        'BOOL': 14,  # TYPE_BOOL = 14, no complex flag
     }
 
     def IDENTIFIER(self, s):
