@@ -27,6 +27,24 @@ class MOOError(IntEnum):
 # Dictionary mapping error name strings to MOOError enum members for runtime lookup
 ERROR_CODES = {e.name: e for e in MOOError}
 
+# Dictionary mapping type name strings to their integer codes for runtime lookup
+# Used by typeof() comparisons like: typeof(x) == NUM
+# ToastStunt type codes match these values
+TYPE_CODES = {
+    # Primary names
+    "NUM": 0,       # Also called INT - integer type
+    "INT": 0,       # Alias for NUM
+    "OBJ": 1,       # Object reference
+    "STR": 2,       # String
+    "ERR": 3,       # Error type
+    "LIST": 4,      # List/array
+    "FLOAT": 9,     # Floating point
+    "MAP": 10,      # Map/dictionary (ToastStunt extension)
+    "ANON": 12,     # Anonymous object (ToastStunt extension)
+    "WAIF": 13,     # Waif object (ToastStunt extension)
+    "BOOL": 14,     # Boolean (ToastStunt extension)
+}
+
 
 class MOOException(Exception):
     """Exception raised for MOO runtime errors that can be caught by try/except."""

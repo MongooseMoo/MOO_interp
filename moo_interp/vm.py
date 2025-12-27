@@ -10,7 +10,7 @@ from attr import define, field
 from lambdamoo_db.database import Anon, MooDatabase, ObjNum
 
 from .builtin_functions import BuiltinFunctions
-from .errors import ERROR_CODES, MOOError, MOOException, SuspendException, ExecSuspendException
+from .errors import ERROR_CODES, TYPE_CODES, MOOError, MOOException, SuspendException, ExecSuspendException
 from .list import MOOList
 from .map import MOOMap
 from .moo_types import (Addable, Comparable, Container, MapKey, MOOAny,
@@ -575,10 +575,12 @@ class VM:
             logger.debug(f"Pushing {result} onto the stack from {var_name}")
             return result
         except ValueError:
-            # Variable not in frame - check if it's a built-in error code
+            # Variable not in frame - check if it's a built-in constant
             var_str = str(var_name)
             if var_str in ERROR_CODES:
                 return ERROR_CODES[var_str]
+            if var_str in TYPE_CODES:
+                return TYPE_CODES[var_str]
             raise
 
     @operator(Opcode.OP_PUSH_CLEAR)
