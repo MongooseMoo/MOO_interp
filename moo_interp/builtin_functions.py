@@ -561,19 +561,27 @@ class BuiltinFunctions:
         listappend(list, value [, position])
         - If position is not provided, append at end
         - If position is provided, insert AFTER that position (1-based)
+        - Returns a NEW list, original is unchanged (MOO copy-on-write semantics)
         """
+        # Create a copy of the list to avoid mutation
+        new_list = MOOList(*list._list)
         if position is None:
-            list.append(value)
+            new_list.append(value)
         else:
             # Insert after the given position (MOO is 1-based)
             # position=1 means insert after index 0, so at index 1
-            list._list.insert(position, value)
-        return list
+            new_list._list.insert(position, value)
+        return new_list
 
     def listdelete(self, list: MOOList, index: int) -> MOOList:
-        """Delete index from list."""
-        del list[index]
-        return list
+        """Delete index from list.
+
+        Returns a NEW list, original is unchanged (MOO copy-on-write semantics).
+        """
+        # Create a copy of the list to avoid mutation
+        new_list = MOOList(*list._list)
+        del new_list[index]
+        return new_list
 
     def listinsert(self, list: MOOList, value, position: int = None) -> MOOList:
         """Insert value into list before a specific position.
@@ -582,13 +590,16 @@ class BuiltinFunctions:
         - VALUE comes before POSITION in MOO
         - If position is not provided, insert at beginning (position 1)
         - If position is provided, insert BEFORE that position (1-based)
+        - Returns a NEW list, original is unchanged (MOO copy-on-write semantics)
         """
+        # Create a copy of the list to avoid mutation
+        new_list = MOOList(*list._list)
         if position is None:
             position = 1
         # Insert before the given position (MOO is 1-based)
         # position=1 means insert at index 0
-        list._list.insert(position - 1, value)
-        return list
+        new_list._list.insert(position - 1, value)
+        return new_list
 
     def listset(self, list: MOOList, value, index: int) -> MOOList:
         """Set value at index in list.
@@ -596,9 +607,12 @@ class BuiltinFunctions:
         listset(list, value, index)
         - VALUE comes before INDEX in MOO
         - Index is 1-based
+        - Returns a NEW list, original is unchanged (MOO copy-on-write semantics)
         """
-        list[index] = value
-        return list
+        # Create a copy of the list to avoid mutation
+        new_list = MOOList(*list._list)
+        new_list[index] = value
+        return new_list
 
     def all_members(self, value: MOOAny, list: MOOList):
         """Return all indices of value in list."""

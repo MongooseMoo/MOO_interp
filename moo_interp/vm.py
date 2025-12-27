@@ -899,8 +899,10 @@ class VM:
     def exec_list_add_tail(self, lst: MOOList, tail: MOOAny) -> MOOList:
         if not isinstance(lst, MOOList):
             raise MOOException(MOOError.E_TYPE, "Expected list")
-        lst.append(tail)
-        return lst
+        # Create a new list to avoid mutation (MOO copy-on-write semantics)
+        new_list = MOOList(*lst._list)
+        new_list.append(tail)
+        return new_list
 
     @operator(Opcode.OP_LIST_APPEND)  # extend in Python
     def exec_list_append(self, lst1: MOOList, lst2: MOOList) -> MOOList:
