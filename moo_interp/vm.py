@@ -1672,13 +1672,18 @@ class VM:
     def exec_last_index(self, container: MOOAny) -> MOOAny:
         """Get the last index/key appropriate for the container type.
 
-        - For lists/strings: returns length (last position)
-        - For maps: returns the last key
-        Raises E_RANGE for empty containers.
+        - For lists/strings: returns length (0 for empty)
+        - For maps: returns the last key (or E_RANGE if empty)
+
+        Note: For lists/strings, this returns 0 for empty containers. This is
+        correct because:
+        - x[$] on empty list compiles to: push x, EOP_LAST (returns 0), OP_REF
+          The OP_REF with index 0 will raise E_RANGE (1-based indexing)
+        - x[1..$] on empty list compiles to: push x, push 1, EOP_LAST (returns 0), OP_RANGE_REF
+          The OP_RANGE_REF with range 1..0 returns empty list (inverted range)
         """
         if isinstance(container, (MOOList, MOOString, str)):
-            if len(container) == 0:
-                raise MOOException(MOOError.E_RANGE)
+            # Return length (0 for empty) - let OP_REF handle E_RANGE if indexing
             return len(container)
         elif isinstance(container, MOOMap):
             if len(container) == 0:
