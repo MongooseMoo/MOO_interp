@@ -755,7 +755,14 @@ class BuiltinFunctions:
         return pos + 1 if pos >= 0 else 0
 
     def strsub(self, str1: MOOString, str2: MOOString, str3: MOOString):
-        return str1.replace(str2, str3)
+        # Unwrap MOOStrings to plain strings for replace()
+        s1 = self._unwrap(str1)
+        s2 = self._unwrap(str2)
+        s3 = self._unwrap(str3)
+        # Case-insensitive replacement like MOO's strsub
+        import re
+        result = re.sub(re.escape(s2), s3, s1, flags=re.IGNORECASE)
+        return MOOString(result)
 
     def strcmp(self, str1: MOOString, str2: MOOString):
         if str1 < str2:
