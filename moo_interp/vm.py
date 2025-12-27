@@ -348,6 +348,9 @@ class VM:
                         del self.stack[-handler.num_args:]
             except SuspendException as e:
                 # Blocking builtin (suspend, read, etc.) - save state and block
+                # Clean up args from stack (since handler didn't complete normally)
+                if handler is not None and handler.num_args and instr.opcode not in {Opcode.OP_PUSH, Opcode.OP_IMM, Opcode.OP_JUMP, Opcode.OP_IF, Opcode.OP_EIF, Opcode.OP_IF_QUES, Opcode.OP_WHILE, Opcode.OP_POP}:
+                    del self.stack[-handler.num_args:]
                 self.suspend_seconds = e.seconds
                 self.state = VMOutcome.OUTCOME_BLOCKED
                 # Advance IP so we resume AFTER the suspend() call
