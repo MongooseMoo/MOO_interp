@@ -423,7 +423,9 @@ class _Ternary(_Expression):
         if_ques_jump = len(true_bc) + 1  # +1 for the OP_JUMP instruction
 
         # OP_JUMP: after evaluating true_value, jump past false_bc
-        end_jump = len(false_bc)
+        # OP_JUMP handler does `ip += offset - 1`, then step() does `ip += 1`
+        # Total advance = offset. To skip false_bc, we need offset = len(false_bc) + 1
+        end_jump = len(false_bc) + 1
 
         result = condition_bc
         result.append(Instruction(opcode=Opcode.OP_IF_QUES, operand=if_ques_jump))
