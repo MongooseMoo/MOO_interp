@@ -639,15 +639,16 @@ class VM:
         frame = self.current_frame
         try:
             index = frame.prog.var_names.index(identifier)
+            # Variable exists - update it
+            frame.rt_env[index] = value
+            logger.debug(f"Put {value} into {identifier} at index {index}")
+            return value
         except ValueError:
+            # New variable - add it
             frame.prog.var_names.append(identifier)
             frame.rt_env.append(value)
-            logger.debug(f"Put {value} into {identifier}")
+            logger.debug(f"Put {value} into new variable {identifier}")
             return value
-        frame.rt_env[index] = value
-        frame.rt_env.append(value)
-        logger.debug(f"Put {value} into {identifier}")
-        return value
 
     @operator(Opcode.OP_ADD)
     def exec_add(self, op1: Any, op2: Any) -> Any:
