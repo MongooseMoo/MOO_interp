@@ -604,8 +604,8 @@ class BuiltinFunctions:
         """Return all indices of value in list."""
         return MOOList([i for i, x in enumerate(list) if x == value])
 
-    def explode(self, string: MOOString, separator: MOOString) -> MOOList:
-        """Split string by separator."""
+    def explode(self, string: MOOString, separator: MOOString = " ") -> MOOList:
+        """Split string by separator (default: space)."""
         return MOOList(string.split(separator))
 
     def reverse(self, lst: MOOList) -> MOOList:
