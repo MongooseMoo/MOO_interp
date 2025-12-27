@@ -931,9 +931,12 @@ class VM:
                 raise MOOException(MOOError.E_TYPE, "list/string index must be integer")
         # MOOString and MOOList already handle 1-based indexing in __getitem__
         # Plain Python lists (e.g., from database properties) need conversion
-        if isinstance(lst, list) and not isinstance(lst, MOOList):
-            return lst[index - 1]  # Convert 1-based to 0-based for plain lists
-        return lst[index]
+        try:
+            if isinstance(lst, list) and not isinstance(lst, MOOList):
+                return lst[index - 1]  # Convert 1-based to 0-based for plain lists
+            return lst[index]
+        except IndexError:
+            raise MOOException(MOOError.E_RANGE, "list/string index out of range")
 
     @operator(Opcode.OP_PUSH_REF)
     def exec_push_ref(self, lst: Container, index: Any) -> MOOAny:
