@@ -493,6 +493,16 @@ class _Assign(_Expression):
                 result += base.object.to_bytecode(state, program)
                 result += base.name.to_bytecode(state, program)
                 result += [Instruction(opcode=Opcode.OP_PUSH_GET_PROP)]
+            elif isinstance(base, DollarProperty):
+                # For $prop[i] = v (which is #0.prop[i] = v):
+                # Push #0, push propname, then PUSH_GET_PROP (keeps obj/propname on stack)
+                result += [Instruction(opcode=Opcode.OP_IMM, operand=0)]
+                if isinstance(base.name, Identifier):
+                    prop_name = MOOString(base.name.value)
+                else:
+                    prop_name = MOOString(str(base.name.value))
+                result += [Instruction(opcode=Opcode.OP_IMM, operand=prop_name)]
+                result += [Instruction(opcode=Opcode.OP_PUSH_GET_PROP)]
             else:
                 # Other base types - just evaluate normally
                 result += base.to_bytecode(state, program)
@@ -528,6 +538,10 @@ class _Assign(_Expression):
                 result += [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(base.value))]
             elif isinstance(base, _Property):
                 # For property: stack has [obj, propname, modified_propvalue]
+                # PUT_PROP expects [obj, propname, value] and stores obj.propname = value
+                result += [Instruction(opcode=Opcode.OP_PUT_PROP)]
+            elif isinstance(base, DollarProperty):
+                # For $prop: stack has [obj, propname, modified_propvalue]
                 # PUT_PROP expects [obj, propname, value] and stores obj.propname = value
                 result += [Instruction(opcode=Opcode.OP_PUT_PROP)]
             # else: other base types - no store needed (result is on stack)
@@ -631,6 +645,16 @@ class _Assign(_Expression):
                 result += base.object.to_bytecode(state, program)
                 result += base.name.to_bytecode(state, program)
                 result += [Instruction(opcode=Opcode.OP_PUSH_GET_PROP)]
+            elif isinstance(base, DollarProperty):
+                # For $prop[start..end] = v (which is #0.prop[start..end] = v):
+                # Push #0, push propname, then PUSH_GET_PROP (keeps obj/propname on stack)
+                result += [Instruction(opcode=Opcode.OP_IMM, operand=0)]
+                if isinstance(base.name, Identifier):
+                    prop_name = MOOString(base.name.value)
+                else:
+                    prop_name = MOOString(str(base.name.value))
+                result += [Instruction(opcode=Opcode.OP_IMM, operand=prop_name)]
+                result += [Instruction(opcode=Opcode.OP_PUSH_GET_PROP)]
             else:
                 result += base.to_bytecode(state, program)
 
@@ -660,6 +684,10 @@ class _Assign(_Expression):
                 state.add_var(base.value)
                 result += [Instruction(opcode=Opcode.OP_PUT, operand=MOOString(base.value))]
             elif isinstance(base, _Property):
+                result += [Instruction(opcode=Opcode.OP_PUT_PROP)]
+            elif isinstance(base, DollarProperty):
+                # For $prop: stack has [obj, propname, modified_propvalue]
+                # PUT_PROP expects [obj, propname, value] and stores obj.propname = value
                 result += [Instruction(opcode=Opcode.OP_PUT_PROP)]
 
             # Step 8: Pop result, push original value for expression result
