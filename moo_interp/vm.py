@@ -72,6 +72,15 @@ class VMOutcome(Enum):
     OUTCOME_FORKED = 3  # Task executed a fork opcode, child task needs to be created
 
 
+class _TailCallMarker:
+    """Sentinel marker returned by builtins to indicate a tail call (frame was pushed)."""
+    def __repr__(self):
+        return "TAIL_CALL"
+
+# Singleton instance for tail call marker
+TAIL_CALL = _TailCallMarker()
+
+
 @define
 class Instruction:
     """Represents a single bytecode instruction"""
@@ -1255,6 +1264,97 @@ class VM:
         # Don't return a value - the verb will execute and eventually OP_RETURN
         return None
 
+    def push_activation(self, code: str, this, verb: str, args, definer,
+                        player=None, caller=None) -> None:
+        """Push a new frame onto the call stack for verb call or pass().
+
+        This is how verb calls and pass() work - they push a frame and let
+        the VM continue execution on the new frame.
+
+        Args:
+            code: MOO source code to compile and execute
+            this: Object ID that the verb is being called on
+            verb: Name of the verb being called
+            args: MOOList of arguments
+            definer: Object ID where the verb is defined (for pass())
+            player: Player ID (None = inherit from caller)
+            caller: Caller ID (None = use current frame's this)
+        """
+        from .moo_ast import parse, compile as compile_moo
+
+        # MOO context variable names - pre-register at indices 0-10
+        context_vars = [
+            "player", "this", "caller", "verb", "args", "argstr",
+            "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
+        ]
+
+        # Compile the verb code
+        ast = parse(code)
+        compiled_frame = compile_moo(ast, bi_funcs=self.bi_funcs, context_vars=context_vars)
+        bytecode = compiled_frame.stack
+
+        # Get context from current frame (if exists)
+        current = self.current_frame if self.call_stack else None
+        if current is None:
+            raise VMError("push_activation called with no current frame")
+
+        # Determine player and caller
+        player_id = player if player is not None else current.player
+        caller_id = caller if caller is not None else current.this
+
+        # Get the compiled verb's var_names and rt_env
+        verb_var_names = compiled_frame.prog.var_names
+        verb_rt_env = compiled_frame.rt_env
+
+        # Create new stack frame
+        new_frame = StackFrame(
+            func_id=definer,
+            prog=Program(var_names=verb_var_names),
+            ip=0,
+            stack=bytecode,
+            this=this,
+            player=player_id,
+            verb=verb,
+            verb_name=verb,
+            stack_base=len(self.stack),
+            caller_perms=definer,
+            definer=definer,
+        )
+
+        # Set up runtime environment - context vars at indices 0-10
+        new_frame.rt_env = list(verb_rt_env)  # Copy to avoid mutation
+
+        # Ensure args is a MOOList
+        if not isinstance(args, MOOList):
+            args = MOOList(list(args)) if hasattr(args, '__iter__') else MOOList([args])
+
+        argstr = " ".join(str(a) for a in args._list) if args._list else ""
+
+        new_frame.rt_env[0] = player_id                  # player
+        new_frame.rt_env[1] = this                       # this
+        new_frame.rt_env[2] = caller_id                  # caller
+        new_frame.rt_env[3] = MOOString(verb)            # verb
+        new_frame.rt_env[4] = args                       # args
+        new_frame.rt_env[5] = MOOString(argstr)          # argstr
+
+        # Copy context variables from caller frame
+        if len(current.rt_env) > 10:
+            new_frame.rt_env[6] = current.rt_env[6]      # dobj
+            new_frame.rt_env[7] = current.rt_env[7]      # dobjstr
+            new_frame.rt_env[8] = current.rt_env[8]      # iobj
+            new_frame.rt_env[9] = current.rt_env[9]      # iobjstr
+            new_frame.rt_env[10] = current.rt_env[10]    # prepstr
+        else:
+            # Default values if caller doesn't have these
+            new_frame.rt_env[6] = -1                     # dobj
+            new_frame.rt_env[7] = MOOString("")          # dobjstr
+            new_frame.rt_env[8] = -1                     # iobj
+            new_frame.rt_env[9] = MOOString("")          # iobjstr
+            new_frame.rt_env[10] = MOOString("")         # prepstr
+
+        # Push the new frame onto the call stack
+        self.call_stack.append(new_frame)
+
     def _get_primitive_prototype(self, value: MOOPrimitive) -> ObjNum | None:
         """Get the prototype object for a primitive value.
 
@@ -2048,6 +2148,12 @@ class VM:
             tb = traceback.format_exc()
             raise VMError(
                 f"Error calling built-in function {func_name}: {e} {tb}")
+
+        # Check for tail call marker (pass() pushes a frame)
+        if isinstance(result, _TailCallMarker):
+            # Builtin pushed a frame - don't push result, continue on new frame
+            return None
+
         # MOO builtins always return a value; None becomes 0
         return result if result is not None else 0
 
