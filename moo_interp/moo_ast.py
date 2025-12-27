@@ -1594,16 +1594,22 @@ class ToAst(Transformer):
         # else: name is already an expression from obj.(expr)
         return _Property(object, name)
 
-    def verb_call(self, call):
+    def verb_call_static(self, call):
+        """Handle obj:verb() - literal verb name."""
         object, name, args = call
-        # Handle both obj:verb (Identifier) and obj:(expr) (any expression)
-        if isinstance(name, Identifier):
-            # Treat this:helper like this:("helper") for correct bytecode
-            name = StringLiteral(name.value)
-        # args is now a _List from call_arguments transformer
+        # name is an Identifier (from IDENTIFIER terminal), convert to StringLiteral
+        name = StringLiteral(name.value if isinstance(name, Identifier) else str(name))
         if isinstance(args, _List):
             return _VerbCall(object, name, args)
-        # Fallback for edge cases
+        return _VerbCall(object, name, _List(list(args) if args else []))
+
+    def verb_call_dynamic(self, call):
+        """Handle obj:(expr)() - computed verb name at runtime."""
+        object, name, args = call
+        # name is an expression (Identifier, StringLiteral, etc.) to be evaluated at runtime
+        # Keep it as-is for dynamic lookup
+        if isinstance(args, _List):
+            return _VerbCall(object, name, args)
         return _VerbCall(object, name, _List(list(args) if args else []))
 
     def index(self, args):

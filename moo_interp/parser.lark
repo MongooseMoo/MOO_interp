@@ -149,7 +149,8 @@ UNARY_OP: "!" | "~" | "-"
         | postfix ".:" IDENTIFIER -> waif_property
         | postfix "[" index_target "]" -> index
         | postfix "[" range_start ".." range_end "]" -> range
-        | postfix ":" (IDENTIFIER | "(" expression ")") "(" call_arguments ")" -> verb_call
+        | postfix ":" IDENTIFIER "(" call_arguments ")" -> verb_call_static
+        | postfix ":" "(" expression ")" "(" call_arguments ")" -> verb_call_dynamic
 
 // Atoms - base expressions (catch can be used directly, e.g., !`expr!ANY')
 ?atom: "(" expression ")"
