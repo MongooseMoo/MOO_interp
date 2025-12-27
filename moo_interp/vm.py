@@ -1223,7 +1223,7 @@ class VM:
 
         # Get the compiled verb's var_names and rt_env (context vars already at 0-10)
         verb_var_names = compiled_frame.prog.var_names if compiled_frame else []
-        verb_rt_env = compiled_frame.rt_env if compiled_frame else [0] * 11  # Space for context
+        verb_rt_env = compiled_frame.rt_env if compiled_frame else [None] * 11  # Space for context
 
         # Create new stack frame for the verb
         # stack_base: VM stack position after CALL_VERB args are popped

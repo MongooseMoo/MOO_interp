@@ -1912,8 +1912,10 @@ def compile(tree, bi_funcs=None, context_vars=None):
 
     # Create frame with rt_env initialized for all tracked variables
     frame = StackFrame(func_id=0, prog=prog, ip=0, stack=bc)
-    # Initialize rt_env with None/0 for each tracked variable
-    frame.rt_env = [0] * len(state.var_names)
+    # Initialize rt_env with None for each variable (uninitialized state)
+    # Context vars (0-10) will be set by push_activation or run()
+    # Local vars (11+) should remain None until assigned
+    frame.rt_env = [None] * len(state.var_names)
     return frame
 
 
