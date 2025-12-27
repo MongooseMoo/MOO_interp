@@ -2117,14 +2117,13 @@ class VM:
         prop_name = str(prop)
 
         # Handle special pseudo-properties from object flags
-        # MOO flags: bit 0=player, bit 1=programmer, bit 2=wizard
+        # MOO flags: bit 1=programmer, bit 2=wizard
+        # Note: 'player' is NOT a built-in property in MOO - use is_player() builtin instead
         flags = getattr(moo_object, 'flags', 0)
         if prop_name == 'wizard':
             return 1 if (flags & 4) else 0
         elif prop_name == 'programmer':
             return 1 if (flags & 2) else 0
-        elif prop_name == 'player':
-            return 1 if (flags & 1) else 0
         elif prop_name == 'r':
             return 1 if (flags & 0x10) else 0  # readable (FLAG_READ = bit 4)
         elif prop_name == 'w':
