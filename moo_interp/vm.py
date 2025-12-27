@@ -2006,54 +2006,53 @@ class VM:
             elif prop_name == 'programmer':
                 return 0  # WAIFs are never programmers
 
-            # :prop properties - check waif's propvals first, then class default
-            if prop_name.startswith(':'):
-                # First check waif's own value
-                if prop_name in obj.propvals:
-                    return obj.propvals[prop_name]
+            # Waif properties: accessed as w.data, defined on class as :data
+            # Auto-prefix with : for property lookup
+            colon_prop = prop_name if prop_name.startswith(':') else ':' + prop_name
 
-                # Then check class object for default value
-                class_obj = self._require_db().objects.get(obj.get_class())
-                if class_obj is None:
-                    raise MOOException(MOOError.E_INVIND, f"Waif class object #{obj.get_class()} not found")
+            # First check waif's own value
+            if colon_prop in obj.propvals:
+                return obj.propvals[colon_prop]
 
-                # Search class for property definition
-                from lambdamoo_db.database import Clear
-                to_check = [class_obj]
-                visited = set()
+            # Then check class object for default value
+            class_obj = self._require_db().objects.get(obj.get_class())
+            if class_obj is None:
+                raise MOOException(MOOError.E_INVIND, f"Waif class object #{obj.get_class()} not found")
 
-                while to_check:
-                    current_obj = to_check.pop(0)
-                    obj_id = getattr(current_obj, 'id', None)
-                    if obj_id in visited:
-                        continue
-                    visited.add(obj_id)
+            # Search class for property definition
+            from lambdamoo_db.database import Clear
+            to_check = [class_obj]
+            visited = set()
 
-                    for p in getattr(current_obj, 'properties', []):
-                        if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
-                            value = p.value
-                            if isinstance(value, Clear):
-                                break  # Check parents
-                            if isinstance(value, str) and not isinstance(value, MOOString):
-                                value = MOOString(value)
-                            elif isinstance(value, list) and not isinstance(value, MOOList):
-                                value = MOOList(value)
-                            elif isinstance(value, dict) and not isinstance(value, MOOMap):
-                                value = MOOMap(value)
-                            return value
+            while to_check:
+                current_obj = to_check.pop(0)
+                obj_id = getattr(current_obj, 'id', None)
+                if obj_id in visited:
+                    continue
+                visited.add(obj_id)
 
-                    # Add parents to search
-                    parents = getattr(current_obj, 'parents', None)
-                    if parents:
-                        for parent_id in parents:
-                            if parent_id >= 0:
-                                parent_obj = self._require_db().objects.get(parent_id)
-                                if parent_obj:
-                                    to_check.append(parent_obj)
+                for p in getattr(current_obj, 'properties', []):
+                    if getattr(p, 'propertyName', getattr(p, 'name', '')) == colon_prop:
+                        value = p.value
+                        if isinstance(value, Clear):
+                            break  # Check parents
+                        if isinstance(value, str) and not isinstance(value, MOOString):
+                            value = MOOString(value)
+                        elif isinstance(value, list) and not isinstance(value, MOOList):
+                            value = MOOList(value)
+                        elif isinstance(value, dict) and not isinstance(value, MOOMap):
+                            value = MOOMap(value)
+                        return value
 
-                raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on waif class")
+                # Add parents to search
+                parents = getattr(current_obj, 'parents', None)
+                if parents:
+                    for parent_id in parents:
+                        if parent_id >= 0:
+                            parent_obj = self._require_db().objects.get(parent_id)
+                            if parent_obj:
+                                to_check.append(parent_obj)
 
-            # Non-:prop properties on waif don't exist
             raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on waif")
 
         if not isinstance(obj, int):
@@ -2172,54 +2171,53 @@ class VM:
             if prop_name in ('owner', 'class', 'wizard', 'programmer'):
                 raise MOOException(MOOError.E_PERM, f"Cannot set waif.{prop_name}")
 
-            # :prop properties
-            if prop_name.startswith(':'):
-                # Check for self-reference (E_RECMOVE)
-                if refers_to_waif(value, obj):
-                    raise MOOException(MOOError.E_RECMOVE, "Waif cannot contain reference to itself")
+            # Waif properties: accessed as w.data, defined on class as :data
+            # Auto-prefix with : for property lookup
+            colon_prop = prop_name if prop_name.startswith(':') else ':' + prop_name
 
-                # Verify property exists on class object
-                class_obj = self._require_db().objects.get(obj.get_class())
-                if class_obj is None:
-                    raise MOOException(MOOError.E_INVIND, f"Waif class object #{obj.get_class()} not found")
+            # Check for self-reference (E_RECMOVE)
+            if refers_to_waif(value, obj):
+                raise MOOException(MOOError.E_RECMOVE, "Waif cannot contain reference to itself")
 
-                # Search class for property definition
-                from lambdamoo_db.database import Clear
-                to_check = [class_obj]
-                visited = set()
-                prop_found = False
+            # Verify property exists on class object
+            class_obj = self._require_db().objects.get(obj.get_class())
+            if class_obj is None:
+                raise MOOException(MOOError.E_INVIND, f"Waif class object #{obj.get_class()} not found")
 
-                while to_check and not prop_found:
-                    current_obj = to_check.pop(0)
-                    obj_id = getattr(current_obj, 'id', None)
-                    if obj_id in visited:
-                        continue
-                    visited.add(obj_id)
+            # Search class for property definition
+            from lambdamoo_db.database import Clear
+            to_check = [class_obj]
+            visited = set()
+            prop_found = False
 
-                    for p in getattr(current_obj, 'properties', []):
-                        if getattr(p, 'propertyName', getattr(p, 'name', '')) == prop_name:
-                            prop_found = True
-                            break
+            while to_check and not prop_found:
+                current_obj = to_check.pop(0)
+                obj_id = getattr(current_obj, 'id', None)
+                if obj_id in visited:
+                    continue
+                visited.add(obj_id)
 
-                    if not prop_found:
-                        # Add parents to search
-                        parents = getattr(current_obj, 'parents', None)
-                        if parents:
-                            for parent_id in parents:
-                                if parent_id >= 0:
-                                    parent_obj = self._require_db().objects.get(parent_id)
-                                    if parent_obj:
-                                        to_check.append(parent_obj)
+                for p in getattr(current_obj, 'properties', []):
+                    if getattr(p, 'propertyName', getattr(p, 'name', '')) == colon_prop:
+                        prop_found = True
+                        break
 
                 if not prop_found:
-                    raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not defined on waif class")
+                    # Add parents to search
+                    parents = getattr(current_obj, 'parents', None)
+                    if parents:
+                        for parent_id in parents:
+                            if parent_id >= 0:
+                                parent_obj = self._require_db().objects.get(parent_id)
+                                if parent_obj:
+                                    to_check.append(parent_obj)
 
-                # Store value in waif's propvals
-                obj.propvals[prop_name] = value
-                return value
+            if not prop_found:
+                raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not defined on waif class")
 
-            # Non-:prop properties on waif don't exist
-            raise MOOException(MOOError.E_PROPNF, f"Property '{prop_name}' not found on waif")
+            # Store value in waif's propvals (using colon-prefixed key)
+            obj.propvals[colon_prop] = value
+            return value
 
         if not isinstance(obj, int):
             raise MOOException(MOOError.E_TYPE, f"Object reference must be int, got {type(obj)}")
