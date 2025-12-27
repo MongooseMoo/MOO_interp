@@ -1989,18 +1989,23 @@ class VM:
 
         # Handle WAIF property access
         if isinstance(obj, Waif):
+            prop_name = str(prop)
+
+            # Special waif pseudo-properties - some work even when invalid
+            if prop_name == 'class':
+                from lambdamoo_db.database import ObjNum
+                # Return #-1 if waif is invalid (class was recycled)
+                if not obj.is_valid():
+                    return ObjNum(-1)
+                return ObjNum(obj.get_class())
+
+            # For other properties, invalid waif raises E_INVIND
             if not obj.is_valid():
                 raise MOOException(MOOError.E_INVIND, "Invalid waif")
 
-            prop_name = str(prop)
-
-            # Special waif pseudo-properties
             if prop_name == 'owner':
                 from lambdamoo_db.database import ObjNum
                 return ObjNum(obj.get_owner())
-            elif prop_name == 'class':
-                from lambdamoo_db.database import ObjNum
-                return ObjNum(obj.get_class())
             elif prop_name == 'wizard':
                 return 0  # WAIFs are never wizards
             elif prop_name == 'programmer':
