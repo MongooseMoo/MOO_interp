@@ -1327,17 +1327,59 @@ class VM:
             for verb in obj.verbs:
                 # Split verb name into aliases and check each
                 verb_aliases = verb.name.split()
-                if verb_name in verb_aliases:
-                    return verb
-                # Also check exact match for simple verbs
-                if verb.name == verb_name:
-                    return verb
+                for alias in verb_aliases:
+                    if self._verb_matches(alias, verb_name):
+                        return verb
 
             # Add parents to check list
             if hasattr(obj, 'parents') and obj.parents:
                 to_check.extend(obj.parents)
 
         return None
+
+    def _verb_matches(self, pattern: str, verb_name: str) -> bool:
+        """Check if verb_name matches a MOO verb pattern.
+
+        MOO verb patterns use * to indicate optional suffix.
+        Example: "co*nnect" matches "co", "con", "conn", "conne", "connec", "connect"
+
+        The pattern means: required prefix (before *) + optional suffix (after *)
+        The verb_name must:
+        1. Start with the required prefix
+        2. Be a prefix of the full verb name (prefix + suffix)
+
+        Args:
+            pattern: Verb pattern, possibly with * wildcard
+            verb_name: Verb name to match
+
+        Returns:
+            True if verb_name matches pattern
+        """
+        # Strip @ prefix (used for second-person commands like "@connect")
+        if pattern.startswith('@'):
+            if verb_name.startswith('@'):
+                verb_name = verb_name[1:]
+                pattern = pattern[1:]
+            else:
+                return False
+
+        # Check for wildcard
+        if '*' in pattern:
+            prefix, suffix = pattern.split('*', 1)
+            full_name = prefix + suffix
+
+            # verb_name must start with required prefix
+            if not verb_name.lower().startswith(prefix.lower()):
+                return False
+
+            # verb_name must be a prefix of the full verb name
+            if not full_name.lower().startswith(verb_name.lower()):
+                return False
+
+            return True
+        else:
+            # Exact match (case-insensitive)
+            return pattern.lower() == verb_name.lower()
 
     # Control Flow Operations
 
