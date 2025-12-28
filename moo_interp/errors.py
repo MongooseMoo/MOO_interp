@@ -27,23 +27,37 @@ class MOOError(IntEnum):
 # Dictionary mapping error name strings to MOOError enum members for runtime lookup
 ERROR_CODES = {e.name: e for e in MOOError}
 
-# Dictionary mapping type name strings to their integer codes for runtime lookup
-# Used by typeof() comparisons like: typeof(x) == NUM
-# ToastStunt type codes match these values
-TYPE_CODES = {
-    # Primary names
-    "NUM": 0,       # Also called INT - integer type
-    "INT": 0,       # Alias for NUM
-    "OBJ": 1,       # Object reference
-    "STR": 2,       # String
-    "ERR": 3,       # Error type
-    "LIST": 4,      # List/array
-    "FLOAT": 9,     # Floating point
-    "MAP": 10,      # Map/dictionary (ToastStunt extension)
-    "ANON": 12,     # Anonymous object (ToastStunt extension)
-    "WAIF": 13,     # Waif object (ToastStunt extension)
-    "BOOL": 14,     # Boolean (ToastStunt extension)
+# MOO type codes (toaststunt compatible)
+# These are the canonical values - BuiltinFunctions.typeof() returns these
+TYPE_INT = 0
+TYPE_OBJ = 1
+TYPE_STR = 2
+TYPE_ERR = 3
+TYPE_LIST = 4
+TYPE_FLOAT = 9
+TYPE_MAP = 10
+TYPE_ANON = 12
+TYPE_WAIF = 13
+TYPE_BOOL = 14
+
+# Mapping from type code to canonical name (used by typename())
+TYPE_NAMES = {
+    TYPE_INT: "INT",
+    TYPE_OBJ: "OBJ",
+    TYPE_STR: "STR",
+    TYPE_ERR: "ERR",
+    TYPE_LIST: "LIST",
+    TYPE_FLOAT: "FLOAT",
+    TYPE_MAP: "MAP",
+    TYPE_ANON: "ANON",
+    TYPE_WAIF: "WAIF",
+    TYPE_BOOL: "BOOL",
 }
+
+# Reverse mapping: type name string to code (used by exec_push for MOO constants)
+# Includes both "NUM" (MOO convention) and "INT" (internal name)
+TYPE_CODES = {name: code for code, name in TYPE_NAMES.items()}
+TYPE_CODES["NUM"] = TYPE_INT  # MOO uses NUM, not INT
 
 
 class MOOException(Exception):

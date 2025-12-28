@@ -22,7 +22,12 @@ if TYPE_CHECKING:
     from .vm import VM
 
 from lambdamoo_db.database import MooDatabase, MooObject, ObjNum
-from .errors import MOOError, MOOException
+from .errors import (
+    MOOError, MOOException,
+    TYPE_INT, TYPE_OBJ, TYPE_STR, TYPE_ERR, TYPE_LIST,
+    TYPE_FLOAT, TYPE_MAP, TYPE_ANON, TYPE_WAIF, TYPE_BOOL,
+    TYPE_NAMES,
+)
 from .list import MOOList
 from .map import MOOMap
 from .string import MOOString
@@ -1967,57 +1972,44 @@ class BuiltinFunctions:
     # Type/Utility functions
     # =========================================================================
 
-    # MOO type codes (toaststunt compatible)
-    TYPE_INT = 0
-    TYPE_OBJ = 1
-    TYPE_STR = 2
-    TYPE_ERR = 3
-    TYPE_LIST = 4
-    TYPE_FLOAT = 9
-    TYPE_MAP = 10
-    TYPE_ANON = 12
-    TYPE_WAIF = 13
-    TYPE_BOOL = 14
+    # Type codes imported from errors.py: TYPE_INT, TYPE_OBJ, TYPE_STR, etc.
 
     def typeof(self, x) -> int:
         """Return the MOO type code for a value."""
         from lambdamoo_db.database import Anon
         from .waif import Waif
         if isinstance(x, bool):
-            return self.TYPE_BOOL
+            return TYPE_BOOL
         elif isinstance(x, Waif):
             # Waif must be checked before other types
-            return self.TYPE_WAIF
+            return TYPE_WAIF
         elif isinstance(x, Anon):
             # Anon must be checked before ObjNum since it also inherits from int
-            return self.TYPE_ANON
+            return TYPE_ANON
         elif isinstance(x, ObjNum):
             # ObjNum must be checked before int since it inherits from int
-            return self.TYPE_OBJ
+            return TYPE_OBJ
         elif isinstance(x, int):
-            return self.TYPE_INT
+            return TYPE_INT
         elif isinstance(x, float):
-            return self.TYPE_FLOAT
+            return TYPE_FLOAT
         elif isinstance(x, (str, MOOString)):
-            return self.TYPE_STR
+            return TYPE_STR
         elif isinstance(x, (list, MOOList)):
-            return self.TYPE_LIST
+            return TYPE_LIST
         elif isinstance(x, (dict, MOOMap)):
-            return self.TYPE_MAP
+            return TYPE_MAP
         elif isinstance(x, MooObject):
-            return self.TYPE_OBJ
+            return TYPE_OBJ
         elif isinstance(x, MOOError):
-            return self.TYPE_ERR
+            return TYPE_ERR
         else:
-            return self.TYPE_INT  # fallback
-
-    # Type name mapping
-    TYPE_NAMES = {0: "INT", 1: "OBJ", 2: "STR", 3: "ERR", 4: "LIST", 9: "FLOAT", 10: "MAP", 12: "ANON", 13: "WAIF", 14: "BOOL"}
+            return TYPE_INT  # fallback
 
     def typename(self, x):
         """Return the type name as a string."""
         type_code = self.typeof(x)
-        return MOOString(self.TYPE_NAMES.get(type_code, "UNKNOWN"))
+        return MOOString(TYPE_NAMES.get(type_code, "UNKNOWN"))
 
     def is_type(self, x, type_code):
         """Check if x is of the given type code."""
