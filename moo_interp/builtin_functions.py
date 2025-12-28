@@ -1048,8 +1048,13 @@ class BuiltinFunctions:
                         break  # Too many suspends
 
                     # Wait for suspend time
+                    # Use gevent.sleep if available (server environment), otherwise time.sleep (CLI)
                     if vm.suspend_seconds > 0:
-                        time.sleep(vm.suspend_seconds)
+                        try:
+                            import gevent
+                            gevent.sleep(vm.suspend_seconds)
+                        except ImportError:
+                            time.sleep(vm.suspend_seconds)
 
                     # Resume: push 0 as return value and reset state
                     vm.push(0)
