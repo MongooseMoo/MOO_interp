@@ -524,7 +524,7 @@ class BuiltinFunctions:
 
         hash_object.update(string.encode('utf-8'))
         if binary:
-            return MOOString(hash_object.digest().decode('latin-1'))
+            return MOOString(self._encode_binary_digest(hash_object.digest()))
         return MOOString(hash_object.hexdigest().upper())
 
     def exp(self, x):
@@ -2304,8 +2304,7 @@ class BuiltinFunctions:
         h = hashlib.new(self._get_hash_algo(algo))
         h.update(self._unwrap_bytes(data))
         if binary:
-            # Return raw bytes as string (latin-1 preserves byte values)
-            return MOOString(h.digest().decode('latin-1'))
+            return MOOString(self._encode_binary_digest(h.digest()))
         return MOOString(h.hexdigest().upper())
 
     def value_hash(self, val, algo: str = 'SHA256', binary: int = 0) -> MOOString:
@@ -2314,7 +2313,7 @@ class BuiltinFunctions:
         h = hashlib.new(self._get_hash_algo(algo))
         h.update(literal.encode('utf-8'))
         if binary:
-            return MOOString(h.digest().decode('latin-1'))
+            return MOOString(self._encode_binary_digest(h.digest()))
         return MOOString(h.hexdigest().upper())
 
     def string_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
@@ -2324,7 +2323,7 @@ class BuiltinFunctions:
         h = hmac.new(key_str.encode('utf-8'), str(data).encode('utf-8'),
                      self._get_hash_algo(algo))
         if binary:
-            return MOOString(h.digest().decode('latin-1'))
+            return MOOString(self._encode_binary_digest(h.digest()))
         return MOOString(h.hexdigest().upper())
 
     def binary_hmac(self, data, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
@@ -2332,7 +2331,7 @@ class BuiltinFunctions:
         h = hmac.new(self._unwrap_bytes(key), self._unwrap_bytes(data),
                      self._get_hash_algo(algo))
         if binary:
-            return MOOString(h.digest().decode('latin-1'))
+            return MOOString(self._encode_binary_digest(h.digest()))
         return MOOString(h.hexdigest().upper())
 
     def value_hmac(self, val, key, algo: str = 'SHA256', binary: int = 0) -> MOOString:
@@ -2343,7 +2342,7 @@ class BuiltinFunctions:
         h = hmac.new(key_str.encode('utf-8'), literal.encode('utf-8'),
                      self._get_hash_algo(algo))
         if binary:
-            return MOOString(h.digest().decode('latin-1'))
+            return MOOString(self._encode_binary_digest(h.digest()))
         return MOOString(h.hexdigest().upper())
 
     # =========================================================================
@@ -2486,6 +2485,15 @@ class BuiltinFunctions:
     # =========================================================================
     # Binary encode/decode
     # =========================================================================
+
+    def _encode_binary_digest(self, digest: bytes) -> str:
+        """
+        Encode binary hash digest to MOO binary string format using ~XX escapes.
+
+        For hash/HMAC binary output, ALL bytes are encoded as ~XX (no printable chars).
+        This ensures the length is exactly 3 * num_bytes (e.g., MD5: 16 * 3 = 48).
+        """
+        return ''.join(f'~{b:02X}' for b in digest)
 
     def encode_binary(self, *args) -> MOOString:
         """
