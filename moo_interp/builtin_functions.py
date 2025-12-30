@@ -69,6 +69,12 @@ class BuiltinFunctions:
         self._sqlite_handles = {}  # SQLite connection handles
         self._next_sqlite_handle = 1
 
+        # Server options (limits)
+        self.max_list_value_bytes: int = 0  # 0 = no limit
+        self.max_map_value_bytes: int = 0   # 0 = no limit
+        self.max_string_concat: int = 0     # 0 = no limit
+        self.max_concat_catchable: bool = False  # If False, E_QUOTA causes abort instead
+
         # automatically register functions
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
@@ -577,6 +583,7 @@ class BuiltinFunctions:
             # Insert after the given position (MOO is 1-based)
             # position=1 means insert after index 0, so at index 1
             new_list._list.insert(position, value)
+        self._check_value_bytes_limit(new_list, is_list=True)
         return new_list
 
     def listdelete(self, lst: MOOList, index: int) -> MOOList:
@@ -607,6 +614,7 @@ class BuiltinFunctions:
         # Insert before the given position (MOO is 1-based)
         # position=1 means insert at index 0
         new_list._list.insert(position - 1, value)
+        self._check_value_bytes_limit(new_list, is_list=True)
         return new_list
 
     def listset(self, lst: MOOList, value, index: int) -> MOOList:
@@ -621,6 +629,7 @@ class BuiltinFunctions:
         new_list = MOOList()
         new_list._list = list(lst._list)
         new_list[index] = value
+        self._check_value_bytes_limit(new_list, is_list=True)
         return new_list
 
     def all_members(self, value: MOOAny, list: MOOList):
@@ -2140,6 +2149,34 @@ class BuiltinFunctions:
         """Return approximate memory size of a value in bytes."""
         return sys.getsizeof(x)
 
+    def _check_value_bytes_limit(self, value, is_list: bool = True):
+        """Check if a value exceeds max_list_value_bytes or max_map_value_bytes.
+
+        Raises MOOException(E_QUOTA) if limit is exceeded.
+
+        Args:
+            value: The value to check
+            is_list: True for list limit, False for map limit
+        """
+        limit = self.max_list_value_bytes if is_list else self.max_map_value_bytes
+        if limit > 0:  # 0 means no limit
+            size = self.value_bytes(value)
+            if size > limit:
+                raise MOOException(MOOError.E_QUOTA, f"Value size {size} exceeds limit {limit}")
+
+    def _check_string_concat_limit(self, result_string):
+        """Check if a string exceeds max_string_concat.
+
+        Raises MOOException(E_QUOTA) if limit is exceeded.
+
+        Args:
+            result_string: The string to check
+        """
+        if self.max_string_concat > 0:  # 0 means no limit
+            length = len(str(result_string))
+            if length > self.max_string_concat:
+                raise MOOException(MOOError.E_QUOTA, f"String length {length} exceeds limit {self.max_string_concat}")
+
     # =========================================================================
     # List/Set functions
     # =========================================================================
@@ -2149,6 +2186,7 @@ class BuiltinFunctions:
         result = MOOList(list(lst))
         if val not in result:
             result.append(val)
+        self._check_value_bytes_limit(result, is_list=True)
         return result
 
     def setremove(self, lst: MOOList, val) -> MOOList:
@@ -2499,7 +2537,7 @@ class BuiltinFunctions:
         """
         Encode values to MOO binary string format using ~XX escapes.
 
-        Format: printable chars (except ~) stay as-is, others become ~XX.
+        Format: printable chars (space + graph, except ~) stay as-is, others become ~XX.
         Tilde (0x7e) is treated as non-printable and becomes ~7E.
 
         Args can be: int (0-255), string, or list of ints/strings.
@@ -2515,7 +2553,8 @@ class BuiltinFunctions:
                     # String - encode each char
                     for char in str(byte_val):
                         b = ord(char)
-                        if 33 <= b <= 126 and b != 0x7e:  # printable except ~
+                        # Match toaststunt: space (32) + isgraph (33-126) except tilde (126)
+                        if 32 <= b <= 126 and b != 0x7e:  # printable (space + graph, except ~)
                             result.append(chr(b))
                         else:
                             result.append(f'~{b:02X}')
@@ -2536,7 +2575,9 @@ class BuiltinFunctions:
             elif isinstance(arg, int):
                 encode_bytes([arg])
 
-        return MOOString(''.join(result))
+        result_str = MOOString(''.join(result))
+        self._check_string_concat_limit(result_str)
+        return result_str
 
     def decode_binary(self, data, fully: int = 0) -> MOOList:
         """
