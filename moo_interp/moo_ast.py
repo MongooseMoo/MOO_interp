@@ -1198,7 +1198,7 @@ class _Range(_Expression):
         return result
 
     def to_moo(self) -> str:
-        return f"{self.object.to_moo()}[{self.start.to_moo()} .. {self.end.to_moo()}]"
+        return f"{self.object.to_moo()}[{self.start.to_moo()}..{self.end.to_moo()}]"
 
 
 @dataclass

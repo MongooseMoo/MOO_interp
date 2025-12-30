@@ -1001,8 +1001,8 @@ class VM:
         # MOO x[2..4] means elements 2, 3, 4 (inclusive)
         # Python slice [1:4] means indices 1, 2, 3 (exclusive end)
         #
-        # Special case: x[n..n] returns the single element, not a sublist/substring
-        # This is toaststunt/MOO behavior
+        # Special case for strings and maps: x[n..n] returns the single element
+        # For lists: x[n..n] returns a single-element list (not the element itself)
 
         # Range bounds checking (like toaststunt)
         # For non-inverted ranges (start <= end): check all bounds
@@ -1029,9 +1029,7 @@ class VM:
                 return MOOString(str(lst)[py_start])
             return MOOString(str(lst)[py_start:py_end])
         elif isinstance(lst, MOOList):
-            # Single element range returns the element itself
-            if start == end:
-                return lst._list[py_start]
+            # List ranges always return a list, even for single element
             return MOOList(lst._list[py_start:py_end])
         else:
             # Map range: start and end are KEY values, not positions
