@@ -319,8 +319,15 @@ class MooPythonTransformer:
         obj = self.transform(node.object)
         if isinstance(node.name, moo_ast.StringLiteral):
             func = pyast.Attribute(value=obj, attr=node.name.value, ctx=pyast.Load())
+        elif isinstance(node.name, moo_ast.Identifier):
+            func = pyast.Attribute(value=obj, attr=node.name.value, ctx=pyast.Load())
         else:
-            func = pyast.Attribute(value=obj, attr=str(node.name.value), ctx=pyast.Load())
+            # Computed verb name: obj:(expr)(args) → getattr(obj, expr)(args)
+            func = pyast.Call(
+                func=pyast.Name(id='getattr', ctx=pyast.Load()),
+                args=[obj, self.transform(node.name)],
+                keywords=[],
+            )
         args = [self.transform(arg) for arg in node.arguments.value]
         return pyast.Call(func=func, args=args, keywords=[])
 
@@ -335,17 +342,18 @@ class MooPythonTransformer:
         # From the grammar: dollar_verb_call is $verb() which means #0:verb()
         # So DollarVerbCall.name is the verb name, DollarVerbCall.arguments is args
         # Object is implicit #0 (system)
+        system_ref = pyast.Name(id='system', ctx=pyast.Load())
         if isinstance(node.name, moo_ast.StringLiteral):
-            verb_name = node.name.value
+            func = pyast.Attribute(value=system_ref, attr=node.name.value, ctx=pyast.Load())
         elif isinstance(node.name, moo_ast.Identifier):
-            verb_name = node.name.value
+            func = pyast.Attribute(value=system_ref, attr=node.name.value, ctx=pyast.Load())
         else:
-            verb_name = str(node.name.value)
-        func = pyast.Attribute(
-            value=pyast.Name(id='system', ctx=pyast.Load()),
-            attr=verb_name,
-            ctx=pyast.Load(),
-        )
+            # Computed verb name: $(expr)(args) → getattr(system, expr)(args)
+            func = pyast.Call(
+                func=pyast.Name(id='getattr', ctx=pyast.Load()),
+                args=[system_ref, self.transform(node.name)],
+                keywords=[],
+            )
         args = [self.transform(arg) for arg in node.arguments.value]
         return pyast.Call(func=func, args=args, keywords=[])
 
