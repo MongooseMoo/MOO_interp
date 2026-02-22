@@ -254,14 +254,56 @@ class BuiltinFunctions:
             return error_val.name
         return str(error_val)
 
+    # Canonical error messages matching toaststunt's unparse_error()
+    ERROR_MESSAGES = {
+        MOOError.E_NONE: "No error",
+        MOOError.E_TYPE: "Type mismatch",
+        MOOError.E_DIV: "Division by zero",
+        MOOError.E_PERM: "Permission denied",
+        MOOError.E_PROPNF: "Property not found",
+        MOOError.E_VERBNF: "Verb not found",
+        MOOError.E_VARNF: "Variable not found",
+        MOOError.E_INVIND: "Invalid indirection",
+        MOOError.E_RECMOVE: "Recursive move",
+        MOOError.E_MAXREC: "Too many verb calls",
+        MOOError.E_RANGE: "Range error",
+        MOOError.E_ARGS: "Incorrect number of arguments",
+        MOOError.E_NACC: "Move refused by destination",
+        MOOError.E_INVARG: "Invalid argument",
+        MOOError.E_QUOTA: "Resource limit exceeded",
+        MOOError.E_FLOAT: "Floating-point arithmetic error",
+        MOOError.E_FILE: "File error",
+        MOOError.E_EXEC: "Exec error",
+        MOOError.E_INTRPT: "Interrupted",
+    }
+
+    def error_message(self, error_val):
+        """Return the human-readable message for a MOOError (e.g. E_TYPE -> 'Type mismatch')."""
+        if isinstance(error_val, MOOError):
+            return self.ERROR_MESSAGES.get(error_val, "Unknown error")
+        return str(error_val)
+
+    def _require_float(self, value, func_name):
+        """Enforce that a value is a float, raising E_TYPE otherwise.
+
+        Math functions in MOO (sqrt, sin, cos, etc.) only accept float arguments.
+        Passing an int raises E_TYPE per toaststunt semantics.
+        """
+        if not isinstance(value, float):
+            raise MOOException(MOOError.E_TYPE, f"{func_name}: requires float argument")
+        return value
+
     def to_string(self, value):
         from .waif import Waif
         if isinstance(value, Waif):
             return str(value)  # Waif.__str__ returns [[Waif class #N]] format
         elif isinstance(value, ObjNum):
             return str(value)  # ObjNum.__str__ already includes #
+        elif isinstance(value, MOOError):
+            # Must be before int check (MOOError extends IntEnum which extends int)
+            return self.error_message(value)
         elif isinstance(value, bool):
-            return str(int(value))  # MOO has no boolean type: True->"1", False->"0"
+            return "true" if value else "false"
         elif isinstance(value, int):
             return str(value)
         elif isinstance(value, MOOList):
@@ -272,8 +314,6 @@ class BuiltinFunctions:
             return str(value)
         elif isinstance(value, float):
             return str(value)
-        elif isinstance(value, MOOError):
-            return self.unparse_error(value)
         # elif isinstance(value, MOOAnon):
             # return "*anonymous*"
         else:
@@ -288,6 +328,9 @@ class BuiltinFunctions:
             # Extract numeric value, not the ObjNum object
             # int() on ObjNum just returns itself, so use int.__new__ or .value
             return int.__index__(value)
+        elif isinstance(value, MOOError):
+            # Must be before int check (MOOError extends IntEnum which extends int)
+            return int(value.value)
         elif isinstance(value, bool):
             # Check bool before int (bool inherits from int)
             return 1 if value else 0
@@ -297,11 +340,15 @@ class BuiltinFunctions:
             try:
                 return int(value)
             except ValueError:
-                return 0
+                # Try parsing as float then truncating (e.g. "3.5" -> 3)
+                try:
+                    return int(float(value))
+                except (ValueError, OverflowError):
+                    return 0
         elif isinstance(value, float):
             return int(value)
-        elif isinstance(value, MOOError):
-            return self.unparse_error(value)
+        elif isinstance(value, (MOOList, MOOMap)):
+            raise MOOException(MOOError.E_TYPE, "toint: cannot convert list or map to integer")
         # elif isinstance(value, MOOAnon):
             # return 0
         else:
@@ -311,6 +358,9 @@ class BuiltinFunctions:
         # Check ObjNum FIRST before int (ObjNum inherits from int)
         if isinstance(value, ObjNum):
             return float(int.__index__(value))
+        elif isinstance(value, MOOError):
+            # Must be before int check (MOOError extends IntEnum which extends int)
+            return float(value.value)
         # Check bool BEFORE int (bool inherits from int)
         # In MOO, tofloat(true/false) raises E_TYPE
         elif isinstance(value, bool):
@@ -324,8 +374,6 @@ class BuiltinFunctions:
                 raise MOOException(MOOError.E_INVARG, "tofloat: cannot convert string to float")
         elif isinstance(value, float):
             return value
-        elif isinstance(value, MOOError):
-            return self.unparse_error(value)
         # elif isinstance(value, MOOAnon):
             # return 0.0
         else:
@@ -342,10 +390,12 @@ class BuiltinFunctions:
         return self._max(*args)
 
     def floor(self, value):
-        return float(math.floor(self.tofloat(value)))
+        self._require_float(value, "floor")
+        return float(math.floor(value))
 
     def ceil(self, value):
-        return float(math.ceil(self.tofloat(value)))
+        self._require_float(value, "ceil")
+        return float(math.ceil(value))
 
     def time(self,):
         import time
@@ -491,13 +541,16 @@ class BuiltinFunctions:
         return 0
 
     def sin(self, value):
-        return math.sin(self.tofloat(value))
+        self._require_float(value, "sin")
+        return math.sin(value)
 
     def cos(self, value):
-        return math.cos(self.tofloat(value))
+        self._require_float(value, "cos")
+        return math.cos(value)
 
     def cosh(self, value):
-        return math.cosh(self.tofloat(value))
+        self._require_float(value, "cosh")
+        return math.cosh(value)
 
     def distance(self, l1: MOOList, l2: MOOList) -> float:
         """Return the distance between two lists."""
@@ -546,37 +599,48 @@ class BuiltinFunctions:
         return MOOString(hash_object.hexdigest().upper())
 
     def exp(self, x):
-        return math.exp(self.tofloat(x))
+        self._require_float(x, "exp")
+        return math.exp(x)
 
     def trunc(self, x):
+        self._require_float(x, "trunc")
         if x < 0:
-            return self.ceil(x)
+            return float(math.ceil(x))
         else:
-            return self.floor(x)
+            return float(math.floor(x))
 
     def acos(self, x):
-        return math.acos(self.tofloat(x))
+        self._require_float(x, "acos")
+        return math.acos(x)
 
     def asin(self, x):
-        return math.asin(self.tofloat(x))
+        self._require_float(x, "asin")
+        return math.asin(x)
 
     def atan(self, x):
-        return math.atan(self.tofloat(x))
+        self._require_float(x, "atan")
+        return math.atan(x)
 
     def atan2(self, y, x):
-        return math.atan2(self.tofloat(y), self.tofloat(x))
+        self._require_float(y, "atan2")
+        self._require_float(x, "atan2")
+        return math.atan2(y, x)
 
     def log10(self, x):
-        return math.log10(self.tofloat(x))
+        self._require_float(x, "log10")
+        return math.log10(x)
 
     def sin(self, x):
-        return math.sin(self.tofloat(x))
+        self._require_float(x, "sin")
+        return math.sin(x)
 
     def sqrt(self, x):
-        return math.sqrt(self.tofloat(x))
+        self._require_float(x, "sqrt")
+        return math.sqrt(x)
 
     def tan(self, x):
-        return math.tan(self.tofloat(x))
+        self._require_float(x, "tan")
+        return math.tan(x)
 
     def listappend(self, lst: MOOList, value, position: int = None) -> MOOList:
         """Append value to list, optionally after a specific position.
@@ -897,14 +961,19 @@ class BuiltinFunctions:
             return MOOString(str(x))  # ObjNum.__str__ already includes #
         elif isinstance(x, MooObject):
             return MOOString(f"#{x.id}")
-        elif isinstance(x, bool):
-            return MOOString(str(int(x)))  # MOO has no boolean type: True->1, False->0
-        elif isinstance(x, MOOString):
-            return MOOString("\"" + x.data + "\"")
-        elif isinstance(x, str):
-            return MOOString("\"" + x + "\"")
         elif isinstance(x, MOOError):
+            # Must be before int check (MOOError extends IntEnum which extends int)
+            # toliteral uses error_name (e.g. "E_TYPE"), not error_message
             return MOOString(self.unparse_error(x))
+        elif isinstance(x, bool):
+            return MOOString("true" if x else "false")
+        elif isinstance(x, MOOString):
+            # Escape backslashes first, then quotes (per toaststunt unparse_value)
+            escaped = str(x).replace("\\", "\\\\").replace('"', '\\"')
+            return MOOString('"' + escaped + '"')
+        elif isinstance(x, str):
+            escaped = x.replace("\\", "\\\\").replace('"', '\\"')
+            return MOOString('"' + escaped + '"')
         elif isinstance(x, (int, float)):
             return MOOString(str(x))
         elif isinstance(x, MOOList):
@@ -1834,37 +1903,48 @@ class BuiltinFunctions:
     _round = round
 
     def round(self, x):
-        """Round to nearest integer."""
-        return float(self._round(self.tofloat(x)))
+        """Round to nearest integer (round half away from zero, per toaststunt)."""
+        self._require_float(x, "round")
+        # Use round-half-away-from-zero, not Python's banker's rounding
+        if x >= 0:
+            return float(math.floor(x + 0.5))
+        else:
+            return float(math.ceil(x - 0.5))
 
     def cbrt(self, x):
         """Cube root."""
-        val = self.tofloat(x)
-        return math.copysign(abs(val) ** (1/3), val)
+        self._require_float(x, "cbrt")
+        return math.copysign(abs(x) ** (1/3), x)
 
     def log(self, x):
         """Natural logarithm."""
-        return math.log(self.tofloat(x))
+        self._require_float(x, "log")
+        return math.log(x)
 
     def sinh(self, x):
         """Hyperbolic sine."""
-        return math.sinh(self.tofloat(x))
+        self._require_float(x, "sinh")
+        return math.sinh(x)
 
     def tanh(self, x):
         """Hyperbolic tangent."""
-        return math.tanh(self.tofloat(x))
+        self._require_float(x, "tanh")
+        return math.tanh(x)
 
     def asinh(self, x):
         """Inverse hyperbolic sine."""
-        return math.asinh(self.tofloat(x))
+        self._require_float(x, "asinh")
+        return math.asinh(x)
 
     def acosh(self, x):
         """Inverse hyperbolic cosine."""
-        return math.acosh(self.tofloat(x))
+        self._require_float(x, "acosh")
+        return math.acosh(x)
 
     def atanh(self, x):
         """Inverse hyperbolic tangent."""
-        return math.atanh(self.tofloat(x))
+        self._require_float(x, "atanh")
+        return math.atanh(x)
 
     def random_bytes(self, n: int) -> MOOString:
         """Generate n cryptographically secure random bytes.
@@ -2120,7 +2200,7 @@ class BuiltinFunctions:
         elif isinstance(x, float):
             return ObjNum(int(x))
         else:
-            return ObjNum(0)
+            raise MOOException(MOOError.E_TYPE, "toobj: cannot convert to object")
 
     def maphaskey(self, m: MOOMap, key, case_matters: int = 1) -> int:
         """Check if a map contains a key. Returns 1 if found, 0 otherwise."""
