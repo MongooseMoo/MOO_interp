@@ -98,8 +98,14 @@ def test_try_except_with_error_binding():
     frame = compile(ast)
     vm = run(frame)
 
-    # Should return the E_DIV error value (as a string)
-    assert vm.result == "E_DIV", "except should bind error to variable e"
+    # Should return the error as a 4-element list: {error_code, message, value, traceback}
+    # Per MOO spec, except e binds e to {E_DIV, "message", value, traceback}
+    # MOOList is 1-indexed (MOO convention)
+    from moo_interp.errors import MOOError
+    from moo_interp.list import MOOList
+    assert isinstance(vm.result, MOOList), "except should bind error list to variable e"
+    assert len(vm.result) == 4, "error list should have 4 elements"
+    assert vm.result[1] == MOOError.E_DIV, "first element should be E_DIV"
 
 
 def test_try_finally_runs_always():

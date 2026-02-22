@@ -471,6 +471,20 @@ class VM:
         # is almost never the right answer for a runtime error.
         return 'E_TYPE'
 
+    def _get_moo_error(self, error_type: str) -> MOOError:
+        """Convert an error type string like 'E_TYPE' to a MOOError enum value."""
+        error_map = {
+            'E_NONE': MOOError.E_NONE, 'E_TYPE': MOOError.E_TYPE,
+            'E_DIV': MOOError.E_DIV, 'E_PERM': MOOError.E_PERM,
+            'E_PROPNF': MOOError.E_PROPNF, 'E_VERBNF': MOOError.E_VERBNF,
+            'E_VARNF': MOOError.E_VARNF, 'E_INVIND': MOOError.E_INVIND,
+            'E_RECMOVE': MOOError.E_RECMOVE, 'E_MAXREC': MOOError.E_MAXREC,
+            'E_RANGE': MOOError.E_RANGE, 'E_ARGS': MOOError.E_ARGS,
+            'E_NACC': MOOError.E_NACC, 'E_INVARG': MOOError.E_INVARG,
+            'E_QUOTA': MOOError.E_QUOTA, 'E_FLOAT': MOOError.E_FLOAT,
+        }
+        return error_map.get(error_type, MOOError.E_TYPE)
+
     def _handle_exception(self, error_type: str, exception: Exception) -> bool:
         """Check if there's an exception handler that can catch this error.
 
@@ -506,7 +520,19 @@ class VM:
                                     frame.prog.var_names.append(var_name)
                                     frame.rt_env.append(None)
                                 var_index = frame.prog.var_names.index(var_name)
-                                frame.rt_env[var_index] = error_type
+                                # MOO except variable is a 4-element list:
+                                # {error_code, message, value, traceback}
+                                # where error_code is a MOOError enum
+                                error_code_val = self._get_moo_error(error_type)
+                                error_message = str(exception) if exception else ""
+                                error_value = 0  # MOO default error value
+                                error_traceback = MOOList()  # TODO: build real traceback
+                                frame.rt_env[var_index] = MOOList([
+                                    error_code_val,
+                                    MOOString(error_message),
+                                    error_value,
+                                    error_traceback,
+                                ])
                     elif handler_type == 'catch':
                         # Restore stack to depth when catch was set up
                         # This removes any intermediate values from the failed expression

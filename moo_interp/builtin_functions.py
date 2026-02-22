@@ -248,6 +248,12 @@ class BuiltinFunctions:
         fn = self.get_function_by_name(name)
         return self.get_id_by_function(fn) if fn else None
 
+    def unparse_error(self, error_val):
+        """Convert a MOOError enum value to its string name (e.g. E_TYPE -> 'E_TYPE')."""
+        if isinstance(error_val, MOOError):
+            return error_val.name
+        return str(error_val)
+
     def to_string(self, value):
         from .waif import Waif
         if isinstance(value, Waif):
@@ -302,18 +308,24 @@ class BuiltinFunctions:
             raise MOOException(MOOError.E_TYPE, "toint: cannot convert to integer")
 
     def tofloat(self, value):
-        if isinstance(value, int):
+        # Check ObjNum FIRST before int (ObjNum inherits from int)
+        if isinstance(value, ObjNum):
+            return float(int.__index__(value))
+        # Check bool BEFORE int (bool inherits from int)
+        # In MOO, tofloat(true/false) raises E_TYPE
+        elif isinstance(value, bool):
+            raise MOOException(MOOError.E_TYPE, "tofloat: cannot convert to float")
+        elif isinstance(value, int):
             return float(value)
         elif isinstance(value, MOOString):
-            return float(value)
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                raise MOOException(MOOError.E_INVARG, "tofloat: cannot convert string to float")
         elif isinstance(value, float):
             return value
-        elif isinstance(value, ObjNum):
-            return float(int.__index__(value))
         elif isinstance(value, MOOError):
             return self.unparse_error(value)
-        elif isinstance(value, bool):
-            return 1.0 if value else 0.0
         # elif isinstance(value, MOOAnon):
             # return 0.0
         else:
@@ -889,6 +901,10 @@ class BuiltinFunctions:
             return MOOString(str(int(x)))  # MOO has no boolean type: True->1, False->0
         elif isinstance(x, MOOString):
             return MOOString("\"" + x.data + "\"")
+        elif isinstance(x, str):
+            return MOOString("\"" + x + "\"")
+        elif isinstance(x, MOOError):
+            return MOOString(self.unparse_error(x))
         elif isinstance(x, (int, float)):
             return MOOString(str(x))
         elif isinstance(x, MOOList):
@@ -899,7 +915,7 @@ class BuiltinFunctions:
             items = [str(self.toliteral(k)) + " -> " + str(self.toliteral(v)) for k, v in x.items()]
             return MOOString("[" + ", ".join(items) + "]")
         else:
-            raise (TypeError, "Unknown type: " + str(type(x)))
+            raise TypeError("Unknown type: " + str(type(x)))
 
     def mapkeys(self, x):
         # x.__iter__() returns keys in sorted order
