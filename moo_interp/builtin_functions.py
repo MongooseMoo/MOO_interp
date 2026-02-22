@@ -712,10 +712,33 @@ class BuiltinFunctions:
         """Return all indices of value in list."""
         return MOOList([i for i, x in enumerate(list) if x == value])
 
-    def explode(self, string: MOOString, separator: MOOString = " ") -> MOOList:
-        """Split string by separator (default: space)."""
-        # string.split() returns plain Python strings, must convert to MOOString
-        return MOOList([MOOString(s) for s in string.split(separator)])
+    def explode(self, string: MOOString, separator: MOOString = " ", adjacent: int = 0) -> MOOList:
+        """Split string by delimiter character.
+
+        Matches toaststunt's bf_explode (list.cc lines 796-821):
+        - Only uses first character of separator (or space if separator is empty)
+        - Without adjacent flag: strtok behavior - collapses consecutive delimiters,
+          skips leading/trailing delimiters
+        - With adjacent flag: strsep behavior - preserves empty strings between
+          consecutive delimiters
+        - Empty input string returns empty list
+        """
+        s = str(string)
+        sep = str(separator)
+        # Use only first char of separator, or space if empty
+        delim = sep[0] if sep else ' '
+
+        if not s:
+            return MOOList([])
+
+        parts = s.split(delim)
+
+        if adjacent:
+            # strsep behavior: preserve empty strings
+            return MOOList([MOOString(p) for p in parts])
+        else:
+            # strtok behavior: filter out empty strings
+            return MOOList([MOOString(p) for p in parts if p])
 
     def reverse(self, lst: MOOList) -> MOOList:
         """Reverse a list or string."""
@@ -1347,6 +1370,8 @@ class BuiltinFunctions:
         native = self._moo_to_python(x, mode_str)
         # Use compact separators (no spaces) to match MOO format
         result_json = json.dumps(native, separators=(',', ':'))
+        # YAJL uses \u0009 for tab, not \t like Python's json.dumps
+        result_json = result_json.replace('\\t', '\\u0009')
         # Convert lowercase \uxxxx escapes to uppercase \uXXXX to match MOO
         result_json = re.sub(
             r'\\u([0-9a-f]{4})',
@@ -2483,56 +2508,273 @@ class BuiltinFunctions:
     # Regex functions
     # =========================================================================
 
+    def _translate_moo_pattern(self, pattern: str) -> str:
+        """Translate MOO regex pattern to Python regex pattern.
+
+        MOO uses % as escape character (toaststunt pattern.cc translate_pattern):
+        - %( %) -> ( ) capture groups
+        - %| -> | alternation
+        - %1-%9 -> \\1-\\9 backreferences
+        - %b %B -> \\b \\B word boundary
+        - %< %> -> \\b word boundary (MOO-specific)
+        - %w -> [a-zA-Z0-9_] (word char), %W -> [^a-zA-Z0-9_]
+        - %. %* %+ %? %[ %^ %$ -> literal . * + ? [ ^ $
+        - Bare ( ) | are literal in MOO, must be escaped for Python
+        - Bare \\ in MOO -> literal backslash
+        - Inside [...] charset, copy without translation
+        """
+        result = []
+        i = 0
+        while i < len(pattern):
+            c = pattern[i]
+            if c == '%':
+                i += 1
+                if i >= len(pattern):
+                    # Trailing % - invalid pattern
+                    raise MOOException(MOOError.E_INVARG, "match: invalid pattern")
+                nc = pattern[i]
+                if nc in '.*+?[^$|()':
+                    # MOO metachar escape -> Python regex metachar
+                    # %( -> (, %) -> ), %| -> |  (Python metachar)
+                    # %. -> \., %* -> \*, etc. (Python escape)
+                    if nc in '()|':
+                        result.append(nc)
+                    else:
+                        result.append('\\')
+                        result.append(nc)
+                elif nc in '123456789':
+                    result.append('\\')
+                    result.append(nc)
+                elif nc in 'bB':
+                    result.append('\\')
+                    result.append(nc)
+                elif nc == '<' or nc == '>':
+                    result.append('\\b')
+                elif nc == 'w':
+                    result.append('[a-zA-Z0-9_]')
+                elif nc == 'W':
+                    result.append('[^a-zA-Z0-9_]')
+                else:
+                    # %x where x is not a recognized escape -> literal x
+                    result.append(re.escape(nc))
+                i += 1
+            elif c == '\\':
+                # Bare backslash in MOO -> literal backslash in Python regex
+                result.append('\\\\')
+                i += 1
+            elif c == '[':
+                # Character class - copy through without translation
+                result.append(c)
+                i += 1
+                if i < len(pattern) and pattern[i] == '^':
+                    result.append(pattern[i])
+                    i += 1
+                # First ] after [^ or [ is literal
+                if i < len(pattern) and pattern[i] == ']':
+                    result.append(pattern[i])
+                    i += 1
+                while i < len(pattern) and pattern[i] != ']':
+                    result.append(pattern[i])
+                    i += 1
+                if i >= len(pattern):
+                    # Unclosed [ - invalid pattern
+                    raise MOOException(MOOError.E_INVARG, "match: invalid pattern")
+                result.append(']')
+                i += 1
+            elif c in '()|':
+                # Bare ( ) | are literal in MOO, must escape for Python
+                result.append('\\')
+                result.append(c)
+                i += 1
+            else:
+                # Everything else passes through (. * + ? ^ $ are metacharacters in both)
+                result.append(c)
+                i += 1
+        return ''.join(result)
+
+    def _build_match_result(self, m, subject: str) -> MOOList:
+        """Build a match result list from a Python regex match object.
+
+        Returns {start, end, replacements, subject} where:
+        - start/end are 1-based indices (toaststunt convention)
+        - replacements is always a 9-element list of {start, end} pairs
+        - Unused groups get {0, -1}
+        """
+        # Build 9-element replacements list
+        replacements = []
+        for i in range(1, 10):
+            if i <= m.lastindex if m.lastindex else 0:
+                s, e = m.start(i), m.end(i)
+                if s == -1:
+                    # Group exists in pattern but didn't participate in match
+                    replacements.append(MOOList([0, -1]))
+                else:
+                    replacements.append(MOOList([s + 1, e]))
+            else:
+                replacements.append(MOOList([0, -1]))
+
+        return MOOList([
+            m.start() + 1,
+            m.end(),
+            MOOList(replacements),
+            MOOString(subject)
+        ])
+
     def match(self, subject: MOOString, pattern: MOOString, case_matters: int = 0) -> MOOList:
         """
-        Match pattern against subject. Returns {start, end, replacements, subject}
+        Match MOO pattern against subject. Returns {start, end, replacements, subject}
         where start/end are 1-based indices, or empty list if no match.
+        Replacements is always a 9-element list; unused groups are {0, -1}.
+
+        Matches toaststunt list.cc lines 1278-1327.
         """
         flags = 0 if case_matters else re.IGNORECASE
         try:
-            m = re.search(str(pattern), str(subject), flags)
+            py_pattern = self._translate_moo_pattern(str(pattern))
+            m = re.search(py_pattern, str(subject), flags)
             if not m:
                 return MOOList([])
-            # Build replacements list from groups
-            replacements = MOOList([
-                MOOList([m.start(i) + 1, m.end(i)])
-                for i in range(1, m.lastindex + 1)
-            ] if m.lastindex else [])
-            return MOOList([m.start() + 1, m.end(), replacements, MOOString(subject)])
+            return self._build_match_result(m, str(subject))
+        except MOOException:
+            raise
         except re.error:
-            return MOOList([])
+            raise MOOException(MOOError.E_INVARG, "match: invalid pattern")
 
     def rmatch(self, subject: MOOString, pattern: MOOString, case_matters: int = 0) -> MOOList:
-        """Match pattern from end of subject."""
+        """Match MOO pattern from end of subject.
+
+        Toaststunt calls re_search with is_reverse=1, which searches from
+        the end of the string backward, finding the rightmost starting position.
+        We simulate this by trying re.match at each position from end to start.
+        """
         flags = 0 if case_matters else re.IGNORECASE
         try:
-            matches = list(re.finditer(str(pattern), str(subject), flags))
-            if not matches:
-                return MOOList([])
-            m = matches[-1]
-            replacements = MOOList([
-                MOOList([m.start(i) + 1, m.end(i)])
-                for i in range(1, m.lastindex + 1)
-            ] if m.lastindex else [])
-            return MOOList([m.start() + 1, m.end(), replacements, MOOString(subject)])
-        except re.error:
+            py_pattern = self._translate_moo_pattern(str(pattern))
+            subj = str(subject)
+            # Search from end backward: try matching at each position from len to 0
+            for pos in range(len(subj), -1, -1):
+                m = re.match(py_pattern, subj[pos:], flags)
+                if m:
+                    # Adjust match positions to be relative to original string
+                    # Create a proper match by searching at the specific position
+                    m2 = re.search(py_pattern, subj[pos:], flags)
+                    if m2:
+                        # Build result with adjusted positions
+                        replacements = []
+                        for i in range(1, 10):
+                            if i <= (m2.lastindex if m2.lastindex else 0):
+                                s, e = m2.start(i), m2.end(i)
+                                if s == -1:
+                                    replacements.append(MOOList([0, -1]))
+                                else:
+                                    replacements.append(MOOList([s + pos + 1, e + pos]))
+                            else:
+                                replacements.append(MOOList([0, -1]))
+                        return MOOList([
+                            m2.start() + pos + 1,
+                            m2.end() + pos,
+                            MOOList(replacements),
+                            MOOString(subj)
+                        ])
             return MOOList([])
+        except MOOException:
+            raise
+        except re.error:
+            raise MOOException(MOOError.E_INVARG, "rmatch: invalid pattern")
 
     def substitute(self, template: MOOString, subs: MOOList) -> MOOString:
+        """Apply substitutions from a match result.
+
+        Matches toaststunt list.cc lines 1398-1455 (bf_substitute).
+
+        Template processing:
+        - %% -> literal %
+        - %0 -> whole match (from subs[1]/subs[2])
+        - %1-%9 -> capture group (from subs[3][N] pair)
+        - Any other char after % -> E_INVARG
+
+        Subs list (MOOList, 1-based indexing) must be exactly 4 elements:
+        - subs[1]: match start (1-based int)
+        - subs[2]: match end (1-based int)
+        - subs[3]: list of exactly 9 {start, end} pairs
+        - subs[4]: subject string
         """
-        Apply substitutions from a match result.
-        %1-%9 replaced with captured groups, %% is literal %.
-        """
-        result = str(template)
-        if len(subs) >= 4:
-            subject = str(subs[3])
-            repls = subs[2] if len(subs) > 2 else MOOList([])
-            for i, repl in enumerate(repls):
-                if isinstance(repl, (list, MOOList)) and len(repl) >= 2:
-                    start, end = int(repl[0]) - 1, int(repl[1])
-                    if start >= 0:
-                        result = result.replace(f'%{i+1}', subject[start:end])
-        return MOOString(result.replace('%%', '%'))
+        # Validate subs list structure
+        if not isinstance(subs, (list, MOOList)) or len(subs) != 4:
+            raise MOOException(MOOError.E_INVARG, "substitute: invalid subs list")
+
+        # Access via _list for 0-based access (MOOList.__getitem__ is 1-based)
+        subs_list = subs._list if isinstance(subs, MOOList) else subs
+        repls_raw = subs_list[2]  # 0-based: element at index 2 = the replacements list
+
+        if isinstance(repls_raw, MOOList):
+            repls_inner = repls_raw._list
+        elif isinstance(repls_raw, list):
+            repls_inner = repls_raw
+        else:
+            raise MOOException(MOOError.E_INVARG, "substitute: subs[3] must be a list of 9 pairs")
+
+        if len(repls_inner) != 9:
+            raise MOOException(MOOError.E_INVARG, "substitute: subs[3] must be a list of 9 pairs")
+
+        for pair_raw in repls_inner:
+            if isinstance(pair_raw, MOOList):
+                if len(pair_raw) != 2:
+                    raise MOOException(MOOError.E_INVARG, "substitute: each replacement must be a pair")
+            elif isinstance(pair_raw, list):
+                if len(pair_raw) != 2:
+                    raise MOOException(MOOError.E_INVARG, "substitute: each replacement must be a pair")
+            else:
+                raise MOOException(MOOError.E_INVARG, "substitute: each replacement must be a pair")
+
+        subject_raw = subs_list[3]  # 0-based: element at index 3 = subject string
+        if not isinstance(subject_raw, (str, MOOString)):
+            raise MOOException(MOOError.E_INVARG, "substitute: subs[4] must be a string")
+
+        subject = str(subject_raw)
+        whole_start = int(subs_list[0])  # match start (1-based)
+        whole_end = int(subs_list[1])    # match end (1-based, inclusive)
+
+        tmpl = str(template)
+        result = []
+        i = 0
+        while i < len(tmpl):
+            if tmpl[i] == '%':
+                i += 1
+                if i >= len(tmpl):
+                    raise MOOException(MOOError.E_INVARG, "substitute: trailing %")
+                c = tmpl[i]
+                if c == '%':
+                    result.append('%')
+                elif c == '0':
+                    # Whole match: extract from subject using whole_start/whole_end
+                    s = whole_start - 1  # Convert to 0-based
+                    e = whole_end        # Already correct for Python slice
+                    if s >= 0 and e >= s:
+                        result.append(subject[s:e])
+                elif c in '123456789':
+                    # Capture group N: extract from repls_inner[N-1] (0-based)
+                    group_idx = int(c) - 1
+                    pair_raw = repls_inner[group_idx]
+                    if isinstance(pair_raw, MOOList):
+                        pair_s = int(pair_raw._list[0])
+                        pair_e = int(pair_raw._list[1])
+                    else:
+                        pair_s = int(pair_raw[0])
+                        pair_e = int(pair_raw[1])
+                    s = pair_s - 1   # Convert to 0-based
+                    e = pair_e       # Already correct for Python slice
+                    if s >= 0 and e >= s:
+                        result.append(subject[s:e])
+                    # If s < 0 (i.e., pair is {0, -1}), output nothing (unused group)
+                else:
+                    raise MOOException(MOOError.E_INVARG, f"substitute: invalid % reference: %{c}")
+                i += 1
+            else:
+                result.append(tmpl[i])
+                i += 1
+
+        return MOOString(''.join(result))
 
     def pcre_match(self, subject: MOOString, pattern: MOOString,
                    options: int = 0, offset: int = 0) -> MOOList:
