@@ -271,7 +271,7 @@ class BuiltinFunctions:
         # elif isinstance(value, MOOAnon):
             # return "*anonymous*"
         else:
-            logger.error("TOSTR: Unknown Var type")
+            raise MOOException(MOOError.E_TYPE, "tostr: cannot convert to string")
 
     def tostr(self, *args):
         return MOOString("".join(map(self.to_string, args)))
@@ -299,7 +299,7 @@ class BuiltinFunctions:
         # elif isinstance(value, MOOAnon):
             # return 0
         else:
-            logger.error("TOINT: Unknown Var type")
+            raise MOOException(MOOError.E_TYPE, "toint: cannot convert to integer")
 
     def tofloat(self, value):
         if isinstance(value, int):
@@ -308,16 +308,16 @@ class BuiltinFunctions:
             return float(value)
         elif isinstance(value, float):
             return value
-        elif isinstance(value, MOOObj):
-            return value.id
+        elif isinstance(value, ObjNum):
+            return float(int.__index__(value))
         elif isinstance(value, MOOError):
             return self.unparse_error(value)
         elif isinstance(value, bool):
             return 1.0 if value else 0.0
-        elif isinstance(value, MOOAnon):
-            return 0.0
+        # elif isinstance(value, MOOAnon):
+            # return 0.0
         else:
-            logger.error("TOFLOAT: Unknown Var type")
+            raise MOOException(MOOError.E_TYPE, "tofloat: cannot convert to float")
 
     _min = min
 
@@ -976,72 +976,77 @@ class BuiltinFunctions:
         # Concatenate all string arguments
         code = ''.join(str(arg.data if hasattr(arg, 'data') else arg) for arg in args)
 
-        from .moo_ast import compile
-        from .vm import VM
+        from .moo_ast import compile as moo_compile
+        from .vm import VM, VMOutcome
+        import time
+
+        # Get bi_funcs from VM context (needed for server builtins like add_property)
+        bi_funcs = self._vm.bi_funcs if self._vm else self
+        db = self._vm.db if self._vm else None
+
+        # MOO context variable names - must be pre-registered for stable indices
+        context_vars = [
+            "player", "this", "caller", "verb", "args", "argstr",
+            "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
+        ]
+
+        # Phase 1: Compile the code string
+        # Compile errors (syntax/parse) are returned as {0, error_list}
+        try:
+            compiled = moo_compile(code, bi_funcs=bi_funcs, context_vars=context_vars)
+        except MOOException as e:
+            return MOOList([0, MOOList([MOOString(e.error_code.name), MOOString(e.message)])])
+        except Exception as e:
+            return MOOList([0, MOOList([MOOString(str(e))])])
+
+        compiled.debug = True
+        compiled.this = -1
+        compiled.verb = ""
+
+        # Get player and caller from parent VM if available
+        player = -1
+        caller = -1
+        if self._vm and self._vm.call_stack:
+            caller_frame = self._vm.call_stack[-1]
+            player = getattr(caller_frame, 'player', -1)
+            caller = getattr(caller_frame, 'this', -1)
+        compiled.player = player
+
+        # Set up runtime environment - context vars at indices 0-10
+        # Per MOO spec for eval():
+        # player    the same as in the calling verb
+        # this      #-1
+        # caller    the same as the initial value of `this' in the calling verb
+        # args      {}
+        # argstr    ""
+        # verb      ""
+        # dobjstr   ""
+        # dobj      #-1
+        # prepstr   ""
+        # iobjstr   ""
+        # iobj      #-1
+        if len(compiled.rt_env) >= 11:
+            compiled.rt_env[0] = ObjNum(player)     # player (must be ObjNum)
+            compiled.rt_env[1] = ObjNum(-1)         # this
+            compiled.rt_env[2] = ObjNum(caller)     # caller (must be ObjNum)
+            compiled.rt_env[3] = ""                 # verb
+            compiled.rt_env[4] = MOOList()          # args
+            compiled.rt_env[5] = ""                 # argstr
+            compiled.rt_env[6] = ObjNum(-1)         # dobj
+            compiled.rt_env[7] = ""                 # dobjstr
+            compiled.rt_env[8] = ObjNum(-1)         # iobj
+            compiled.rt_env[9] = ""                 # iobjstr
+            compiled.rt_env[10] = ""                # prepstr
+
+        # Phase 2: Execute the compiled code
+        # Runtime MOOExceptions propagate to the caller (parent VM handles them)
+        vm = VM(db=db, bi_funcs=bi_funcs)
+        vm.call_stack = [compiled]
+
+        # Save parent VM reference (eval may set bi_funcs._vm to the new vm)
+        parent_vm = self._vm
 
         try:
-            # Get bi_funcs from VM context (needed for server builtins like add_property)
-            bi_funcs = self._vm.bi_funcs if self._vm else self
-            db = self._vm.db if self._vm else None
-
-            # MOO context variable names - must be pre-registered for stable indices
-            context_vars = [
-                "player", "this", "caller", "verb", "args", "argstr",
-                "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
-            ]
-
-            # Compile with the same bi_funcs as the parent VM
-            # Pass context_vars so they get pre-registered with stable indices
-            compiled = compile(code, bi_funcs=bi_funcs, context_vars=context_vars)
-            compiled.debug = True
-            compiled.this = -1
-            compiled.verb = ""
-
-            # Get player and caller from parent VM if available
-            player = -1
-            caller = -1
-            if self._vm and self._vm.call_stack:
-                caller_frame = self._vm.call_stack[-1]
-                player = getattr(caller_frame, 'player', -1)
-                caller = getattr(caller_frame, 'this', -1)
-            compiled.player = player
-
-            # Set up runtime environment - context vars at indices 0-10
-            # Per MOO spec for eval():
-            # player    the same as in the calling verb
-            # this      #-1
-            # caller    the same as the initial value of `this' in the calling verb
-            # args      {}
-            # argstr    ""
-            # verb      ""
-            # dobjstr   ""
-            # dobj      #-1
-            # prepstr   ""
-            # iobjstr   ""
-            # iobj      #-1
-            if len(compiled.rt_env) >= 11:
-                compiled.rt_env[0] = ObjNum(player)     # player (must be ObjNum)
-                compiled.rt_env[1] = ObjNum(-1)         # this
-                compiled.rt_env[2] = ObjNum(caller)     # caller (must be ObjNum)
-                compiled.rt_env[3] = ""                 # verb
-                compiled.rt_env[4] = MOOList()          # args
-                compiled.rt_env[5] = ""                 # argstr
-                compiled.rt_env[6] = ObjNum(-1)         # dobj
-                compiled.rt_env[7] = ""                 # dobjstr
-                compiled.rt_env[8] = ObjNum(-1)         # iobj
-                compiled.rt_env[9] = ""                 # iobjstr
-                compiled.rt_env[10] = ""                # prepstr
-
-            # Create new VM with same db and bi_funcs
-            vm = VM(db=db, bi_funcs=bi_funcs)
-            vm.call_stack = [compiled]
-
-            # Save parent VM reference (eval may set bi_funcs._vm to the new vm)
-            parent_vm = self._vm
-
-            # Run with suspend support - loop until done or aborted
-            from .vm import VMOutcome
-            import time
             max_suspends = 100  # Prevent infinite loops
             suspend_count = 0
 
@@ -1083,16 +1088,11 @@ class BuiltinFunctions:
                 else:
                     # Done or error - break out
                     break
-
-            # Restore parent VM reference
+        finally:
+            # Always restore parent VM reference
             bi_funcs._vm = parent_vm
 
-            return MOOList([1, vm.result])
-        except MOOException as e:
-            # MOOException includes error code - return it for proper error handling
-            return MOOList([0, MOOList([MOOString(e.error_code.name), MOOString(e.message)])])
-        except Exception as e:
-            return MOOList([0, MOOList([MOOString(str(e))])])
+        return MOOList([1, vm.result])
 
     def encode_base64(self, x, safe=0):
         x = self._unwrap_bytes(x)
