@@ -254,6 +254,8 @@ class BuiltinFunctions:
             return str(value)  # Waif.__str__ returns [[Waif class #N]] format
         elif isinstance(value, ObjNum):
             return str(value)  # ObjNum.__str__ already includes #
+        elif isinstance(value, bool):
+            return str(int(value))  # MOO has no boolean type: True->"1", False->"0"
         elif isinstance(value, int):
             return str(value)
         elif isinstance(value, MOOList):
@@ -266,8 +268,6 @@ class BuiltinFunctions:
             return str(value)
         elif isinstance(value, MOOError):
             return self.unparse_error(value)
-        elif isinstance(value, bool):
-            return "true" if value else "false"
         # elif isinstance(value, MOOAnon):
             # return "*anonymous*"
         else:
@@ -886,7 +886,7 @@ class BuiltinFunctions:
         elif isinstance(x, MooObject):
             return MOOString(f"#{x.id}")
         elif isinstance(x, bool):
-            return MOOString(str(x).lower())
+            return MOOString(str(int(x)))  # MOO has no boolean type: True->1, False->0
         elif isinstance(x, MOOString):
             return MOOString("\"" + x.data + "\"")
         elif isinstance(x, (int, float)):
@@ -1087,12 +1087,12 @@ class BuiltinFunctions:
             # Restore parent VM reference
             bi_funcs._vm = parent_vm
 
-            return MOOList([True, vm.result])
+            return MOOList([1, vm.result])
         except MOOException as e:
             # MOOException includes error code - return it for proper error handling
-            return MOOList([False, MOOList([MOOString(e.error_code.name), MOOString(e.message)])])
+            return MOOList([0, MOOList([MOOString(e.error_code.name), MOOString(e.message)])])
         except Exception as e:
-            return MOOList([False, MOOList([MOOString(str(e))])])
+            return MOOList([0, MOOList([MOOString(str(e))])])
 
     def encode_base64(self, x, safe=0):
         x = self._unwrap_bytes(x)
