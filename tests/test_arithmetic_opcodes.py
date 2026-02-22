@@ -7,6 +7,7 @@ negative numbers, and type mismatches.
 from contextlib import contextmanager
 
 import pytest
+from moo_interp.errors import MOOException, MOOError
 from moo_interp.list import MOOList
 from moo_interp.string import MOOString
 from moo_interp.opcodes import Opcode
@@ -152,14 +153,22 @@ def test_op_mult_one():
 
 
 def test_op_mult_string_repetition():
-    """OP_MULT repeats strings (if supported)."""
-    # MOO may support this - check behavior
-    program = """
-    return "ab" * 3;
+    """OP_MULT on string * int raises E_TYPE in MOO (no string repetition).
+
+    MOO arithmetic operators require both operands to be the same numeric type.
+    String repetition is not a MOO feature.
     """
-    result = run_program(program)
-    # This might be "ababab" or might error - document actual behavior
-    # For now just ensure it doesn't crash
+    with create_vm() as vm:
+        vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
+            Instruction(opcode=Opcode.OP_IMM, operand="ab"),
+            Instruction(opcode=Opcode.OP_IMM, operand=3),
+            Instruction(opcode=Opcode.OP_MULT),
+        ]))
+        vm.step()
+        vm.step()
+        with pytest.raises(MOOException) as exc_info:
+            vm.step()
+        assert exc_info.value.error_code == MOOError.E_TYPE
 
 
 # ===== OP_DIV tests =====
@@ -186,7 +195,7 @@ def test_op_div_negative():
 
 
 def test_op_div_by_zero():
-    """OP_DIV by zero raises error."""
+    """OP_DIV by zero raises E_DIV."""
     with create_vm() as vm:
         vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
             Instruction(opcode=Opcode.OP_IMM, operand=10),
@@ -195,14 +204,18 @@ def test_op_div_by_zero():
         ]))
         vm.step()
         vm.step()
-        with pytest.raises(VMError, match="zero"):
+        with pytest.raises(MOOException) as exc_info:
             vm.step()
+        assert exc_info.value.error_code == MOOError.E_DIV
 
 
 def test_op_div_fractional():
-    """OP_DIV with non-integer result."""
-    # Python-style division returns float
-    expect_result("return 7 / 2;", 3.5)
+    """OP_DIV with non-integer result uses integer truncation.
+
+    MOO int/int division truncates toward zero (C-style), not Python floor division.
+    7 / 2 = 3 (not 3.5).
+    """
+    expect_result("return 7 / 2;", 3)
 
 
 # ===== OP_MOD tests =====
@@ -228,7 +241,7 @@ def test_op_mod_negative():
 
 
 def test_op_mod_by_zero():
-    """OP_MOD by zero raises error."""
+    """OP_MOD by zero raises E_DIV."""
     with create_vm() as vm:
         vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
             Instruction(opcode=Opcode.OP_IMM, operand=10),
@@ -237,8 +250,9 @@ def test_op_mod_by_zero():
         ]))
         vm.step()
         vm.step()
-        with pytest.raises(VMError, match="zero"):
+        with pytest.raises(MOOException) as exc_info:
             vm.step()
+        assert exc_info.value.error_code == MOOError.E_DIV
 
 
 def test_op_mod_exact_division():

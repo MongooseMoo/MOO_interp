@@ -1,4 +1,5 @@
 import inspect
+import math
 import traceback
 import warnings
 from enum import Enum
@@ -25,6 +26,14 @@ MOOPrimitive = Union[int, float, str, MOOString, MOOError, MOOList, MOOMap]
 # Type alias for all values that can be verb call targets
 # Objects (ObjNum, Anon) call verbs directly; primitives use prototype lookup
 MOOValue = Union[ObjNum, Anon, MOOPrimitive]
+
+
+def _is_real(d: float) -> bool:
+    """Check if a float is a real number (not NaN or Inf).
+
+    Matches toaststunt's IS_REAL macro.
+    """
+    return not (math.isnan(d) or math.isinf(d))
 
 
 class OpcodeHandler(Protocol):
@@ -402,8 +411,13 @@ class VM:
         frame.ip += 1
 
     def _extract_error_type(self, e: Exception) -> str:
-        """Extract the MOO error type from an exception."""
-        # Handle MOOException directly
+        """Extract the MOO error type from an exception.
+
+        For MOOException, extracts the error code directly.
+        For Python exceptions, maps by exception type first, then by string matching.
+        Default fallback is E_TYPE (most common arithmetic/operation error).
+        """
+        # Handle MOOException directly - this is the preferred path
         if isinstance(e, MOOException):
             error_code = e.error_code
             if hasattr(error_code, 'name'):
@@ -413,15 +427,26 @@ class VM:
                            4: 'E_PROPNF', 5: 'E_VERBNF', 6: 'E_VARNF', 7: 'E_INVIND',
                            8: 'E_RECMOVE', 9: 'E_MAXREC', 10: 'E_RANGE', 11: 'E_ARGS',
                            12: 'E_NACC', 13: 'E_INVARG', 14: 'E_QUOTA', 15: 'E_FLOAT'}
-            return error_names.get(int(error_code), 'E_NONE')
+            return error_names.get(int(error_code), 'E_TYPE')
 
+        # Map Python exception types to MOO error codes
+        if isinstance(e, TypeError):
+            return 'E_TYPE'
+        if isinstance(e, ZeroDivisionError):
+            return 'E_DIV'
+        if isinstance(e, (IndexError, KeyError)):
+            return 'E_RANGE'
+        if isinstance(e, ValueError):
+            return 'E_INVARG'
+        if isinstance(e, OverflowError):
+            return 'E_FLOAT'
+
+        # String-based fallback for VMError and other wrapped exceptions
         error_str = str(e)
-        # Look for MOO error codes like E_DIV, E_TYPE, E_RANGE, etc.
+        # Check for explicit MOO error code names in the message
         if 'E_DIV' in error_str or 'division' in error_str.lower() or 'by zero' in error_str.lower():
             return 'E_DIV'
-        if 'E_TYPE' in error_str or 'type' in error_str.lower() or 'subscriptable' in error_str.lower() or 'not iterable' in error_str.lower():
-            return 'E_TYPE'
-        if 'E_RANGE' in error_str or 'index' in error_str.lower():
+        if 'E_RANGE' in error_str:
             return 'E_RANGE'
         if 'E_INVIND' in error_str:
             return 'E_INVIND'
@@ -433,7 +458,18 @@ class VM:
             return 'E_PERM'
         if 'E_ARGS' in error_str:
             return 'E_ARGS'
-        return 'E_NONE'  # Generic error
+        if 'E_INVARG' in error_str:
+            return 'E_INVARG'
+        if 'E_FLOAT' in error_str:
+            return 'E_FLOAT'
+        if 'E_QUOTA' in error_str:
+            return 'E_QUOTA'
+        if 'E_TYPE' in error_str or 'type' in error_str.lower() or 'subscriptable' in error_str.lower() or 'not iterable' in error_str.lower():
+            return 'E_TYPE'
+        # Default to E_TYPE - the most common error for type mismatches
+        # in arithmetic and operations. This is better than E_NONE which
+        # is almost never the right answer for a runtime error.
+        return 'E_TYPE'
 
     def _handle_exception(self, error_type: str, exception: Exception) -> bool:
         """Check if there's an exception handler that can catch this error.
@@ -652,42 +688,126 @@ class VM:
             logger.debug(f"Put {value} into new variable {identifier}")
             return value
 
+    @staticmethod
+    def _is_moo_int(val: Any) -> bool:
+        """Check if a value is a MOO integer (int or ObjNum, but not bool or float).
+
+        In MOO, TYPE_INT includes object numbers (ObjNum is a subclass of int).
+        Python bools are also int subclasses but should not be treated as MOO integers
+        for arithmetic purposes.
+        """
+        return isinstance(val, int) and not isinstance(val, bool)
+
     @operator(Opcode.OP_ADD)
     def exec_add(self, op1: Any, op2: Any) -> Any:
-        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
-        return op1 + op2
+        """MOO addition: int+int, float+float, str+str, list+list, list+any.
+
+        Follows toaststunt execute.cc OP_ADD semantics:
+        - Numeric: both must be same type (int+int or float+float), else E_TYPE
+        - String: str+str = concatenation
+        - List: list+list = listconcat, list+any = listappend
+        - All other combinations: E_TYPE
+        """
+        # Numeric addition: both must be int or both float (no cross-type)
+        if self._is_moo_int(op1) and self._is_moo_int(op2):
+            return int(op1) + int(op2)
+        if isinstance(op1, float) and isinstance(op2, float):
+            return op1 + op2
+        # String concatenation
+        if isinstance(op1, (str, MOOString)) and isinstance(op2, (str, MOOString)):
+            return str(op1) + str(op2)
+        # List operations
+        if isinstance(op1, MOOList):
+            if isinstance(op2, MOOList):
+                # listconcat
+                return MOOList(*(op1._list + op2._list))
+            else:
+                # listappend
+                new_list = MOOList(*op1._list)
+                new_list.append(op2)
+                return new_list
+        raise MOOException(MOOError.E_TYPE, "Type mismatch in addition")
 
     @operator(Opcode.OP_MINUS)
     def exec_subtract(self, op1: Any, op2: Any) -> Any:
-        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
-        return op1 - op2
+        """MOO subtraction: both operands must be same numeric type.
+
+        Follows toaststunt SIMPLE_BINARY(subtract, -) semantics:
+        - int-int -> int, float-float -> float
+        - Mixed types or non-numeric -> E_TYPE
+        """
+        if self._is_moo_int(op1) and self._is_moo_int(op2):
+            return int(op1) - int(op2)
+        if isinstance(op1, float) and isinstance(op2, float):
+            return op1 - op2
+        raise MOOException(MOOError.E_TYPE, "Type mismatch in subtraction")
 
     @operator(Opcode.OP_MULT)
-    def exec_multiply(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
-        return op1 * op2
+    def exec_multiply(self, op1: Any, op2: Any) -> Any:
+        """MOO multiplication: both operands must be same numeric type.
+
+        Follows toaststunt SIMPLE_BINARY(multiply, *) semantics:
+        - int*int -> int, float*float -> float
+        - Mixed types or non-numeric -> E_TYPE
+        """
+        if self._is_moo_int(op1) and self._is_moo_int(op2):
+            return int(op1) * int(op2)
+        if isinstance(op1, float) and isinstance(op2, float):
+            return op1 * op2
+        raise MOOException(MOOError.E_TYPE, "Type mismatch in multiplication")
 
     @operator(Opcode.OP_DIV)
-    def exec_divide(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
-        try:
-            # MOO semantics: integer / integer = integer (truncate toward zero)
-            if isinstance(op1, int) and isinstance(op2, int):
-                return op1 // op2  # Integer division
-            else:
-                return op1 / op2  # Float division
-        except ZeroDivisionError:
-            raise MOOException(MOOError.E_DIV, "Division by zero")
+    def exec_divide(self, op1: Any, op2: Any) -> Any:
+        """MOO division: both operands must be same numeric type.
+
+        Follows toaststunt do_divide semantics:
+        - int/int -> int (truncates toward zero), float/float -> float
+        - Division by zero -> E_DIV
+        - Mixed types or non-numeric -> E_TYPE
+        """
+        if self._is_moo_int(op1) and self._is_moo_int(op2):
+            a, b = int(op1), int(op2)
+            if b == 0:
+                raise MOOException(MOOError.E_DIV, "Division by zero")
+            # C-style truncation toward zero (Python // rounds toward negative infinity)
+            result = int(a / b) if (a < 0) != (b < 0) and a % b != 0 else a // b
+            return result
+        if isinstance(op1, float) and isinstance(op2, float):
+            if op2 == 0.0:
+                raise MOOException(MOOError.E_DIV, "Division by zero")
+            result = op1 / op2
+            if not _is_real(result):
+                raise MOOException(MOOError.E_FLOAT, "Floating-point overflow")
+            return result
+        raise MOOException(MOOError.E_TYPE, "Type mismatch in division")
 
     @operator(Opcode.OP_MOD)
-    def exec_mod(self, op1: MOONumber, op2: MOONumber) -> MOONumber:
-        try:
-            return op1 % op2
-        except ZeroDivisionError:
-            raise MOOException(MOOError.E_DIV, "Division by zero")
+    def exec_mod(self, op1: Any, op2: Any) -> Any:
+        """MOO modulus: both operands must be same numeric type.
+
+        Follows toaststunt do_modulus semantics:
+        - int%int -> int (Euclidean mod, always non-negative), float%float -> float
+        - Modulus by zero -> E_DIV
+        - Mixed types or non-numeric -> E_TYPE
+        """
+        if self._is_moo_int(op1) and self._is_moo_int(op2):
+            a, b = int(op1), int(op2)
+            if b == 0:
+                raise MOOException(MOOError.E_DIV, "Division by zero")
+            # Toaststunt uses (n % d + d) % d for Euclidean modulus
+            result = (a % b + b) % b
+            return result
+        if isinstance(op1, float) and isinstance(op2, float):
+            if op2 == 0.0:
+                raise MOOException(MOOError.E_DIV, "Division by zero")
+            result = math.fmod(math.fmod(op1, op2) + op2, op2)
+            return result
+        raise MOOException(MOOError.E_TYPE, "Type mismatch in modulus")
 
     @operator(Opcode.OP_EQ)
-    def exec_eq(self, op1: MOOAny, op2: MOOAny) -> bool:
-        """MOO equality: types must match (except bool==int cross-compare)."""
-        return self._moo_equality(op1, op2)
+    def exec_eq(self, op1: MOOAny, op2: MOOAny) -> int:
+        """MOO equality: types must match. Returns int 0/1 (MOO has no bool type)."""
+        return 1 if self._moo_equality(op1, op2) else 0
 
     def _moo_equality(self, lhs: MOOAny, rhs: MOOAny) -> bool:
         """MOO strict type equality.
@@ -801,28 +921,75 @@ class VM:
             return 0
 
     @operator(Opcode.OP_NE)
-    def exec_ne(self, op1: MOOAny, op2: MOOAny) -> bool:
-        return op1 != op2
+    def exec_ne(self, op1: MOOAny, op2: MOOAny) -> int:
+        """MOO inequality. Returns int 0/1 (MOO has no bool type)."""
+        return 0 if self._moo_equality(op1, op2) else 1
 
     @operator(Opcode.OP_LT)
-    def exec_lt(self, op1: Any, op2: Any) -> bool:
-        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
-        return op1 < op2
+    def exec_lt(self, op1: Any, op2: Any) -> int:
+        """MOO less-than comparison. Returns int 0/1.
+
+        Follows toaststunt semantics: operands must be same type.
+        Allowed types: int, float, obj, err, str (case-insensitive).
+        Lists and maps cannot be compared -> E_TYPE.
+        """
+        return self._moo_compare(op1, op2, 'lt')
 
     @operator(Opcode.OP_LE)
-    def exec_le(self, op1: Any, op2: Any) -> bool:
-        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
-        return op1 <= op2
+    def exec_le(self, op1: Any, op2: Any) -> int:
+        """MOO less-than-or-equal comparison. Returns int 0/1."""
+        return self._moo_compare(op1, op2, 'le')
 
     @operator(Opcode.OP_GT)
-    def exec_gt(self, op1: Any, op2: Any) -> bool:
-        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
-        return op1 > op2
+    def exec_gt(self, op1: Any, op2: Any) -> int:
+        """MOO greater-than comparison. Returns int 0/1."""
+        return self._moo_compare(op1, op2, 'gt')
 
     @operator(Opcode.OP_GE)
-    def exec_ge(self, op1: Any, op2: Any) -> bool:
-        # MOO is dynamically typed - incompatible types raise E_TYPE at runtime
-        return op1 >= op2
+    def exec_ge(self, op1: Any, op2: Any) -> int:
+        """MOO greater-than-or-equal comparison. Returns int 0/1."""
+        return self._moo_compare(op1, op2, 'ge')
+
+    def _moo_compare(self, lhs: Any, rhs: Any, op: str) -> int:
+        """MOO ordered comparison. Returns int 0/1.
+
+        Follows toaststunt execute.cc OP_LT/LE/GT/GE semantics:
+        - int vs int, float vs float: numeric compare
+        - int vs float or float vs int: E_TYPE (compare_numbers checks a.type != b.type)
+        - obj vs obj: compare as integers
+        - str vs str: case-insensitive compare
+        - err vs err: compare as integers
+        - list or map: E_TYPE
+        - different types: E_TYPE
+        """
+        # Both int (includes ObjNum)
+        if self._is_moo_int(lhs) and self._is_moo_int(rhs):
+            comparison = (int(lhs) > int(rhs)) - (int(lhs) < int(rhs))
+        # Both float
+        elif isinstance(lhs, float) and isinstance(rhs, float):
+            comparison = (lhs > rhs) - (lhs < rhs)
+        # Both string
+        elif isinstance(lhs, (str, MOOString)) and isinstance(rhs, (str, MOOString)):
+            a, b = str(lhs).lower(), str(rhs).lower()
+            comparison = (a > b) - (a < b)
+        # Both MOOError
+        elif isinstance(lhs, MOOError) and isinstance(rhs, MOOError):
+            comparison = (int(lhs) > int(rhs)) - (int(lhs) < int(rhs))
+        # Lists and maps cannot be compared
+        elif isinstance(lhs, (MOOList, MOOMap)) or isinstance(rhs, (MOOList, MOOMap)):
+            raise MOOException(MOOError.E_TYPE, "Type mismatch in comparison")
+        else:
+            raise MOOException(MOOError.E_TYPE, "Type mismatch in comparison")
+
+        if op == 'lt':
+            return 1 if comparison < 0 else 0
+        elif op == 'le':
+            return 1 if comparison <= 0 else 0
+        elif op == 'gt':
+            return 1 if comparison > 0 else 0
+        elif op == 'ge':
+            return 1 if comparison >= 0 else 0
+        return 0
 
     @operator(Opcode.OP_AND)
     def exec_and(self, op1: Any, op2: Any) -> Any:
@@ -835,12 +1002,24 @@ class VM:
         return op1 or op2
 
     @operator(Opcode.OP_NOT)
-    def exec_not(self, operand: MOOAny) -> bool:
-        return not operand
+    def exec_not(self, operand: MOOAny) -> int:
+        """MOO logical NOT. Returns int 0/1 (MOO has no bool type).
+
+        Follows toaststunt: ans.v.num = !is_true(arg)
+        """
+        return 0 if operand else 1
 
     @operator(Opcode.OP_UNARY_MINUS)
-    def exec_unary_minus(self, op1: MOONumber):
-        return -op1
+    def exec_unary_minus(self, op1: Any) -> Any:
+        """MOO unary minus. Only works on int or float.
+
+        Follows toaststunt: E_TYPE for non-numeric types.
+        """
+        if self._is_moo_int(op1):
+            return -int(op1)
+        if isinstance(op1, float):
+            return -op1
+        raise MOOException(MOOError.E_TYPE, "Type mismatch in unary minus")
 
     # Extended opcode implementations
 
@@ -888,8 +1067,55 @@ class VM:
         return result
 
     @operator(Extended_Opcode.EOP_EXP)
-    def exec_exp(self, lhs: MOONumber,   rhs: MOONumber):
-        return lhs ** rhs
+    def exec_exp(self, lhs: Any, rhs: Any) -> Any:
+        """MOO exponentiation (LHS ^ RHS).
+
+        Follows toaststunt do_power semantics:
+        - int ^ int -> int (with special handling for negative exponents)
+        - float ^ int -> float, float ^ float -> float
+        - int ^ float -> E_TYPE
+        - 0 ^ negative -> E_DIV
+        - NaN/Inf result -> E_FLOAT
+        """
+        if self._is_moo_int(lhs):
+            if not self._is_moo_int(rhs):
+                raise MOOException(MOOError.E_TYPE, "Type mismatch in exponentiation")
+            a, b = int(lhs), int(rhs)
+            if b < 0:
+                if a == -1:
+                    return 1 if (b & 1) else -1
+                elif a == 0:
+                    raise MOOException(MOOError.E_DIV, "Division by zero")
+                elif a == 1:
+                    return 1
+                else:
+                    return 0
+            else:
+                # Standard integer exponentiation
+                r = 1
+                base = a
+                exp = b
+                while exp != 0:
+                    if exp & 1:
+                        r *= base
+                    base *= base
+                    exp >>= 1
+                return r
+        elif isinstance(lhs, float):
+            if self._is_moo_int(rhs):
+                d = float(int(rhs))
+            elif isinstance(rhs, float):
+                d = rhs
+            else:
+                raise MOOException(MOOError.E_TYPE, "Type mismatch in exponentiation")
+            import errno
+            errno.errno = 0
+            result = lhs ** d
+            if not _is_real(result):
+                raise MOOException(MOOError.E_FLOAT, "Floating-point overflow")
+            return result
+        else:
+            raise MOOException(MOOError.E_TYPE, "Type mismatch in exponentiation")
 
     # List operations
 
