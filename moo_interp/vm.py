@@ -2374,11 +2374,30 @@ class VM:
         except SuspendException:
             # Let SuspendException propagate to be caught by step() for blocking
             raise
+        except TypeError as e:
+            func_name = func.__name__
+            msg = str(e)
+            # Distinguish "missing argument" (E_ARGS) from "wrong type" (E_TYPE)
+            if 'argument' in msg and ('missing' in msg or 'positional' in msg or 'expected' in msg or 'takes' in msg):
+                raise MOOException(MOOError.E_ARGS, f"{func_name}: {msg}")
+            else:
+                raise MOOException(MOOError.E_TYPE, f"{func_name}: {msg}")
+        except ValueError as e:
+            func_name = func.__name__
+            raise MOOException(MOOError.E_INVARG, f"{func_name}: {e}")
+        except ZeroDivisionError as e:
+            func_name = func.__name__
+            raise MOOException(MOOError.E_DIV, f"{func_name}: {e}")
+        except (IndexError, KeyError) as e:
+            func_name = func.__name__
+            raise MOOException(MOOError.E_RANGE, f"{func_name}: {e}")
+        except OverflowError as e:
+            func_name = func.__name__
+            raise MOOException(MOOError.E_FLOAT, f"{func_name}: {e}")
         except Exception as e:
             func_name = func.__name__
-            tb = traceback.format_exc()
-            raise VMError(
-                f"Error calling built-in function {func_name}: {e} {tb}")
+            # Fallback: still convert to MOOException rather than VMError
+            raise MOOException(MOOError.E_TYPE, f"{func_name}: {e}")
 
         # Check for tail call marker (pass() pushes a frame)
         if isinstance(result, _TailCallMarker):
