@@ -1,0 +1,10 @@
+{
+  "targeted_red_result": "1 failed; falsifying example bitand",
+  "targeted_green_result": "1 passed",
+  "full_suite_result": "450 passed, 5 skipped",
+  "live_differential_result": "910 matched, 0 mismatches",
+  "extra_before": 64,
+  "extra_after": 58,
+  "missing_before": 100,
+  "missing_after": 100
+}

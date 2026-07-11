@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-07-11T02:43:42.2411190-06:00",
+  "total": 455,
+  "pass": 450,
+  "fail": 0,
+  "skip": 5,
+  "toast_builtin_count": 229,
+  "local_registered_count": 187,
+  "shared_builtin_count": 129,
+  "missing_builtin_count": 100,
+  "extra_registered_count": 58
+}

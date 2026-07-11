@@ -1994,30 +1994,6 @@ class BuiltinFunctions:
         else:
             return n >> (-count)
 
-    def bitand(self, a, b):
-        """Bitwise AND of two integers."""
-        return int(a) & int(b)
-
-    def bitor(self, a, b):
-        """Bitwise OR of two integers."""
-        return int(a) | int(b)
-
-    def bitxor(self, a, b):
-        """Bitwise XOR of two integers."""
-        return int(a) ^ int(b)
-
-    def bitnot(self, a):
-        """Bitwise NOT of an integer."""
-        return ~int(a)
-
-    def bitshl(self, n, count):
-        """Bitwise left shift."""
-        return int(n) << int(count)
-
-    def bitshr(self, n, count):
-        """Bitwise right shift."""
-        return int(n) >> int(count)
-
     # Additional math builtins
     def log2(self, x):
         """Return base-2 logarithm."""

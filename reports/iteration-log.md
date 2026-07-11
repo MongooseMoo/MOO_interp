@@ -90,3 +90,10 @@
 - Target: registry infrastructure exposed as MOO builtins
 - Result: 64 extras (-7); 449 passed, 5 skipped; 910/910 oracle cases matched
 - Commit: recorded by this commit
+
+## 014 - 2026-07-11
+
+- Start: 64 extra registered names, including 6 non-Toast bitwise functions
+- Target: delete non-Toast bitwise builtin functions
+- Result: 58 extras (-6); 450 passed, 5 skipped; 910/910 oracle cases matched
+- Commit: recorded by this commit

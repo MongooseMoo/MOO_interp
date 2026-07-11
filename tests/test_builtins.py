@@ -26,6 +26,14 @@ REGISTRY_INFRASTRUCTURE_NAMES = (
     "get_id_by_name",
     "raise_error",
 )
+NON_TOAST_BITWISE_BUILTINS = (
+    "bitand",
+    "bitnot",
+    "bitor",
+    "bitshl",
+    "bitshr",
+    "bitxor",
+)
 
 
 class TestStrtr:
@@ -86,3 +94,8 @@ def test_registry_infrastructure_is_not_registered_as_builtins(name):
     builtins = BuiltinFunctions()
     assert name not in builtins.functions
     assert "raise" in builtins.functions
+
+
+@given(name=st.sampled_from(NON_TOAST_BITWISE_BUILTINS))
+def test_non_toast_bitwise_functions_are_not_registered(name):
+    assert name not in BuiltinFunctions().functions
