@@ -80,12 +80,8 @@ class BuiltinFunctions:
             if callable(attr) and not attr_name.startswith('_'):
                 self(attr)
 
-        # Register aliases (raise is a Python keyword, so we use raise_error internally)
-        # The alias 'raise' should map to the same function object and ID as 'raise_error'
-        if 'raise_error' in self.functions:
-            func = self.functions['raise_error']
-            self.functions['raise'] = func
-            # Both names now point to the same function, so get_id_by_name will return the same ID
+        # Python reserves "raise", so register its private implementation by name.
+        self._register("raise", self._raise)
 
     def __call__(self, fn):
         if self.current_id > 511:
@@ -164,7 +160,7 @@ class BuiltinFunctions:
         raise TypeError(f"Expected string or bytes, got {type(value).__name__}")
 
 
-    def register(self, name: str, func):
+    def _register(self, name: str, func):
         """Register an external function with a custom name.
         
         Args:
@@ -190,9 +186,9 @@ class BuiltinFunctions:
 
     def __getitem__(self, key):
         if isinstance(key, str):
-            return self.get_function_by_name(key)
+            return self._get_function_by_name(key)
         elif isinstance(key, int):
-            return self.get_function_by_id(key)
+            return self._get_function_by_id(key)
         else:
             raise KeyError(
                 f"Invalid key type. Expected str or int, got {type(key).__name__}")
@@ -202,15 +198,15 @@ class BuiltinFunctions:
 
     def __delitem__(self, key):
         if isinstance(key, str):
-            fn = self.get_function_by_name(key)
+            fn = self._get_function_by_name(key)
             if fn is None:
                 raise KeyError(f"No function named {key}")
             del self.functions[key]
-            id = self.get_id_by_function(fn)
+            id = self._get_id_by_function(fn)
             del self.id_to_function[id]
             del self.function_to_id[fn]
         elif isinstance(key, int):
-            fn = self.get_function_by_id(key)
+            fn = self._get_function_by_id(key)
             if fn is None:
                 raise KeyError(f"No function with id {key}")
             del self.id_to_function[key]
@@ -230,22 +226,22 @@ class BuiltinFunctions:
 
     # Helper methods
 
-    def get_function_by_name(self, name):
+    def _get_function_by_name(self, name):
         return self.functions.get(name)
 
-    def get_function_by_id(self, id):
+    def _get_function_by_id(self, id):
         return self.id_to_function.get(id)
 
-    def get_function_name_by_id(self, id):
+    def _get_function_name_by_id(self, id):
         func = self.id_to_function.get(id)
         return func.__name__ if func else f"<unknown_id_{id}>"
 
-    def get_id_by_function(self, fn):
+    def _get_id_by_function(self, fn):
         return self.function_to_id.get(fn)
 
-    def get_id_by_name(self, name):
-        fn = self.get_function_by_name(name)
-        return self.get_id_by_function(fn) if fn else None
+    def _get_id_by_name(self, name):
+        fn = self._get_function_by_name(name)
+        return self._get_id_by_function(fn) if fn else None
 
     def unparse_error(self, error_val):
         """Convert a MOOError enum value to its string name (e.g. E_TYPE -> 'E_TYPE')."""
@@ -2154,7 +2150,7 @@ class BuiltinFunctions:
         except Exception:
             raise MOOException(MOOError.E_INVARG, "Invalid hex")
 
-    def raise_error(self, code, message=None, value=None):
+    def _raise(self, code, message=None, value=None):
         """Raise an error that can be caught by try/except.
 
         raise(code [, message [, value]])

@@ -1,0 +1,11 @@
+{
+  "targeted_red_command": "uv run pytest tests/test_builtins.py -k registry_infrastructure -q",
+  "targeted_red_result": "1 failed; falsifying example register",
+  "targeted_green_result": "1 passed",
+  "full_suite_result": "449 passed, 5 skipped",
+  "live_differential_result": "910 matched, 0 mismatches",
+  "extra_before": 71,
+  "extra_after": 64,
+  "missing_before": 100,
+  "missing_after": 100
+}

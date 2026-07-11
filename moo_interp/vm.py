@@ -2337,9 +2337,9 @@ class VM:
         frame = self.call_stack[-1]
         instr = frame.stack[frame.ip]
         func_id = instr.operand
-        func = self.bi_funcs.get_function_by_id(func_id)
+        func = self.bi_funcs._get_function_by_id(func_id)
         if func is None:
-            func_name = self.bi_funcs.get_function_name_by_id(func_id) if self.bi_funcs else None
+            func_name = self.bi_funcs._get_function_name_by_id(func_id) if self.bi_funcs else None
             # Debug info
             verb_name = frame.verb_name if hasattr(frame, 'verb_name') else '<unknown>'
             raise VMError(f"Unknown built-in function id={func_id} name={func_name} in verb={verb_name} ip={frame.ip} instr={instr}")

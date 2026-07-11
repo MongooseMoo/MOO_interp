@@ -103,7 +103,7 @@ class MooDebugger:
             # Detect builtin calls
             elif instr.opcode == Opcode.OP_BI_FUNC_CALL:
                 func_id = instr.operand
-                func_name = self.vm.bi_funcs.get_function_name_by_id(func_id) if self.vm.bi_funcs else f"builtin_{func_id}"
+                func_name = self.vm.bi_funcs._get_function_name_by_id(func_id) if self.vm.bi_funcs else f"builtin_{func_id}"
 
                 for plugin in self.plugins:
                     if plugin.enabled:
@@ -295,7 +295,7 @@ class MooDebugger:
         # Add extra details for specific opcodes
         if instr.opcode == Opcode.OP_BI_FUNC_CALL:
             func_id = instr.operand
-            func_name = self.vm.bi_funcs.get_function_name_by_id(func_id)
+            func_name = self.vm.bi_funcs._get_function_name_by_id(func_id)
             result['builtin_name'] = func_name
             result['builtin_id'] = func_id
         elif instr.opcode == Opcode.OP_CALL_VERB:

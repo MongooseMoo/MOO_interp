@@ -17,6 +17,15 @@ PRIVATE_CALLABLE_NAMES = tuple(
     and not name.startswith("__")
     and callable(getattr(BuiltinFunctions, name))
 )
+REGISTRY_INFRASTRUCTURE_NAMES = (
+    "register",
+    "get_function_by_name",
+    "get_function_by_id",
+    "get_function_name_by_id",
+    "get_id_by_function",
+    "get_id_by_name",
+    "raise_error",
+)
 
 
 class TestStrtr:
@@ -70,3 +79,10 @@ def test_object_string_conversions_keep_hash_prefix(number):
 @given(name=st.sampled_from(PRIVATE_CALLABLE_NAMES))
 def test_private_helpers_are_not_registered_as_builtins(name):
     assert name not in BuiltinFunctions().functions
+
+
+@given(name=st.sampled_from(REGISTRY_INFRASTRUCTURE_NAMES))
+def test_registry_infrastructure_is_not_registered_as_builtins(name):
+    builtins = BuiltinFunctions()
+    assert name not in builtins.functions
+    assert "raise" in builtins.functions

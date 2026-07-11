@@ -83,3 +83,10 @@
 - Target: private helper leakage into the builtin namespace
 - Result: 71 extras (-23); 448 passed, 5 skipped; 910/910 oracle cases matched
 - Commit: recorded by this commit
+
+## 013 - 2026-07-11
+
+- Start: 71 extra registered names, including 7 registry infrastructure names
+- Target: registry infrastructure exposed as MOO builtins
+- Result: 64 extras (-7); 449 passed, 5 skipped; 910/910 oracle cases matched
+- Commit: recorded by this commit
