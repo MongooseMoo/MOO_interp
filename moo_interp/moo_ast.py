@@ -1129,10 +1129,9 @@ class _VerbCall(_Expression):
 class _FirstIndex(_Expression):
     """Represents ^ (first element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
     def to_bytecode(self, state: CompilerState, program: Program):
-        # EOP_FIRST_INDEX needs the container on stack to determine index/key
         if state.indexed_object is not None:
             result = state.indexed_object.to_bytecode(state, program)
-            result += [self.emit_extended_byte(Extended_Opcode.EOP_FIRST_INDEX)]
+            result += [self.emit_extended_byte(Extended_Opcode.EOP_FIRST)]
             return result
         else:
             # No context - just return 1 for lists/strings
@@ -1145,10 +1144,9 @@ class _FirstIndex(_Expression):
 class _LastIndex(_Expression):
     """Represents $ (last element) in an index context. Prefixed with _ to avoid ast_utils auto-registration."""
     def to_bytecode(self, state: CompilerState, program: Program):
-        # EOP_LAST_INDEX needs the container on stack to determine last index/key
         if state.indexed_object is not None:
             result = state.indexed_object.to_bytecode(state, program)
-            result += [self.emit_extended_byte(Extended_Opcode.EOP_LAST_INDEX)]
+            result += [self.emit_extended_byte(Extended_Opcode.EOP_LAST)]
             return result
         else:
             # Fallback - no context available

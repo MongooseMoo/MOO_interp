@@ -2,11 +2,11 @@
 
 from contextlib import contextmanager
 
-import pytest
 from moo_interp.list import MOOList
+from moo_interp.map import MOOMap
 from moo_interp.string import MOOString
 from moo_interp.opcodes import Extended_Opcode, Opcode
-from moo_interp.vm import VM, Instruction, Program, StackFrame, VMError
+from moo_interp.vm import VM, Instruction, Program, StackFrame
 
 
 @contextmanager
@@ -45,7 +45,7 @@ def test_eop_length_string():
 
 
 def test_eop_first_list():
-    """EOP_FIRST returns first element of list."""
+    """EOP_FIRST returns the first valid list index."""
     with create_vm() as vm:
         test_list = MOOList(10, 20, 30)
         vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
@@ -54,11 +54,11 @@ def test_eop_first_list():
         ]))
         vm.step()  # Push list
         vm.step()  # Execute EOP_FIRST
-        assert vm.stack[-1] == 10
+        assert vm.stack[-1] == 1
 
 
 def test_eop_first_empty_list():
-    """EOP_FIRST on empty list raises error."""
+    """EOP_FIRST returns zero for an empty list."""
     with create_vm() as vm:
         test_list = MOOList()
         vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
@@ -66,12 +66,12 @@ def test_eop_first_empty_list():
             Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_FIRST.value),
         ]))
         vm.step()  # Push list
-        with pytest.raises(VMError):
-            vm.step()  # Execute EOP_FIRST
+        vm.step()  # Execute EOP_FIRST
+        assert vm.stack[-1] == 0
 
 
 def test_eop_last_list():
-    """EOP_LAST returns last element of list."""
+    """EOP_LAST returns the last valid list index."""
     with create_vm() as vm:
         test_list = MOOList(10, 20, 30)
         vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
@@ -80,11 +80,11 @@ def test_eop_last_list():
         ]))
         vm.step()  # Push list
         vm.step()  # Execute EOP_LAST
-        assert vm.stack[-1] == 30
+        assert vm.stack[-1] == 3
 
 
 def test_eop_last_empty_list():
-    """EOP_LAST on empty list raises error."""
+    """EOP_LAST returns zero for an empty list."""
     with create_vm() as vm:
         test_list = MOOList()
         vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
@@ -92,8 +92,62 @@ def test_eop_last_empty_list():
             Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_LAST.value),
         ]))
         vm.step()  # Push list
-        with pytest.raises(VMError):
-            vm.step()  # Execute EOP_LAST
+        vm.step()  # Execute EOP_LAST
+        assert vm.stack[-1] == 0
+
+
+def test_eop_first_and_last_string_indices():
+    """EOP_FIRST and EOP_LAST return string boundary indices."""
+    with create_vm() as vm:
+        test_string = MOOString("toast")
+        vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
+            Instruction(opcode=Opcode.OP_IMM, operand=test_string),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_FIRST.value),
+            Instruction(opcode=Opcode.OP_IMM, operand=test_string),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_LAST.value),
+        ]))
+        vm.step()
+        vm.step()
+        assert vm.stack[-1] == 1
+        vm.step()
+        vm.step()
+        assert vm.stack[-1] == 5
+
+
+def test_eop_first_and_last_map_keys():
+    """EOP_FIRST and EOP_LAST return sorted map boundary keys."""
+    with create_vm() as vm:
+        test_map = MOOMap(_map={3: "c", 1: "a", 2: "b"})
+        vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
+            Instruction(opcode=Opcode.OP_IMM, operand=test_map),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_FIRST.value),
+            Instruction(opcode=Opcode.OP_IMM, operand=test_map),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_LAST.value),
+        ]))
+        vm.step()
+        vm.step()
+        assert vm.stack[-1] == 1
+        vm.step()
+        vm.step()
+        assert vm.stack[-1] == 3
+
+
+def test_eop_first_and_last_empty_map_return_none():
+    """ToastStunt returns none for either boundary of an empty map."""
+    with create_vm() as vm:
+        test_map = MOOMap()
+        vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
+            Instruction(opcode=Opcode.OP_IMM, operand=test_map),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_FIRST.value),
+            Instruction(opcode=Opcode.OP_IMM, operand=test_map),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_LAST.value),
+        ]))
+        vm.step()
+        vm.step()
+        assert vm.stack[-1] is None
+        vm.step()
+        vm.step()
+        assert vm.stack[-1] is None
 
 
 def test_eop_rangeset_basic():

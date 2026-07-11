@@ -2015,68 +2015,26 @@ class VM:
             raise MOOException(MOOError.E_TYPE, f"length() requires list, string, or map, got {type(value)}")
 
     @operator(Extended_Opcode.EOP_FIRST)
-    def exec_first(self, lst: MOOList) -> MOOAny:
-        """Return first element of list."""
-        if not isinstance(lst, MOOList):
-            raise MOOException(MOOError.E_TYPE, f"first() requires list, got {type(lst)}")
-        if len(lst) == 0:
-            raise MOOException(MOOError.E_RANGE, "first() on empty list")
-        return lst[1]  # MOO is 1-indexed
+    def exec_first(self) -> None:
+        """Replace a container with its first valid index or key."""
+        container = self.pop()
+        if isinstance(container, (MOOList, MOOString, str)):
+            self.push(1 if len(container) else 0)
+        elif isinstance(container, MOOMap):
+            self.push(next(iter(container), None))
+        else:
+            raise MOOException(MOOError.E_TYPE)
 
     @operator(Extended_Opcode.EOP_LAST)
-    def exec_last(self, lst: MOOList) -> MOOAny:
-        """Return last element of list."""
-        if not isinstance(lst, MOOList):
-            raise MOOException(MOOError.E_TYPE, f"last() requires list, got {type(lst)}")
-        if len(lst) == 0:
-            raise MOOException(MOOError.E_RANGE, "last() on empty list")
-        return lst[len(lst)]  # MOO is 1-indexed
-
-    @operator(Extended_Opcode.EOP_FIRST_INDEX)
-    def exec_first_index(self, container: MOOAny) -> MOOAny:
-        """Get the first index/key appropriate for the container type.
-
-        - For lists/strings: returns 1 (first position)
-        - For maps: returns the first key
-        Raises E_RANGE for empty containers.
-        """
+    def exec_last(self) -> None:
+        """Replace a container with its last valid index or key."""
+        container = self.pop()
         if isinstance(container, (MOOList, MOOString, str)):
-            if len(container) == 0:
-                raise MOOException(MOOError.E_RANGE)
-            return 1
+            self.push(len(container))
         elif isinstance(container, MOOMap):
-            if len(container) == 0:
-                raise MOOException(MOOError.E_RANGE)
-            # Return first key
-            return next(iter(container.keys()))
+            self.push(next(reversed(list(container)), None))
         else:
-            raise MOOException(MOOError.E_TYPE, f"first index requires list, string, or map, got {type(container)}")
-
-    @operator(Extended_Opcode.EOP_LAST_INDEX)
-    def exec_last_index(self, container: MOOAny) -> MOOAny:
-        """Get the last index/key appropriate for the container type.
-
-        - For lists/strings: returns length (0 for empty)
-        - For maps: returns the last key (or E_RANGE if empty)
-
-        Note: For lists/strings, this returns 0 for empty containers. This is
-        correct because:
-        - x[$] on empty list compiles to: push x, EOP_LAST (returns 0), OP_REF
-          The OP_REF with index 0 will raise E_RANGE (1-based indexing)
-        - x[1..$] on empty list compiles to: push x, push 1, EOP_LAST (returns 0), OP_RANGE_REF
-          The OP_RANGE_REF with range 1..0 returns empty list (inverted range)
-        """
-        if isinstance(container, (MOOList, MOOString, str)):
-            # Return length (0 for empty) - let OP_REF handle E_RANGE if indexing
-            return len(container)
-        elif isinstance(container, MOOMap):
-            if len(container) == 0:
-                raise MOOException(MOOError.E_RANGE)
-            # Return last key
-            # Maps maintain insertion order in Python 3.7+
-            return list(container.keys())[-1]
-        else:
-            raise MOOException(MOOError.E_TYPE, f"last index requires list, string, or map, got {type(container)}")
+            raise MOOException(MOOError.E_TYPE)
 
     @operator(Extended_Opcode.EOP_RANGESET)
     def exec_rangeset(self, base, start, end, value):
