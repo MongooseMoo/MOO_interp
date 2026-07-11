@@ -20,3 +20,10 @@
 - Target: ToastStunt optional scatter default evaluation
 - Result: 5 failures (-1), with 2 additional coverage cases
 - Commit: recorded by this commit
+
+## 004 - 2026-07-11
+
+- Start: 5 failures
+- Target: ToastStunt object receiver typing and verb source compilation
+- Result: 2 failures (-3)
+- Commit: recorded by this commit

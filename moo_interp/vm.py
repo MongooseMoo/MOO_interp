@@ -1443,35 +1443,22 @@ class VM:
         if not verb:
             raise MOOException(MOOError.E_VERBNF, f"verb '{verb_name}' not found on object #{obj_id}")
 
-        # Check if verb.code is already compiled bytecode (Instructions) or source strings
-        # For tests: verb.code may be [Instruction, ...]
-        # For real usage: verb.code is ["source line 1", "source line 2", ...]
-        compiled_frame = None
-        if verb.code and isinstance(verb.code[0], Instruction):
-            # Already compiled - use directly
-            bytecode = verb.code
-        else:
-            # Source code - compile it
-            # Import here to avoid circular dependency
-            from .moo_ast import parse, compile as compile_moo
+        from .moo_ast import parse, compile as compile_moo
 
-            # MOO context variable names - pre-register at indices 0-10
-            context_vars = [
-                "player", "this", "caller", "verb", "args", "argstr",
-                "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
-            ]
+        context_vars = [
+            "player", "this", "caller", "verb", "args", "argstr",
+            "dobj", "dobjstr", "iobj", "iobjstr", "prepstr"
+        ]
 
-            try:
-                if verb.code is None:
-                    raise VMError(f"OP_CALL_VERB: verb '{verb_name}' has no code")
-                code_str = "\n".join(verb.code)
-                ast = parse(code_str)
-                # Use the VM's bi_funcs instance for consistent builtin IDs
-                # Pass context_vars so they get pre-registered with stable indices
-                compiled_frame = compile_moo(ast, bi_funcs=self.bi_funcs, context_vars=context_vars)
-                bytecode = compiled_frame.stack
-            except Exception as e:
-                raise VMError(f"OP_CALL_VERB: failed to compile verb '{verb_name}': {e}")
+        try:
+            if verb.code is None:
+                raise VMError(f"OP_CALL_VERB: verb '{verb_name}' has no code")
+            code_str = "\n".join(verb.code)
+            ast = parse(code_str)
+            compiled_frame = compile_moo(ast, bi_funcs=self.bi_funcs, context_vars=context_vars)
+            bytecode = compiled_frame.stack
+        except Exception as e:
+            raise VMError(f"OP_CALL_VERB: failed to compile verb '{verb_name}': {e}")
 
         # Get current frame to copy context from
         caller_frame = self.current_frame if self.call_stack else None
@@ -1479,8 +1466,8 @@ class VM:
         caller_id = caller_frame.this if caller_frame else 0
 
         # Get the compiled verb's var_names and rt_env (context vars already at 0-10)
-        verb_var_names = compiled_frame.prog.var_names if compiled_frame else []
-        verb_rt_env = compiled_frame.rt_env if compiled_frame else [None] * 11  # Space for context
+        verb_var_names = compiled_frame.prog.var_names
+        verb_rt_env = compiled_frame.rt_env
 
         # Create new stack frame for the verb
         # stack_base: VM stack position after CALL_VERB args are popped

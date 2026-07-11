@@ -4,14 +4,14 @@ from moo_interp.vm import VM, Instruction, Program, StackFrame, VMOutcome
 from moo_interp.opcodes import Opcode
 from moo_interp.list import MOOList
 from moo_interp.string import MOOString
-from lambdamoo_db.database import MooDatabase, MooObject, Verb
+from lambdamoo_db.database import MooDatabase, MooObject, ObjNum, Verb
 
 
 def test_op_call_verb_simple():
     """Test that OP_CALL_VERB can call a verb on an object
 
     Stack layout before OP_CALL_VERB (bottom to top):
-    - object ID (int)
+    - object ID (ObjNum)
     - verb name (MOOString)
     - arguments (MOOList)
     """
@@ -30,7 +30,7 @@ def test_op_call_verb_simple():
     db.total_players = 0
 
     # Create test object #1
-    obj_id = 1
+    obj_id = ObjNum(1)
     obj = MooObject(
         id=obj_id,
         name="test_object",
@@ -40,17 +40,6 @@ def test_op_call_verb_simple():
         parents=[]
     )
 
-    # Add a simple verb that returns the sum of two arguments
-    # Verb code: return args[1] + 10;
-    verb_code = [
-        Instruction(opcode=Opcode.OP_PUSH, operand=MOOString("args")),
-        Instruction(opcode=Opcode.OP_IMM, operand=1),
-        Instruction(opcode=Opcode.OP_REF),  # args[1]
-        Instruction(opcode=Opcode.OP_IMM, operand=10),
-        Instruction(opcode=Opcode.OP_ADD),
-        Instruction(opcode=Opcode.OP_RETURN),
-    ]
-
     verb = Verb(
         name="test_verb",
         owner=1,
@@ -58,7 +47,7 @@ def test_op_call_verb_simple():
         preps=0,
         object=obj_id
     )
-    verb.code = verb_code
+    verb.code = ["return args[1] + 10;"]
     obj.verbs.append(verb)
     db.objects[obj_id] = obj
 
@@ -104,7 +93,7 @@ def test_op_call_verb_with_inheritance():
     db.total_players = 0
 
     # Create parent object with verb
-    parent_id = 1
+    parent_id = ObjNum(1)
     parent = MooObject(
         id=parent_id,
         name="parent_object",
@@ -114,11 +103,6 @@ def test_op_call_verb_with_inheritance():
         parents=[]
     )
 
-    verb_code = [
-        Instruction(opcode=Opcode.OP_IMM, operand=42),
-        Instruction(opcode=Opcode.OP_RETURN),
-    ]
-
     verb = Verb(
         name="inherited_verb",
         owner=1,
@@ -126,12 +110,12 @@ def test_op_call_verb_with_inheritance():
         preps=0,
         object=parent_id
     )
-    verb.code = verb_code
+    verb.code = ["return 42;"]
     parent.verbs.append(verb)
     db.objects[parent_id] = parent
 
     # Create child object that inherits from parent
-    child_id = 2
+    child_id = ObjNum(2)
     child = MooObject(
         id=child_id,
         name="child_object",
@@ -176,7 +160,7 @@ def test_op_call_verb_sets_context():
     db.total_verbs = 1
     db.total_players = 0
 
-    obj_id = 1
+    obj_id = ObjNum(1)
     obj = MooObject(
         id=obj_id,
         name="test_object",
@@ -186,13 +170,6 @@ def test_op_call_verb_sets_context():
         parents=[]
     )
 
-    # Verb that returns the value of 'this'
-    # In real MOO, 'this' is a builtin variable
-    verb_code = [
-        Instruction(opcode=Opcode.OP_PUSH, operand=MOOString("this")),
-        Instruction(opcode=Opcode.OP_RETURN),
-    ]
-
     verb = Verb(
         name="get_this",
         owner=1,
@@ -200,7 +177,7 @@ def test_op_call_verb_sets_context():
         preps=0,
         object=obj_id
     )
-    verb.code = verb_code
+    verb.code = ["return this;"]
     obj.verbs.append(verb)
     db.objects[obj_id] = obj
 
@@ -241,7 +218,7 @@ def test_op_call_verb_nonexistent_verb():
     db.total_verbs = 0
     db.total_players = 0
 
-    obj_id = 1
+    obj_id = ObjNum(1)
     obj = MooObject(
         id=obj_id,
         name="test_object",
