@@ -1994,53 +1994,6 @@ class BuiltinFunctions:
         else:
             return n >> (-count)
 
-    # Additional math builtins
-    def log2(self, x):
-        """Return base-2 logarithm."""
-        return math.log2(self.tofloat(x))
-
-    def fmod(self, x, y):
-        """Return floating-point remainder."""
-        return math.fmod(self.tofloat(x), self.tofloat(y))
-
-    def hypot(self, x, y):
-        """Return Euclidean distance sqrt(x*x + y*y)."""
-        return math.hypot(self.tofloat(x), self.tofloat(y))
-
-    def copysign(self, x, y):
-        """Return x with sign of y."""
-        return math.copysign(self.tofloat(x), self.tofloat(y))
-
-    def frexp(self, x):
-        """Return (mantissa, exponent) tuple."""
-        m, e = math.frexp(self.tofloat(x))
-        return MOOList([m, e])
-
-    def ldexp(self, x, i):
-        """Return x * (2 ** i)."""
-        return math.ldexp(self.tofloat(x), int(i))
-
-    def modf(self, x):
-        """Return (fractional, integer) parts."""
-        f, i = math.modf(self.tofloat(x))
-        return MOOList([f, i])
-
-    def remainder(self, x, y):
-        """Return IEEE 754 remainder."""
-        return math.remainder(self.tofloat(x), self.tofloat(y))
-
-    def isfinite(self, x):
-        """Return 1 if x is finite, 0 otherwise."""
-        return 1 if math.isfinite(self.tofloat(x)) else 0
-
-    def isinf(self, x):
-        """Return 1 if x is infinite, 0 otherwise."""
-        return 1 if math.isinf(self.tofloat(x)) else 0
-
-    def isnan(self, x):
-        """Return 1 if x is NaN, 0 otherwise."""
-        return 1 if math.isnan(self.tofloat(x)) else 0
-
     # Aggregation functions for lists
     _sum = sum  # Save builtin
 

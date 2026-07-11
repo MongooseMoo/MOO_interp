@@ -34,6 +34,10 @@ NON_TOAST_BITWISE_BUILTINS = (
     "bitshr",
     "bitxor",
 )
+NON_TOAST_MATH_EXTENSIONS = (
+    "copysign", "fmod", "frexp", "hypot", "isfinite", "isinf",
+    "isnan", "ldexp", "log2", "modf", "remainder",
+)
 
 
 class TestStrtr:
@@ -98,4 +102,9 @@ def test_registry_infrastructure_is_not_registered_as_builtins(name):
 
 @given(name=st.sampled_from(NON_TOAST_BITWISE_BUILTINS))
 def test_non_toast_bitwise_functions_are_not_registered(name):
+    assert name not in BuiltinFunctions().functions
+
+
+@given(name=st.sampled_from(NON_TOAST_MATH_EXTENSIONS))
+def test_non_toast_math_extensions_are_not_registered(name):
     assert name not in BuiltinFunctions().functions

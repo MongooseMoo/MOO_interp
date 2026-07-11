@@ -97,3 +97,10 @@
 - Target: delete non-Toast bitwise builtin functions
 - Result: 58 extras (-6); 450 passed, 5 skipped; 910/910 oracle cases matched
 - Commit: recorded by this commit
+
+## 015 - 2026-07-11
+
+- Start: 58 extra registered names, including 11 non-Toast math extensions
+- Target: delete non-Toast Python/C math extensions
+- Result: 47 extras (-11); 451 passed, 5 skipped; 910/910 oracle cases matched
+- Commit: recorded by this commit
