@@ -10,6 +10,8 @@ are not part of MOO language syntax (they would be implemented as built-in funct
 from contextlib import contextmanager
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from moo_interp.opcodes import Extended_Opcode, Opcode
 from moo_interp.vm import VM, Instruction, Program, StackFrame
 
@@ -187,10 +189,14 @@ def test_eop_bitshr_to_zero():
     assert run_bitwise_op(5, 10, Extended_Opcode.EOP_BITSHR) == 0
 
 
-def test_eop_bitshr_negative():
-    """EOP_BITSHR with negative number (arithmetic shift)."""
-    # Python uses arithmetic right shift for negative numbers
-    assert run_bitwise_op(-16, 2, Extended_Opcode.EOP_BITSHR) == -4
+@given(
+    value=st.integers(min_value=-(2**63), max_value=-1),
+    shift=st.integers(min_value=1, max_value=63),
+)
+def test_eop_bitshr_negative_uses_unsigned_64_bit_shift(value, shift):
+    """EOP_BITSHR casts its left operand to ToastStunt's unsigned UNum."""
+    expected = (value & 0xFFFFFFFFFFFFFFFF) >> shift
+    assert run_bitwise_op(value, shift, Extended_Opcode.EOP_BITSHR) == expected
 
 
 # ===== EOP_COMPLEMENT tests =====
