@@ -1,3 +1,5 @@
+import pytest
+
 from moo_interp.moo_ast import run, parse, compile, disassemble
 
 
@@ -67,8 +69,10 @@ def expect_result(program, expected):
 def test_add():
     expect_result(add_program, 3)
 
+
 def test_unary():
     expect_result(unary_program, -1)
+
 
 def test_conditional():
     expect_result(conditional_program, 1)
@@ -78,7 +82,10 @@ def test_while():
     expect_result(while_program, 10)
 
 
-
-
 def test_for():
     expect_result(for_program, 6)
+
+
+def test_unknown_builtin_is_rejected_during_compilation():
+    with pytest.raises(ValueError, match="Unknown built-in function: typename"):
+        compile(parse("return typename(0);"))

@@ -26,7 +26,6 @@ from .errors import (
     MOOError, MOOException,
     TYPE_INT, TYPE_OBJ, TYPE_STR, TYPE_ERR, TYPE_LIST,
     TYPE_FLOAT, TYPE_MAP, TYPE_ANON, TYPE_WAIF, TYPE_BOOL,
-    TYPE_NAMES,
 )
 from .list import MOOList
 from .map import MOOMap
@@ -2141,40 +2140,6 @@ class BuiltinFunctions:
             return TYPE_OBJ
         else:
             return TYPE_INT  # fallback
-
-    def typename(self, x):
-        """Return the type name as a string."""
-        type_code = self.typeof(x)
-        return MOOString(TYPE_NAMES.get(type_code, "UNKNOWN"))
-
-    def is_type(self, x, type_code):
-        """Check if x is of the given type code."""
-        return 1 if self.typeof(x) == type_code else 0
-
-    def tonum(self, x):
-        """Alias for toint."""
-        return self.toint(x)
-
-    def toerr(self, x):
-        """Convert value to error code."""
-        if isinstance(x, MOOError):
-            return x
-        elif isinstance(x, int):
-            # Map integer to error code
-            error_map = {0: MOOError.E_NONE, 1: MOOError.E_TYPE, 2: MOOError.E_DIV,
-                         3: MOOError.E_PERM, 4: MOOError.E_PROPNF, 5: MOOError.E_VERBNF,
-                         6: MOOError.E_VARNF, 7: MOOError.E_INVIND, 8: MOOError.E_RECMOVE,
-                         9: MOOError.E_MAXREC, 10: MOOError.E_RANGE, 11: MOOError.E_ARGS,
-                         12: MOOError.E_NACC, 13: MOOError.E_INVARG, 14: MOOError.E_QUOTA,
-                         15: MOOError.E_FLOAT}
-            return error_map.get(x, MOOError.E_NONE)
-        elif isinstance(x, (str, MOOString)):
-            # Parse error name like "E_TYPE"
-            name = str(x).upper()
-            if hasattr(MOOError, name):
-                return getattr(MOOError, name)
-            return MOOError.E_NONE
-        return MOOError.E_NONE
 
     def encode_hex(self, s):
         """Encode string to hex."""

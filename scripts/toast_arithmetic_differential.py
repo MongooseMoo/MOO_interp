@@ -65,6 +65,8 @@ def local_result(expression: str) -> dict[str, Any]:
         return {"success": False, "error": type(cause).__name__}
     except MOOException as error:
         return {"success": False, "error": error.error_code.name}
+    except ValueError as error:
+        return {"success": False, "error": f"['Line 1:  {error}']"}
 
 
 def toast_result(transport: SocketTransport, expression: str) -> dict[str, Any]:

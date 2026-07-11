@@ -1011,6 +1011,8 @@ class _FunctionCall(_Expression):
         # Use the bi_funcs from state if available, otherwise create a new instance
         bi_funcs = state.bi_funcs if state.bi_funcs else BuiltinFunctions()
         builtin_id = bi_funcs.get_id_by_name(self.name)
+        if builtin_id is None:
+            raise ValueError(f"Unknown built-in function: {self.name}")
         result += [Instruction(opcode=Opcode.OP_BI_FUNC_CALL,
                                operand=builtin_id)]
         return result

@@ -1,0 +1,9 @@
+{
+  "command": "uv run --with ../moo-conformance-tests scripts/toast_arithmetic_differential.py",
+  "oracle": "/root/src/toaststunt@aecc51e",
+  "cases": 910,
+  "matched_before": 882,
+  "matched_after": 910,
+  "mismatches_before": 28,
+  "mismatches_after": 0
+}

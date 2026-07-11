@@ -62,3 +62,10 @@
 - Target: shared error and object type identity
 - Result: 28 mismatches (-4), all isolated to non-Toast builtins
 - Commit: recorded by this commit
+
+## 010 - 2026-07-11
+
+- Start: 28 mismatches from four non-Toast builtins
+- Target: delete extra conversion/type builtin surface
+- Result: 910/910 oracle cases matched (28 mismatches removed)
+- Commit: recorded by this commit
