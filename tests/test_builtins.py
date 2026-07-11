@@ -10,6 +10,15 @@ from moo_interp.moo_ast import compile, parse, run
 from moo_interp.moo_types import MOOString
 
 
+PRIVATE_CALLABLE_NAMES = tuple(
+    name
+    for name in dir(BuiltinFunctions)
+    if name.startswith("_")
+    and not name.startswith("__")
+    and callable(getattr(BuiltinFunctions, name))
+)
+
+
 class TestStrtr:
     """Test strtr builtin function."""
 
@@ -56,3 +65,8 @@ def test_object_string_conversions_keep_hash_prefix(number):
     obj = ObjNum(number)
     assert str(builtins.tostr(obj)) == f"#{number}"
     assert str(builtins.toliteral(obj)) == f"#{number}"
+
+
+@given(name=st.sampled_from(PRIVATE_CALLABLE_NAMES))
+def test_private_helpers_are_not_registered_as_builtins(name):
+    assert name not in BuiltinFunctions().functions

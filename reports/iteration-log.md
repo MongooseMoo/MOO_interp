@@ -76,3 +76,10 @@
 - Target: literal Toast oracle provenance and builtin namespace inventory
 - Result: exact checkout rebuilt; 910/910 cases matched; namespace delta measured as 100 missing plus 94 extra names
 - Commit: recorded by this commit
+
+## 012 - 2026-07-11
+
+- Start: 94 extra registered names, including 23 private helpers
+- Target: private helper leakage into the builtin namespace
+- Result: 71 extras (-23); 448 passed, 5 skipped; 910/910 oracle cases matched
+- Commit: recorded by this commit

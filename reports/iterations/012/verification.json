@@ -1,0 +1,15 @@
+{
+  "targeted_red_command": "uv run pytest tests/test_builtins.py -k private_helpers -q",
+  "targeted_red_result": "1 failed; falsifying example _build_match_result",
+  "targeted_green_command": "uv run pytest tests/test_builtins.py -k private_helpers -q",
+  "targeted_green_result": "1 passed",
+  "full_suite_command": "uv run pytest",
+  "full_suite_result": "448 passed, 5 skipped",
+  "live_differential_command": "uv run --with ../moo-conformance-tests scripts/toast_arithmetic_differential.py",
+  "live_differential_result": "910 matched, 0 mismatches",
+  "inventory_command": "uv run --with ../moo-conformance-tests scripts/toast_builtin_inventory.py",
+  "extra_before": 94,
+  "extra_after": 71,
+  "missing_before": 100,
+  "missing_after": 100
+}

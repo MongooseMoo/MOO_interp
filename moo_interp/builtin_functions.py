@@ -77,7 +77,7 @@ class BuiltinFunctions:
         # automatically register functions
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
-            if callable(attr) and not attr_name.startswith('__'):
+            if callable(attr) and not attr_name.startswith('_'):
                 self(attr)
 
         # Register aliases (raise is a Python keyword, so we use raise_error internally)
