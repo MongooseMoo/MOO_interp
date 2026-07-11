@@ -298,7 +298,7 @@ class BuiltinFunctions:
         if isinstance(value, Waif):
             return str(value)  # Waif.__str__ returns [[Waif class #N]] format
         elif isinstance(value, ObjNum):
-            return str(value)  # ObjNum.__str__ already includes #
+            return f"#{int(value)}"
         elif isinstance(value, MOOError):
             # Must be before int check (MOOError extends IntEnum which extends int)
             return self.error_message(value)
@@ -981,7 +981,7 @@ class BuiltinFunctions:
             return MOOString(str(x))  # Waif.__str__ returns [[Waif class #N]] format
         # Check ObjNum FIRST (before int/float) since it inherits from int
         elif isinstance(x, ObjNum):
-            return MOOString(str(x))  # ObjNum.__str__ already includes #
+            return MOOString(f"#{int(x)}")
         elif isinstance(x, MooObject):
             return MOOString(f"#{x.id}")
         elif isinstance(x, MOOError):
@@ -2124,6 +2124,9 @@ class BuiltinFunctions:
         elif isinstance(x, ObjNum):
             # ObjNum must be checked before int since it inherits from int
             return TYPE_OBJ
+        elif isinstance(x, MOOError):
+            # MOOError must be checked before int since IntEnum inherits from int
+            return TYPE_ERR
         elif isinstance(x, int):
             return TYPE_INT
         elif isinstance(x, float):
@@ -2136,8 +2139,6 @@ class BuiltinFunctions:
             return TYPE_MAP
         elif isinstance(x, MooObject):
             return TYPE_OBJ
-        elif isinstance(x, MOOError):
-            return TYPE_ERR
         else:
             return TYPE_INT  # fallback
 

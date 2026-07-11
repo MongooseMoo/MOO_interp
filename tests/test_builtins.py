@@ -1,7 +1,12 @@
 """Tests for builtin functions."""
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
+from lambdamoo_db.database import ObjNum
 from moo_interp.builtin_functions import BuiltinFunctions
+from moo_interp.errors import MOOError, TYPE_ERR
+from moo_interp.moo_ast import compile, parse, run
 from moo_interp.moo_types import MOOString
 
 
@@ -34,3 +39,20 @@ class TestStrtr:
         # Should transform: H->H, e->i, L->P, L->P, o->o = "HiPPo"
         # Case insensitive means uppercase maps to uppercase, lowercase to lowercase
         assert result_str == "HiPPo"
+
+
+@given(error=st.sampled_from(list(MOOError)))
+def test_typeof_preserves_error_type(error):
+    assert BuiltinFunctions().typeof(error) == TYPE_ERR
+
+
+def test_compiled_error_constant_preserves_error_type():
+    assert run(compile(parse("return typeof(E_TYPE);"))).result == TYPE_ERR
+
+
+@given(number=st.integers(min_value=-(2**31), max_value=2**31 - 1))
+def test_object_string_conversions_keep_hash_prefix(number):
+    builtins = BuiltinFunctions()
+    obj = ObjNum(number)
+    assert str(builtins.tostr(obj)) == f"#{number}"
+    assert str(builtins.toliteral(obj)) == f"#{number}"

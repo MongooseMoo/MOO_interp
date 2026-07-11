@@ -55,3 +55,10 @@
 - Target: core string/list/map differential
 - Result: 845/845 oracle cases matched; local suite stayed green
 - Commit: recorded by this commit
+
+## 009 - 2026-07-11
+
+- Start: 32 conversion/type differential mismatches
+- Target: shared error and object type identity
+- Result: 28 mismatches (-4), all isolated to non-Toast builtins
+- Commit: recorded by this commit

@@ -141,6 +141,71 @@ def container_expressions() -> list[str]:
     ]
 
 
+def conversion_expressions() -> list[str]:
+    values = (
+        "0",
+        "-7",
+        "1.5",
+        '"42"',
+        '"bad"',
+        "#3",
+        "E_TYPE",
+        "{}",
+        "[]",
+        "true",
+    )
+    expressions = [f"typeof({value})" for value in values]
+    expressions += [f"typename({value})" for value in values]
+    expressions += [
+        "is_type(1, INT)",
+        "is_type(1.0, FLOAT)",
+        'is_type("x", STR)',
+        "is_type({}, LIST)",
+        "is_type([], MAP)",
+        "is_type(#3, OBJ)",
+        "is_type(E_TYPE, ERR)",
+        "is_type(1, FLOAT)",
+        "toint(1)",
+        "toint(-7.9)",
+        'toint("42")',
+        'toint("-7")',
+        'toint("bad")',
+        "toint(#3)",
+        "toint(E_TYPE)",
+        "tofloat(1.5)",
+        "tofloat(1)",
+        'tofloat("1.5")',
+        'tofloat("bad")',
+        "tofloat(true)",
+        "tonum(7)",
+        "tonum(1.5)",
+        'tonum("42")',
+        'tonum("1.5")',
+        'tonum("bad")',
+        "toobj(3)",
+        "toobj(#3)",
+        'toobj("#3")',
+        'toobj("3")',
+        'toobj("bad")',
+        "toerr(1)",
+        "toerr(E_TYPE)",
+        'toerr("E_TYPE")',
+        'toerr("TYPE")',
+        'toerr("bad")',
+        "tostr()",
+        "tostr(1)",
+        'tostr("a", 2, #3)',
+        "toliteral(1)",
+        "toliteral(1.5)",
+        'toliteral("toast")',
+        "toliteral(#3)",
+        "toliteral(E_TYPE)",
+        "toliteral({1, \"x\", #3})",
+        'toliteral(["a" -> 1])',
+    ]
+    return expressions
+
+
 def available_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -183,7 +248,11 @@ def main() -> int:
     try:
         wait_for_server(port, process)
         transport.connect("wizard")
-        expressions = arithmetic_expressions() + container_expressions()
+        expressions = (
+            arithmetic_expressions()
+            + container_expressions()
+            + conversion_expressions()
+        )
         for expression in expressions:
             local = local_result(expression)
             toast = toast_result(transport, expression)
