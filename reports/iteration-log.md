@@ -48,3 +48,10 @@
 - Target: live ToastStunt arithmetic differential
 - Result: 810/810 oracle cases matched; local suite stayed green
 - Commit: recorded by this commit
+
+## 008 - 2026-07-11
+
+- Start: 810 live oracle cases matched
+- Target: core string/list/map differential
+- Result: 845/845 oracle cases matched; local suite stayed green
+- Commit: recorded by this commit

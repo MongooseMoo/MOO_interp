@@ -47,7 +47,7 @@ def normalize_value(value: Any) -> Any:
         return [normalize_value(item) for item in value]
     if isinstance(value, MOOMap):
         return {
-            str(normalize_value(key)): normalize_value(value[key])
+            normalize_value(key): normalize_value(value[key])
             for key in value
         }
     return value
@@ -101,6 +101,46 @@ def arithmetic_expressions() -> list[str]:
     return expressions
 
 
+def container_expressions() -> list[str]:
+    return [
+        '""',
+        '"Toast"',
+        '"abc" + "DEF"',
+        '"AbC" == "aBc"',
+        '"AbC" != "aBd"',
+        '"b" in "abc"',
+        '"z" in "abc"',
+        '"toast"[1]',
+        '"toast"[5]',
+        '"toast"[2..4]',
+        '"toast"[1..$]',
+        '"toast"[^..$]',
+        '""[1]',
+        '{}',
+        '{1, 2, 3}',
+        '{1, 2} + {3, 4}',
+        '2 in {1, 2, 3}',
+        '4 in {1, 2, 3}',
+        '{1, 2, 3}[1]',
+        '{1, 2, 3}[3]',
+        '{1, 2, 3}[2..3]',
+        '{1, 2, 3}[1..$]',
+        '{1, 2, 3}[^..$]',
+        '{}[1]',
+        '[]',
+        '[1 -> "one", 2 -> "two"]',
+        '[1 -> "one", 2 -> "two"][1]',
+        '[1 -> "one", 2 -> "two"][2]',
+        '[1 -> "one", 2 -> "two"][3]',
+        '[3 -> "three", 1 -> "one", 2 -> "two"][^]',
+        '[3 -> "three", 1 -> "one", 2 -> "two"][$]',
+        '1 in [1 -> "one", 2 -> "two"]',
+        '3 in [1 -> "one", 2 -> "two"]',
+        '{1, {2, 3}, "x"}',
+        '["list" -> {1, 2}, "map" -> [1 -> 2]]',
+    ]
+
+
 def available_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -143,7 +183,7 @@ def main() -> int:
     try:
         wait_for_server(port, process)
         transport.connect("wizard")
-        expressions = arithmetic_expressions()
+        expressions = arithmetic_expressions() + container_expressions()
         for expression in expressions:
             local = local_result(expression)
             toast = toast_result(transport, expression)
