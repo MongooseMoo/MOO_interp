@@ -27,3 +27,10 @@
 - Target: ToastStunt object receiver typing and verb source compilation
 - Result: 2 failures (-3)
 - Commit: recorded by this commit
+
+## 005 - 2026-07-11
+
+- Start: 2 failures
+- Target: ToastStunt integer exponentiation property
+- Result: 1 failure (-1), with 1 additional coverage case
+- Commit: recorded by this commit

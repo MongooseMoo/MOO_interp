@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import pytest
 from hypothesis import given
 from hypothesis.strategies import integers, lists, sampled_from
+from moo_interp.errors import MOOError, MOOException
 from moo_interp.list import MOOList
 
 from moo_interp.opcodes import Extended_Opcode, Opcode
@@ -32,7 +33,6 @@ opcode_mapping = {
     Opcode.OP_LE: operator.le,
     Opcode.OP_GT: operator.gt,
     Opcode.OP_GE: operator.ge,
-    Extended_Opcode.EOP_EXP:     operator.pow,
 }
 
 
@@ -78,6 +78,38 @@ def test_vm_math_operations(values, opcode):
             assert vm.stack[-1] == expected_result
         except VMError:
             pass
+
+
+@given(
+    base=integers(min_value=-50, max_value=50),
+    exponent=integers(min_value=-8, max_value=8),
+)
+def test_vm_integer_exponentiation_matches_toaststunt(base, exponent):
+    with create_vm() as vm:
+        vm.call_stack.append(StackFrame(0, Program(), ip=0, stack=[
+            Instruction(opcode=Opcode.OP_IMM, operand=base),
+            Instruction(opcode=Opcode.OP_IMM, operand=exponent),
+            Instruction(opcode=Opcode.OP_EXTENDED, operand=Extended_Opcode.EOP_EXP.value),
+        ]))
+        vm.step()
+        vm.step()
+
+        if base == 0 and exponent < 0:
+            with pytest.raises(MOOException) as exc_info:
+                vm.step()
+            assert exc_info.value.error_code == MOOError.E_DIV
+            return
+
+        vm.step()
+        if exponent >= 0:
+            expected = base ** exponent
+        elif base == -1:
+            expected = 1 if exponent & 1 else -1
+        elif base == 1:
+            expected = 1
+        else:
+            expected = 0
+        assert vm.stack[-1] == expected
 
 
 # MOOList tests
