@@ -7,6 +7,8 @@ Scatter syntax:
 {a, @rest} = list;          # Rest variable (captures remaining)
 """
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from moo_interp.moo_ast import parse, compile, run
 
 
@@ -51,6 +53,24 @@ def test_scatter_optional_with_default():
     vm = run(frame)
 
     assert list(vm.result) == [1, 2, 99], "Should use explicit default"
+
+
+@given(default=st.integers(min_value=-10, max_value=192))
+def test_scatter_optional_uses_optimized_integer_default(default):
+    """Every integer encoded as an optimized opcode remains unchanged."""
+    vm = run(compile(parse(f"{{?value = {default}}} = {{}}; return value;")))
+    assert vm.result == default
+
+
+def test_scatter_optional_executes_default_expression():
+    """A missing optional evaluates its ordinary MOO default expression."""
+    program = """
+    base = 40;
+    {?value = base + 2} = {};
+    return value;
+    """
+    vm = run(compile(parse(program)))
+    assert vm.result == 42
 
 
 def test_scatter_rest():

@@ -13,3 +13,10 @@
 - Target: ToastStunt `EOP_FIRST` and `EOP_LAST` boundary semantics
 - Result: 6 failures (-2), with 3 additional coverage cases
 - Commit: recorded by this commit
+
+## 003 - 2026-07-11
+
+- Start: 6 failures
+- Target: ToastStunt optional scatter default evaluation
+- Result: 5 failures (-1), with 2 additional coverage cases
+- Commit: recorded by this commit

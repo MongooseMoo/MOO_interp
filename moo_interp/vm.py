@@ -2191,20 +2191,26 @@ class VM:
             elif is_optional:
                 # No value but optional - use default
                 if default_bc:
-                    # Execute default bytecode to get value
-                    # For simplicity, we'll evaluate constants directly
-                    # Default is typically a simple literal
-                    if default_bc and len(default_bc) == 1:
-                        default_instr = default_bc[0]
-                        # Handle short integer format: opcode 113+n means push n
-                        if isinstance(default_instr.opcode, int) and 113 <= default_instr.opcode < 369:
-                            frame.rt_env[var_index] = default_instr.opcode - 113
-                        elif default_instr.opcode == Opcode.OP_IMM and default_instr.operand is not None:
-                            frame.rt_env[var_index] = default_instr.operand
-                        else:
-                            frame.rt_env[var_index] = 0
-                    else:
-                        frame.rt_env[var_index] = 0
+                    default_frame = StackFrame(
+                        func_id=frame.func_id,
+                        prog=frame.prog,
+                        ip=0,
+                        stack=[*default_bc, Instruction(opcode=Opcode.OP_RETURN)],
+                        rt_env=frame.rt_env,
+                        this=frame.this,
+                        player=frame.player,
+                        verb=frame.verb,
+                        verb_name=frame.verb_name,
+                        debug=frame.debug,
+                        threaded=frame.threaded,
+                        stack_base=len(self.stack),
+                        caller_perms=frame.caller_perms,
+                        definer=frame.definer,
+                    )
+                    self.call_stack.append(default_frame)
+                    while default_frame in self.call_stack:
+                        self.step()
+                    frame.rt_env[var_index] = self.pop()
                 else:
                     frame.rt_env[var_index] = 0  # MOO default for optional
             else:
