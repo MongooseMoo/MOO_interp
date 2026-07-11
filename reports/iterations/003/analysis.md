@@ -1,6 +1,8 @@
 # Iteration 003 analysis
 
-ToastStunt oracle: `/root/src/toaststunt` at `aecc51e`.
+ToastStunt oracle: `C:\Users\Q\src\toaststunt` at
+`e8a353665a106244f5e01edb67239c90411ae584`. The cited parser, compiler,
+and executor source blobs are byte-identical to those originally inspected.
 
 Target: optional scatter defaults.
 

@@ -1,6 +1,8 @@
 # Iteration 004 analysis
 
-ToastStunt oracle: `/root/src/toaststunt` at `aecc51e`.
+ToastStunt oracle: `C:\Users\Q\src\toaststunt` at
+`e8a353665a106244f5e01edb67239c90411ae584`. The cited `src/execute.cc`
+blob is byte-identical to the one originally inspected.
 
 Target: object verb-call fixtures and any exposed call-frame defects.
 

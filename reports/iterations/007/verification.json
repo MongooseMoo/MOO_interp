@@ -1,7 +1,8 @@
 {
   "command": "uv run --with ../moo-conformance-tests scripts/toast_arithmetic_differential.py",
-  "oracle": "/root/src/toaststunt@aecc51e",
-  "database": "/root/src/toaststunt/test/Test.db",
+  "historical_oracle": "/root/src/toaststunt@aecc51e",
+  "exact_oracle_revalidation": "C:\\Users\\Q\\src\\toaststunt@e8a353665a106244f5e01edb67239c90411ae584",
+  "database_blob_revalidated": "89ddeacd6f1834bab4bfc8763c0ade02f1801f3e",
   "cases": 810,
   "matched": 810,
   "mismatches": 0

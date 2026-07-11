@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-07-11T02:32:10.0105995-06:00",
+  "total": 452,
+  "pass": 447,
+  "fail": 0,
+  "skip": 5,
+  "oracle_cases": 910,
+  "oracle_mismatches": 0,
+  "builtin_namespace_delta": 194
+}

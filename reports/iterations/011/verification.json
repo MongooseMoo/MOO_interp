@@ -1,0 +1,14 @@
+{
+  "oracle_build_command": "wsl.exe sh -lc cmake --build /mnt/c/Users/Q/src/toaststunt/build --parallel 2",
+  "oracle": "C:\\Users\\Q\\src\\toaststunt@e8a353665a106244f5e01edb67239c90411ae584",
+  "differential_command": "uv run --with ../moo-conformance-tests scripts/toast_arithmetic_differential.py",
+  "differential_cases": 910,
+  "differential_matched": 910,
+  "differential_mismatches": 0,
+  "inventory_command": "uv run --with ../moo-conformance-tests scripts/toast_builtin_inventory.py",
+  "toast_builtin_count": 229,
+  "local_registered_count": 223,
+  "shared_builtin_count": 129,
+  "missing_builtin_count": 100,
+  "extra_registered_count": 94
+}

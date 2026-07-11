@@ -31,9 +31,10 @@ from moo_interp.moo_ast import VMRunError, compile, parse, run
 from moo_interp.string import MOOString
 
 
-TOAST_ROOT = "/root/src/toaststunt"
-TOAST_BINARY = f"{TOAST_ROOT}/build-release/moo"
-TOAST_DATABASE = f"{TOAST_ROOT}/test/Test.db"
+TOAST_ROOT = Path.home() / "src" / "toaststunt"
+TOAST_WSL_ROOT = "/mnt/c/Users/Q/src/toaststunt"
+TOAST_BINARY = f"{TOAST_WSL_ROOT}/build/moo"
+TOAST_DATABASE = f"{TOAST_WSL_ROOT}/test/Test.db"
 
 
 def normalize_value(value: Any) -> Any:
@@ -228,6 +229,12 @@ def wait_for_server(port: int, process: subprocess.Popen[bytes]) -> None:
 
 
 def main() -> int:
+    toast_revision = subprocess.run(
+        ["git", "-C", str(TOAST_ROOT), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     port = available_port()
     oracle_dir = f"/tmp/moo_interp_toast_{os.getpid()}"
     command = (
@@ -264,7 +271,7 @@ def main() -> int:
                 )
 
         summary = {
-            "oracle": f"{TOAST_ROOT}@aecc51e",
+            "oracle": f"{TOAST_ROOT}@{toast_revision}",
             "cases": len(expressions),
             "matched": len(expressions) - len(mismatches),
             "mismatches": mismatches,

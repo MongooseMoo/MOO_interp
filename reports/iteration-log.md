@@ -69,3 +69,10 @@
 - Target: delete extra conversion/type builtin surface
 - Result: 910/910 oracle cases matched (28 mismatches removed)
 - Commit: recorded by this commit
+
+## 011 - 2026-07-11
+
+- Start: prior live evidence used a nearby Toast checkout
+- Target: literal Toast oracle provenance and builtin namespace inventory
+- Result: exact checkout rebuilt; 910/910 cases matched; namespace delta measured as 100 missing plus 94 extra names
+- Commit: recorded by this commit
