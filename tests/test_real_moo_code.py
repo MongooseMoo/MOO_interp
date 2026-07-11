@@ -69,6 +69,10 @@ def get_toastcore_verbs(limit=100):
 @pytest.fixture(scope="module")
 def toastcore_verbs():
     """Fixture to provide toastcore verbs."""
+    if not HAS_LAMBDAMOO_DB:
+        pytest.skip("lambdamoo_db not installed")
+    if not TOASTCORE_DB.exists():
+        pytest.skip(f"Database not found: {TOASTCORE_DB}")
     return get_toastcore_verbs(limit=100)
 
 
