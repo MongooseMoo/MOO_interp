@@ -41,3 +41,10 @@
 - Target: absent `toastcore.db` fixture handling
 - Result: 0 failures (-1), 443 passed and 5 explicit skips
 - Commit: recorded by this commit
+
+## 007 - 2026-07-11
+
+- Start: 0 local failures
+- Target: live ToastStunt arithmetic differential
+- Result: 810/810 oracle cases matched; local suite stayed green
+- Commit: recorded by this commit
